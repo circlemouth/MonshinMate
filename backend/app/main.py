@@ -3,8 +3,9 @@
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
 from typing import Any
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 from .llm_gateway import LLMGateway, LLMSettings
@@ -15,6 +16,9 @@ default_llm_settings = LLMSettings(
     provider="ollama", model="llama2", temperature=0.2, system_prompt=""
 )
 llm_gateway = LLMGateway(default_llm_settings)
+
+# メモリ上でセッションを保持する簡易ストア
+sessions: dict[str, "Session"] = {}
 
 
 @app.get("/healthz")
@@ -106,9 +110,74 @@ class SessionCreateRequest(BaseModel):
     visit_type: str
     answers: dict[str, Any]
 
+class Session(BaseModel):
+    """セッションの内容を表すモデル。"""
 
-@app.post("/sessions")
-def create_session(req: SessionCreateRequest) -> dict:
-    """受け取った回答をそのまま返すスタブ。"""
+    id: str
+    patient_name: str
+    dob: str
+    visit_type: str
+    answers: dict[str, Any]
+    summary: str | None = None
 
-    return {"status": "received", "answers": req.answers}
+
+class SessionCreateResponse(Session):
+    """セッション作成時のレスポンス。"""
+
+    status: str = "created"
+
+
+@app.post("/sessions", response_model=SessionCreateResponse)
+def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
+    """新しいセッションを作成して返す。"""
+
+    session_id = str(uuid4())
+    session = Session(
+        id=session_id,
+        patient_name=req.patient_name,
+        dob=req.dob,
+        visit_type=req.visit_type,
+        answers=req.answers,
+    )
+    sessions[session_id] = session
+    return SessionCreateResponse(**session.model_dump())
+
+
+class AnswerRequest(BaseModel):
+    """質問への回答データ。"""
+
+    item_id: str
+    answer: Any
+
+
+@app.post("/sessions/{session_id}/answer")
+def answer_question(session_id: str, req: AnswerRequest) -> dict:
+    """回答をセッションに追加し、次の質問を返す。"""
+
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    session.answers[req.item_id] = req.answer
+    question = llm_gateway.generate_question(session.answers)
+    return {
+        "questions": [
+            {
+                "id": "followup",
+                "text": question,
+                "expected_input_type": "string",
+                "priority": 1,
+            }
+        ]
+    }
+
+
+@app.post("/sessions/{session_id}/finalize")
+def finalize_session(session_id: str) -> dict:
+    """セッションを確定し要約を返す。"""
+
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    summary = llm_gateway.summarize(session.answers)
+    session.summary = summary
+    return {"summary": summary, "answers": session.answers}

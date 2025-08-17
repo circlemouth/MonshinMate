@@ -32,3 +32,15 @@ class LLMGateway:
         """チャット形式での応答を模擬的に返す。"""
         s = self.settings
         return f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
+
+    def summarize(self, answers: dict[str, Any]) -> str:
+        """回答内容を簡易に要約した文字列を返す。
+
+        Args:
+            answers: 質問項目IDをキーとした回答の辞書。
+
+        Returns:
+            str: 連結された回答を含む要約文字列。
+        """
+        summary_items = ", ".join(f"{k}:{v}" for k, v in answers.items())
+        return f"要約: {summary_items}"
