@@ -49,7 +49,7 @@ def test_llm_settings_get_and_update() -> None:
 
 
 def test_create_session() -> None:
-    """セッション作成エンドポイントが入力を反映して返すことを確認する。"""
+    """セッション作成が行われ ID が発行されることを確認する。"""
     payload = {
         "patient_name": "山田太郎",
         "dob": "1990-01-01",
@@ -58,4 +58,21 @@ def test_create_session() -> None:
     }
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
-    assert res.json()["answers"]["chief_complaint"] == "頭痛"
+    data = res.json()
+    assert data["answers"]["chief_complaint"] == "頭痛"
+    assert "id" in data
+    assert data["status"] == "created"
+    session_id = data["id"]
+
+    # 回答追加と要約処理の確認
+    answer_res = client.post(
+        f"/sessions/{session_id}/answer",
+        json={"item_id": "onset", "answer": "昨日"},
+    )
+    assert answer_res.status_code == 200
+    q = answer_res.json()["questions"][0]["text"]
+    assert "追加質問" in q
+
+    finalize_res = client.post(f"/sessions/{session_id}/finalize")
+    assert finalize_res.status_code == 200
+    assert finalize_res.json()["summary"].startswith("要約")
