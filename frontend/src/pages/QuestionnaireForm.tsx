@@ -26,12 +26,17 @@ export default function QuestionnaireForm() {
   const [dob, setDob] = useState('');
   const [visitType, setVisitType] = useState('initial');
   const [message, setMessage] = useState('');
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [followupQuestion, setFollowupQuestion] = useState<string | null>(null);
+  const [followupItemId, setFollowupItemId] = useState<string | null>(null);
+  const [followupAnswer, setFollowupAnswer] = useState<string>('');
+  const [summary, setSummary] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('/questionnaires/default/template?visit_type=initial')
+    fetch(`/questionnaires/default/template?visit_type=${visitType}`)
       .then((res) => res.json())
       .then((data) => setItems(data.items));
-  }, []);
+  }, [visitType]);
 
   const handleSubmit = async () => {
     const payload = {
@@ -47,6 +52,47 @@ export default function QuestionnaireForm() {
     });
     const data = await res.json();
     setMessage(data.status);
+    setSessionId(data.id);
+  };
+
+  const submitFollowup = async () => {
+    if (!sessionId || !followupItemId) return;
+    const res = await fetch(`/sessions/${sessionId}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: followupItemId, answer: followupAnswer }),
+    });
+    const data = await res.json();
+    setFollowupAnswer('');
+    if (data.questions && data.questions.length > 0) {
+      setFollowupQuestion(data.questions[0].text);
+      setFollowupItemId(data.questions[0].id);
+    } else {
+      setFollowupQuestion(null);
+      setFollowupItemId(null);
+    }
+  };
+
+  const startFollowups = async () => {
+    // 最初の起動として、主訴または onset を促す
+    if (!sessionId) return;
+    const res = await fetch(`/sessions/${sessionId}/answer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: 'chief_complaint', answer: answers['chief_complaint'] || '' }),
+    });
+    const data = await res.json();
+    if (data.questions && data.questions.length > 0) {
+      setFollowupQuestion(data.questions[0].text);
+      setFollowupItemId(data.questions[0].id);
+    }
+  };
+
+  const finalize = async () => {
+    if (!sessionId) return;
+    const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
+    const data = await res.json();
+    setSummary(data.summary);
   };
 
   return (
@@ -77,7 +123,44 @@ export default function QuestionnaireForm() {
       <Button onClick={handleSubmit} colorScheme="teal">
         送信
       </Button>
-      {message && <Box>{message}</Box>}
+      {message && <Box>セッション: {message}</Box>}
+
+      {sessionId && !followupQuestion && (
+        <Button onClick={startFollowups} colorScheme="orange">
+          追質問を開始
+        </Button>
+      )}
+
+      {followupQuestion && (
+        <Box borderWidth="1px" borderRadius="md" p={4}>
+          <Box mb={2}>{followupQuestion}</Box>
+          <Input
+            placeholder="回答を入力"
+            value={followupAnswer}
+            onChange={(e) => setFollowupAnswer(e.target.value)}
+            mb={2}
+          />
+          <Button onClick={submitFollowup} colorScheme="orange" mr={2}>
+            送信
+          </Button>
+          <Button onClick={finalize} variant="outline">
+            最終確認へ（確定）
+          </Button>
+        </Box>
+      )}
+
+      {sessionId && !followupQuestion && (
+        <Button onClick={finalize} colorScheme="green">
+          確定（要約を作成）
+        </Button>
+      )}
+
+      {summary && (
+        <Box borderWidth="1px" borderRadius="md" p={4}
+          whiteSpace="pre-wrap">
+          {summary}
+        </Box>
+      )}
     </VStack>
   );
 }

@@ -29,3 +29,32 @@
   - `answers` (object): 確定した回答
 
 ※ 現段階ではセッションはメモリ上にのみ保持される。
+
+## POST /llm/settings/test
+- **概要**: LLM 接続の疎通テストを行う（現状はスタブで常に `{"status":"ok"}` を返す）。
+- **レスポンス**:
+  - `status` (str): 疎通状態。`ok` で成功。
+
+## GET /questionnaires/{id}/template?visit_type=initial|followup
+- **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
+- **レスポンス**:
+  - `Questionnaire`: `{ id: string, items: QuestionnaireItem[] }`
+
+## GET /questionnaires
+- **概要**: 登録済みテンプレートの一覧（id と visit_type）を返す。
+- **レスポンス**:
+  - `Array<{ id: string, visit_type: string }>`
+
+## POST /questionnaires
+- **概要**: テンプレートの作成・更新。
+- **リクエストボディ**:
+  - `id` (str): テンプレートID
+  - `visit_type` (str): `initial` | `followup`
+  - `items` (QuestionnaireItem[]): 項目配列
+- **レスポンス**:
+  - `{ status: "ok" }`
+
+## DELETE /questionnaires/{id}?visit_type=...
+- **概要**: 指定テンプレートを削除。
+- **レスポンス**:
+  - `{ status: "ok" }`
