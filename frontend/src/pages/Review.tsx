@@ -8,7 +8,6 @@ import {
   Checkbox,
   CheckboxGroup,
   RadioGroup,
-  HStack,
   Radio,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
@@ -20,64 +19,48 @@ interface Item {
   type: string;
   required: boolean;
   options?: string[];
-  when?: { item_id: string; equals: string };
 }
 
-/** 患者向けの問診フォーム画面。 */
-export default function QuestionnaireForm() {
-  const [items, setItems] = useState<Item[]>([]);
+/** 全回答を確認しインライン編集後に確定するページ。 */
+export default function Review() {
+  const navigate = useNavigate();
+  const sessionId = sessionStorage.getItem('session_id');
+  const [items] = useState<Item[]>(
+    JSON.parse(sessionStorage.getItem('questionnaire_items') || '[]')
+  );
   const [answers, setAnswers] = useState<Record<string, any>>(
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
-  const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
-  const visitType = sessionStorage.getItem('visit_type') || 'initial';
-  const navigate = useNavigate();
 
   useEffect(() => {
     if (!sessionId) {
       navigate('/');
       return;
     }
-    fetch(`/questionnaires/default/template?visit_type=${visitType}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setItems(data.items);
-        sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
-      });
-  }, [visitType, sessionId, navigate]);
+    if (!sessionStorage.getItem('answers')) {
+      navigate('/questionnaire');
+    }
+  }, [navigate, sessionId]);
 
-  const handleSubmit = async () => {
+  const finalize = async () => {
     if (!sessionId) return;
     try {
       await postWithRetry(`/sessions/${sessionId}/answers`, { answers });
-      sessionStorage.setItem('answers', JSON.stringify(answers));
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
       const data = await res.json();
-      if (data.questions && data.questions.length > 0) {
-        navigate('/questions');
-      } else {
-        navigate('/review');
-      }
-    } catch {
-      // ネットワークエラー時は回答をキューに保存し確認画面へ遷移
+      sessionStorage.setItem('summary', data.summary);
       sessionStorage.setItem('answers', JSON.stringify(answers));
-      navigate('/review');
+      navigate('/done');
+    } catch {
+      // 確定リクエストが送信できない場合はキューに保存済み回答を保持
+      sessionStorage.setItem('answers', JSON.stringify(answers));
+      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
   };
 
-  const visibleItems = items.filter((item) => {
-    if (!item.when) return true;
-    return answers[item.when.item_id] === item.when.equals;
-  });
-
-  const missingRequired = visibleItems.some((item) => {
-    const val = answers[item.id];
-    return item.required && (val === undefined || val === '' || (Array.isArray(val) && val.length === 0));
-  });
-
   return (
     <VStack spacing={4} align="stretch">
-      {visibleItems.map((item) => (
+      {items.map((item) => (
         <FormControl key={item.id} isRequired={item.required}>
           <FormLabel>{item.label}</FormLabel>
           {item.type === 'number' ? (
@@ -126,8 +109,8 @@ export default function QuestionnaireForm() {
           )}
         </FormControl>
       ))}
-      <Button onClick={handleSubmit} colorScheme="teal" isDisabled={missingRequired}>
-        次へ
+      <Button onClick={finalize} colorScheme="green">
+        確定する
       </Button>
     </VStack>
   );

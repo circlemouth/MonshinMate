@@ -14,26 +14,70 @@
   - `id` (str): セッションID
   - `answers` (object): 現在までの回答
 
-## POST /sessions/{session_id}/answer
-- **概要**: 指定セッションに回答を追加し、追質問を返す。
+## POST /sessions/{session_id}/answers
+- **概要**: 複数の回答をまとめて保存する。
+- **リクエストボディ**:
+  - `answers` (object): `{ 質問ID: 回答 }`
+- **レスポンス**:
+  - `{ status: "ok", remaining_items: string[] }`
+- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。
+
+## POST /sessions/{session_id}/llm-questions
+- **概要**: 不足項目に応じた追加質問を生成する。
+- **レスポンス**:
+  - `questions` (array): 追加質問リスト。各要素は `id`, `text`, `expected_input_type`, `priority` を含む。
+- **備考**: LLM が無効化されている場合は常に空配列を返す。
+
+## POST /sessions/{session_id}/llm-answers
+- **概要**: 追加質問への回答を保存する。
 - **リクエストボディ**:
   - `item_id` (str): 質問項目ID
   - `answer` (any): 回答内容
 - **レスポンス**:
-  - `questions` (array): 追質問リスト。各要素は `id`, `text`, `expected_input_type`, `priority` を含む。
+  - `{ status: "ok", remaining_items: string[] }`
+- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。
 
 ## POST /sessions/{session_id}/finalize
 - **概要**: セッションを確定し要約を生成する。
 - **レスポンス**:
   - `summary` (str): 生成された要約
   - `answers` (object): 確定した回答
+  - `finalized_at` (str): ISO8601形式の確定時刻
+  - `status` (str): `finalized`
 
 ※ 現段階ではセッションはメモリ上にのみ保持される。
+
+## GET /llm/settings
+- **概要**: 現在の LLM 設定を取得する。
+- **レスポンス**:
+  - `provider` (str)
+  - `model` (str)
+  - `temperature` (float)
+  - `system_prompt` (str)
+  - `enabled` (bool): LLM を利用するかどうか
+
+## PUT /llm/settings
+- **概要**: LLM 設定を更新する。
+- **リクエストボディ**:
+  - `provider` (str)
+  - `model` (str)
+  - `temperature` (float)
+  - `system_prompt` (str)
+  - `enabled` (bool)
+- **レスポンス**:
+  - 更新後の同項目
 
 ## POST /llm/settings/test
 - **概要**: LLM 接続の疎通テストを行う（現状はスタブで常に `{"status":"ok"}` を返す）。
 - **レスポンス**:
   - `status` (str): 疎通状態。`ok` で成功。
+
+## POST /admin/login
+- **概要**: 管理画面へのログインを行う。
+- **リクエストボディ**:
+  - `password` (str): 管理者パスワード
+- **レスポンス**:
+  - `{ status: "ok" }`（成功時）
 
 ## GET /questionnaires/{id}/template?visit_type=initial|followup
 - **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
@@ -58,3 +102,12 @@
 - **概要**: 指定テンプレートを削除。
 - **レスポンス**:
   - `{ status: "ok" }`
+
+## GET /health
+- **概要**: 死活監視用の簡易エンドポイント。`{"status":"ok"}` を返す。
+
+## GET /readyz
+- **概要**: 依存サービス（DB・LLM）の疎通確認を行う。利用可能な場合は `{"status":"ready"}` を返す。
+
+## GET /metrics
+- **概要**: OpenMetrics 形式の最小メトリクスを返す。

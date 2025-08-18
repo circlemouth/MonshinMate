@@ -1,6 +1,8 @@
 """LLM ゲートウェイのスタブ実装。"""
 
 from typing import Any
+import time
+import logging
 
 from pydantic import BaseModel
 
@@ -12,6 +14,7 @@ class LLMSettings(BaseModel):
     model: str
     temperature: float
     system_prompt: str = ""
+    enabled: bool = True
 
 
 class LLMGateway:
@@ -52,18 +55,28 @@ class LLMGateway:
         Returns:
             str: 追質問の本文。
         """
+        start = time.perf_counter()
         suffix = ""
         if context:
             # 簡易に既知情報の要約を1行付与（トークンスピル抑制のため最小限）。
             keys = ", ".join(list(context.keys())[:3])
             if keys:
                 suffix = f"（参考: 入力済み項目={keys}）"
-        return f"追加質問: {missing_item_label} について詳しく教えてください。{suffix}".strip()
+        result = f"追加質問: {missing_item_label} について詳しく教えてください。{suffix}".strip()
+        duration = (time.perf_counter() - start) * 1000
+        logging.getLogger("llm").info(
+            "generate_question item=%s took_ms=%.1f", missing_item_id, duration
+        )
+        return result
 
     def chat(self, message: str) -> str:
         """チャット形式での応答を模擬的に返す。"""
+        start = time.perf_counter()
         s = self.settings
-        return f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
+        result = f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
+        duration = (time.perf_counter() - start) * 1000
+        logging.getLogger("llm").info("chat took_ms=%.1f", duration)
+        return result
 
     def summarize(self, answers: dict[str, Any]) -> str:
         """回答内容を簡易に要約した文字列を返す。
@@ -74,6 +87,7 @@ class LLMGateway:
         Returns:
             str: 連結された回答を含む要約文字列。
         """
+        start = time.perf_counter()
         # 重要項目を先頭に並べ、読める要約に整形する簡易版。
         order = ["chief_complaint", "onset"] + [k for k in answers.keys() if k not in {"chief_complaint", "onset"}]
         parts = []
@@ -81,4 +95,7 @@ class LLMGateway:
             if k in answers:
                 parts.append(f"{k}:{answers[k]}")
         summary_items = ", ".join(parts)
-        return f"要約: {summary_items}"
+        result = f"要約: {summary_items}"
+        duration = (time.perf_counter() - start) * 1000
+        logging.getLogger("llm").info("summarize took_ms=%.1f", duration)
+        return result

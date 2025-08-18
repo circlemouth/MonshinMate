@@ -9,9 +9,18 @@ from app.main import app  # type: ignore[import]
 from fastapi.testclient import TestClient
 
 
-def test_healthz() -> None:
-    """/healthz が正常に応答することを確認する。"""
+def test_health_endpoints() -> None:
+    """/health と /healthz が正常に応答することを確認する。"""
     client = TestClient(app)
-    response = client.get("/healthz")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    for path in ["/health", "/healthz"]:
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+
+def test_readyz() -> None:
+    """/readyz が依存確認に成功することを確認する。"""
+    client = TestClient(app)
+    resp = client.get("/readyz")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ready"
