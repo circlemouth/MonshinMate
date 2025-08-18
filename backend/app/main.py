@@ -4,16 +4,51 @@
 """
 from typing import Any
 from uuid import uuid4
+import time
+from datetime import datetime
+import os
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Request
 import sqlite3
 from pydantic import BaseModel
 
 from .llm_gateway import LLMGateway, LLMSettings
-from .db import init_db, upsert_template, get_template as db_get_template, list_templates, delete_template
+from .db import (
+    init_db,
+    upsert_template,
+    get_template as db_get_template,
+    list_templates,
+    delete_template,
+    save_session,
+)
+from .validator import Validator
+from .session_fsm import SessionFSM
 import logging
 
+init_db()
 app = FastAPI(title="MonshinMate API")
+
+logger = logging.getLogger("api")
+
+
+@app.middleware("http")
+async def log_middleware(request: Request, call_next):
+    """API 呼び出しとエラーを記録するミドルウェア。"""
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:  # noqa: BLE001 - ログ出力後に再送出
+        logger.exception("api_error path=%s method=%s", request.url.path, request.method)
+        raise
+    duration = (time.perf_counter() - start) * 1000
+    logger.info(
+        "api_call path=%s method=%s status=%d duration_ms=%.1f",
+        request.url.path,
+        request.method,
+        response.status_code,
+        duration,
+    )
+    return response
 
 
 @app.on_event("startup")
@@ -33,22 +68,27 @@ def on_startup() -> None:
     logging.getLogger(__name__).info("startup completed")
 
 default_llm_settings = LLMSettings(
-    provider="ollama", model="llama2", temperature=0.2, system_prompt=""
+    provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=True
 )
 llm_gateway = LLMGateway(default_llm_settings)
+
+# 管理者ログイン用のパスワード（簡易実装）
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
 
 
+@app.get("/health")
+def health() -> dict:
+    """死活監視用の簡易エンドポイント。"""
+    return {"status": "ok"}
+
+
 @app.get("/healthz")
 def healthz() -> dict:
-    """死活監視用の簡易エンドポイント。
-
-    Returns:
-        dict: ステータス文字列を含む辞書。
-    """
-    return {"status": "ok"}
+    """後方互換のためのエイリアス。"""
+    return health()
 
 
 @app.get("/readyz")
@@ -75,6 +115,13 @@ def root() -> dict:
     return {"message": "ようこそ"}
 
 
+class WhenCondition(BaseModel):
+    """項目の表示条件（軽量版）。"""
+
+    item_id: str
+    equals: str
+
+
 class QuestionnaireItem(BaseModel):
     """問診項目の定義。"""
 
@@ -82,6 +129,8 @@ class QuestionnaireItem(BaseModel):
     label: str
     type: str
     required: bool = False
+    options: list[str] | None = None
+    when: WhenCondition | None = None
 
 
 class Questionnaire(BaseModel):
@@ -198,6 +247,21 @@ def test_llm_settings() -> dict:
     return llm_gateway.test_connection()
 
 
+class AdminLoginRequest(BaseModel):
+    """管理者ログインリクエスト。"""
+
+    password: str
+
+
+@app.post("/admin/login")
+def admin_login(payload: AdminLoginRequest) -> dict:
+    """管理画面へのログインを行う。"""
+
+    if payload.password != ADMIN_PASSWORD:
+        raise HTTPException(status_code=401, detail="unauthorized")
+    return {"status": "ok"}
+
+
 class SessionCreateRequest(BaseModel):
     """セッション作成時に受け取る情報。"""
 
@@ -205,6 +269,7 @@ class SessionCreateRequest(BaseModel):
     dob: str
     visit_type: str
     answers: dict[str, Any]
+    questionnaire_id: str = "default"
 
 class Session(BaseModel):
     """セッションの内容を表すモデル。
@@ -217,6 +282,8 @@ class Session(BaseModel):
     patient_name: str
     dob: str
     visit_type: str
+    questionnaire_id: str
+    template_items: list[QuestionnaireItem]
     answers: dict[str, Any]
     summary: str | None = None
     # 進行管理
@@ -225,26 +292,19 @@ class Session(BaseModel):
     attempt_counts: dict[str, int] = {}
     additional_questions_used: int = 0
     max_additional_questions: int = 5
+    finalized_at: datetime | None = None
 
 
-def _required_items_for_visit(visit_type: str) -> list[QuestionnaireItem]:
-    # 最小テンプレートの必須定義（将来的に DB 定義に寄せてもよい）
-    return [
-        QuestionnaireItem(id="chief_complaint", label="主訴", type="string", required=True),
-    ]
-
-
-def _update_completion_status(session: Session) -> None:
-    """必須項目の充足状態を更新する。"""
-    required = _required_items_for_visit(session.visit_type)
-    remaining = [it.id for it in required if it.id not in session.answers or not str(session.answers[it.id]).strip()]
-    session.remaining_items = remaining
-    session.completion_status = "complete" if not remaining else "in_progress"
-
-
-class SessionCreateResponse(Session):
+class SessionCreateResponse(BaseModel):
     """セッション作成時のレスポンス。"""
 
+    id: str
+    patient_name: str
+    dob: str
+    visit_type: str
+    answers: dict[str, Any]
+    remaining_items: list[str]
+    completion_status: str
     status: str = "created"
 
 
@@ -252,94 +312,103 @@ class SessionCreateResponse(Session):
 def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     """新しいセッションを作成して返す。"""
     session_id = str(uuid4())
+    tpl = db_get_template(req.questionnaire_id, req.visit_type)
+    if tpl is None:
+        tpl = db_get_template("default", req.visit_type)
+    if tpl is None:
+        tpl = {
+            "id": "default",
+            "items": [
+                {"id": "chief_complaint", "label": "主訴", "type": "string", "required": True},
+                {"id": "onset", "label": "発症時期", "type": "string", "required": False},
+            ],
+        }
+    items = [QuestionnaireItem(**it) for it in tpl["items"]]
+    Validator.validate_partial(items, req.answers)
     session = Session(
         id=session_id,
         patient_name=req.patient_name,
         dob=req.dob,
         visit_type=req.visit_type,
+        questionnaire_id=req.questionnaire_id,
+        template_items=items,
         answers=req.answers,
     )
-    _update_completion_status(session)
+    fsm = SessionFSM(session, llm_gateway)
+    fsm.update_completion()
     sessions[session_id] = session
+    save_session(session)
     global METRIC_SESSIONS_CREATED
     METRIC_SESSIONS_CREATED += 1
-    return SessionCreateResponse(**session.model_dump())
+    logger.info("session_created id=%s visit_type=%s", session_id, req.visit_type)
+    return SessionCreateResponse(
+        id=session.id,
+        patient_name=session.patient_name,
+        dob=session.dob,
+        visit_type=session.visit_type,
+        answers=session.answers,
+        remaining_items=session.remaining_items,
+        completion_status=session.completion_status,
+    )
 
 
-class AnswerRequest(BaseModel):
-    """質問への回答データ。"""
+class AnswersRequest(BaseModel):
+    """複数回答を一度に受け取るリクエスト。"""
+
+    answers: dict[str, Any]
+
+
+@app.post("/sessions/{session_id}/answers")
+def add_answers(session_id: str, req: AnswersRequest) -> dict:
+    """複数の回答をまとめて保存する。"""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    fsm = SessionFSM(session, llm_gateway)
+    for item_id, ans in req.answers.items():
+        fsm.step(item_id, ans)
+    save_session(session)
+    logger.info("answers_saved id=%s count=%d", session_id, len(req.answers))
+    return {"status": "ok", "remaining_items": session.remaining_items}
+
+
+class LlmAnswerRequest(BaseModel):
+    """追加質問への回答データ。"""
 
     item_id: str
     answer: Any
 
 
-@app.post("/sessions/{session_id}/answer")
-def answer_question(session_id: str, req: AnswerRequest) -> dict:
-    """回答をセッションに追加し、次の質問を返す。"""
+@app.post("/sessions/{session_id}/llm-answers")
+def submit_llm_answer(session_id: str, req: LlmAnswerRequest) -> dict:
+    """追加質問への回答を保存する。"""
+    session = sessions.get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    fsm = SessionFSM(session, llm_gateway)
+    fsm.step(req.item_id, req.answer)
+    global METRIC_ANSWERS_RECEIVED
+    METRIC_ANSWERS_RECEIVED += 1
+    save_session(session)
+    logger.info("llm_answer_saved id=%s item=%s", session_id, req.item_id)
+    return {"status": "ok", "remaining_items": session.remaining_items}
+
+
+@app.post("/sessions/{session_id}/llm-questions")
+def get_llm_questions(session_id: str) -> dict:
+    """不足項目に応じた追加質問を返す。"""
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
 
-    # 回答を保存
-    session.answers[req.item_id] = req.answer
-    global METRIC_ANSWERS_RECEIVED
-    METRIC_ANSWERS_RECEIVED += 1
-    # 必須項目の完了判定を更新
-    _update_completion_status(session)
-
-    # 追質問の生成（上限管理）
-    # 必須がすべて埋まっていても、上限に達するまでは汎用の追加質問を返す
-    if session.additional_questions_used >= session.max_additional_questions:
+    fsm = SessionFSM(session, llm_gateway)
+    question = fsm.next_question()
+    save_session(session)
+    if not question:
+        logger.info("llm_question_limit id=%s", session_id)
         return {"questions": []}
-
-    # 次に不足している（必須でないものを含む）代表的な項目を選ぶ簡易戦略
-    # ここでは onset を例に、未入力ならそれを聞く
-    next_item_id = None
-    next_item_label = None
-    if "onset" not in session.answers:
-        next_item_id = "onset"
-        next_item_label = "発症時期"
-    elif "chief_complaint" not in session.answers:
-        next_item_id = "chief_complaint"
-        next_item_label = "主訴"
-
-    # 項目ごとの再質問上限（3回）を超過していないか確認
-    if next_item_id is not None:
-        count = session.attempt_counts.get(next_item_id, 0)
-        if count >= 3:
-            next_item_id = None
-
-    if next_item_id is None:
-        # 汎用の追加質問を 1 件返す（互換目的・最小実装）
-        session.additional_questions_used += 1
-        return {
-            "questions": [
-                {
-                    "id": "followup",
-                    "text": "追加質問: 他に伝えておきたいことはありますか？",
-                    "expected_input_type": "string",
-                    "priority": 1,
-                }
-            ]
-        }
-
-    session.additional_questions_used += 1
-    session.attempt_counts[next_item_id] = session.attempt_counts.get(next_item_id, 0) + 1
-    question = llm_gateway.generate_question(
-        missing_item_id=next_item_id,
-        missing_item_label=next_item_label,
-        context=session.answers,
-    )
-    return {
-        "questions": [
-            {
-                "id": next_item_id,
-                "text": question,
-                "expected_input_type": "string",
-                "priority": 1,
-            }
-        ]
-    }
+    logger.info("llm_question id=%s item=%s", session_id, question["id"])
+    return {"questions": [question]}
 
 
 @app.post("/sessions/{session_id}/finalize")
@@ -349,16 +418,22 @@ def finalize_session(session_id: str) -> dict:
     session = sessions.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
-    # ここでは最小要件：必須が埋まっていれば確定可能
-    if session.completion_status != "complete":
-        # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
-        # plannedSystem 上の運用方針に合わせ、ベース問診のみでの完了も許容。
-        pass
+    SessionFSM(session, llm_gateway).update_completion()
+    # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
     summary = llm_gateway.summarize(session.answers)
     session.summary = summary
+    session.finalized_at = datetime.utcnow()
+    session.completion_status = "finalized"
     global METRIC_SUMMARIES
     METRIC_SUMMARIES += 1
-    return {"summary": summary, "answers": session.answers}
+    logger.info("session_finalized id=%s", session_id)
+    save_session(session)
+    return {
+        "summary": summary,
+        "answers": session.answers,
+        "finalized_at": session.finalized_at.isoformat(),
+        "status": session.completion_status,
+    }
 
 
 # --- 観測用メトリクス（最小実装） ---

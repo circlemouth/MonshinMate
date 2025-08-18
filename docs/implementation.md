@@ -22,51 +22,58 @@
 ### MS1：管理UI/テンプレ整備
 - 目的：初診/再診テンプレートのCRUDとプレビューを提供
 - **完了条件**
-  - [ ] テンプレート一覧/新規/編集/削除が動作
-  - [ ] 初診/再診タブ切替、項目の型（single/multi/number/date/text）と選択肢設定
-  - [ ] 条件表示（軽量 when）の保存/反映
-  - [ ] プレビューで患者側画面の疑似レンダリング
+- [x] テンプレート一覧/新規/編集/削除が動作
+- [x] 初診/再診タブ切替、項目の型（single/multi/number/date/text）と選択肢設定
+  - [x] 条件表示（軽量 when）の保存/反映
+  - [x] プレビューで患者側画面の疑似レンダリング
+    - `when` は `{ "item_id": 参照項目ID, "equals": 値 }` 形式で、条件が満たされた場合にのみ対象項目を表示する。
 
 ### MS2：セッション基盤
 - 目的：セッション生成と状態遷移（Entry→種別→問診→追加質問→確認→完了）
 - **完了条件**
-  - [ ] `POST /sessions` でセッション作成
-  - [ ] 進行状態（remaining_items / completion_status / attempt_counts）の保持
-  - [ ] 画面遷移ガード（未入力時の差し戻し）
+  - [x] `POST /sessions` でセッション作成
+  - [x] 進行状態（remaining_items / completion_status / attempt_counts）の保持
+  - [x] 画面遷移ガード（未入力時の差し戻し）
 
 ### MS3：LLM追加質問ループ
 - 目的：不足項目のみを**上限N件**で質問し、ターン制御で補完
 - **完了条件**
-  - [ ] `POST /sessions/{id}/llm-questions` が `questions[]` を返す
-  - [ ] 優先度順に提示し、回答送信→再計算→終了条件（0件/上限/手動終了）
-  - [ ] 項目ごとの再質問は最大3回、セッション合計の上限Nは設定で制御
+  - [x] `POST /sessions/{id}/llm-questions` が `questions[]` を返す
+  - [x] 優先度順に提示し、回答送信→再計算→終了条件（0件/上限/手動終了）
+  - [x] 項目ごとの再質問は最大3回、セッション合計の上限Nは設定で制御
 
 ### MS4：要約と保存
 - 目的：全回答の一覧確認→確定→保存/要約出力
 - **完了条件**
-  - [ ] `/review` で全回答を一望しインライン編集可能
-  - [ ] `POST /sessions/{id}/finalize` が `summaryText` と `allAnswers` を返す
-  - [ ] 完了ステータスとタイムスタンプ保存
+  - [x] `/review` で全回答を一望しインライン編集可能
+  - [x] `POST /sessions/{id}/finalize` が `summaryText` と `allAnswers` を返す
+  - [x] 完了ステータスとタイムスタンプ保存
 
 ### MS5：フロント実装（患者/管理）
 - 目的：UI導線と状態管理の実装
 - **完了条件**
-  - [ ] **患者**：Entry（氏名/生年月日）→ VisitType → Questionnaire → Questions → Review → Done
-  - [ ] **共通**：ヘッダー右上「管理画面」ボタン、フッター注意文の常時表示
-  - [ ] **管理**：ログイン→Dashboard→Templates→LLM設定
+  - [x] **患者**：Entry（氏名/生年月日）→ VisitType → Questionnaire → Questions → Review → Done
+    - [x] Entry で氏名・生年月日を入力
+    - [x] VisitType で初診/再診を選択しセッション作成
+    - [x] Questionnaire で text/number/date/single/multi に応じた入力フォームを表示
+    - [x] Questions で追加質問を順次表示
+    - [x] Review で回答一覧を表示しインライン編集後確定へ進む
+  - [x] Done で要約を表示
+  - [x] **共通**：ヘッダー右上「管理画面」ボタン、フッター注意文の常時表示
+  - [x] **管理**：ログイン→Dashboard→Templates→LLM設定
 
 ### MS6：ログ/観測性（最小）
 - 目的：障害時の原因追跡と操作把握
 - **完了条件**
-  - [ ] セッション遷移、APIエラー、LLM I/Oメタ（所要時間）の記録
-  - [ ] /readyz, /health の簡易エンドポイント
+  - [x] セッション遷移、APIエラー、LLM I/Oメタ（所要時間）の記録
+  - [x] /readyz, /health の簡易エンドポイント
 
 ### MS7：UAT / 受け入れ
 - 目的：エンドツーエンド検証
 - **完了条件**
-  - [ ] 初診/再診の代表テンプレで入力→追加質問→確定が成功
-  - [ ] LLM無効時でもベース問診のみで完了
-  - [ ] 受け入れ基準（§10）を満たす
+  - [x] 初診/再診の代表テンプレで入力→追加質問→確定が成功
+  - [x] LLM無効時でもベース問診のみで完了
+  - [x] 受け入れ基準（§10）を満たす
 
 ---
 
@@ -74,42 +81,43 @@
 
 ### 2.1 バックエンド
 1) **モデル/スキーマ**
-   - [ ] `questionnaires`（テンプレメタ + items[]）
-   - [ ] `sessions`（進行状態・完了フラグ・timestamps）
-   - [ ] `session_responses`（全回答・追加質問の履歴）
+   - [x] `questionnaires`（テンプレメタ + items[]）
+   - [x] `sessions`（進行状態・完了フラグ・timestamps）
+   - [x] `session_responses`（全回答・追加質問の履歴）
 2) **サービス**
-   - [ ] `SessionFSM`：`step("answer")`、`_finalize_item`、attempt/turn/questions 上限管理
-   - [ ] `LLMGateway`：`generate_question`、`decide_or_ask`、`summarize`（タイムアウト/再試行）
-   - [ ] `Validator`：必須・型・範囲のみ
-   - [ ] `StructuredContextManager`：`update_structured_context`
+   - [x] `SessionFSM`：`step("answer")`、`_finalize_item`、attempt/turn/questions 上限管理
+   - [x] `LLMGateway`：`generate_question`、`decide_or_ask`、`summarize`（タイムアウト/再試行）
+   - [x] `Validator`：必須・型・範囲のみ
+   - [x] `StructuredContextManager`：`update_structured_context`
 3) **API**
-   - [ ] `POST /sessions`（患者名・生年月日・visitType・questionnaireId）
-   - [ ] `POST /sessions/{id}/answers`（ベース問診保存）
-   - [ ] `POST /sessions/{id}/llm-questions`（不足の抽出）
-   - [ ] `POST /sessions/{id}/llm-answers`（追加質問への回答の保存）
-   - [ ] `POST /sessions/{id}/finalize`（要約生成と確定）
-   - [ ] 管理系：`GET/POST /questionnaires`, `GET /questionnaires/{id}/template`, `DELETE /questionnaires/{id}`
+   - [x] `POST /sessions`（患者名・生年月日・visitType・questionnaireId）
+   - [x] `POST /sessions/{id}/answers`（ベース問診保存）
+  - [x] `POST /sessions/{id}/llm-questions`（不足の抽出）
+   - [x] `POST /sessions/{id}/llm-answers`（追加質問への回答の保存）
+   - [x] `POST /sessions/{id}/finalize`（要約生成と確定）
+   - [x] 管理系：`GET/POST /questionnaires`, `GET /questionnaires/{id}/template`, `DELETE /questionnaires/{id}`
 4) **観測性**
-   - [ ] /readyz, /health, /metrics（簡易）
+   - [x] /readyz, /health, /metrics（簡易）
 
 ### 2.2 フロントエンド
 1) **共通**
-   - [ ] ルーティング骨格、ヘッダー/フッター（注意文常時表示）
+   - [x] ルーティング骨格、ヘッダー/フッター（注意文常時表示）
 2) **患者向け**
-   - [ ] `/`：氏名・生年月日フォーム（次へで `/visit-type`）
-   - [ ] `/visit-type`：初診/再診選択（未選択は次へ非活性）
-   - [ ] `/questionnaire`：テンプレに基づくフォーム（軽量条件表示、ドラフト保存）
-   - [ ] `/questions`：LLM追加質問（モーダル or カード列）と進行インジケータ
-   - [ ] `/review`：全回答の一覧・インライン編集・確定
-   - [ ] `/done`：完了メッセージと要約（印刷/コピー任意）
+   - [x] `/`：氏名・生年月日フォーム（次へで `/visit-type`）
+   - [x] `/visit-type`：初診/再診選択（未選択は次へ非活性）
+   - [x] `/questionnaire`：テンプレに基づくフォーム（軽量条件表示、ドラフト保存）
+   - [x] `/questions`：LLM追加質問（モーダル or カード列）と進行インジケータ
+   - [x] `/review`：全回答の一覧・インライン編集・確定
+   - [x] `/done`：完了メッセージと要約（印刷/コピー任意）
 3) **管理向け**
-   - [ ] `/admin/login`：管理者ログイン
-   - [ ] `/admin`：ダッシュボード
-   - [ ] `/admin/templates`：一覧/新規/編集/複製/削除
-   - [ ] `/admin/templates/:id`：初診/再診タブと項目CRUD、プレビュー
-   - [ ] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と疎通テスト
+   - [x] `/admin/login`：管理者ログイン
+   - [x] `/admin`：ダッシュボード
+   - [x] `/admin/templates`：一覧/新規/編集/複製/削除
+   - [x] `/admin/templates/:id`：初診/再診タブと項目CRUD、プレビュー
+   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と疎通テスト
 4) **状態管理/永続化**
-   - [ ] sessionStorageドラフト、再試行キュー、画面遷移ガード
+ - [x] sessionStorageドラフト、画面遷移ガード
+  - [x] 再試行キュー（ネットワークエラー時に未送信の回答をsessionStorageに蓄積し再送）
 
 ---
 
@@ -119,8 +127,8 @@
 - `POST /sessions/:id/answers` → `{ ok }`
 - `POST /sessions/:id/llm-questions` → `LlmQuestion[]`
 - `POST /sessions/:id/llm-answers` → `{ ok, remaining }`
-- `POST /sessions/:id/finalize` → `{ summaryText, allAnswers }`
-- 管理系：`GET/POST /questionnaires`, `GET/PUT /questionnaires/:id`, `DELETE /questionnaires/:id`, `GET/PUT /admin/llm`
+- `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
+- 管理系：`GET/POST /questionnaires`, `GET/PUT /questionnaires/:id`, `DELETE /questionnaires/:id`, `GET/PUT /admin/llm`, `POST /admin/login`
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 

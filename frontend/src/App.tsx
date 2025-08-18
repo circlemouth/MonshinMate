@@ -1,18 +1,44 @@
-import { Container, Heading, Box } from '@chakra-ui/react';
-import { Routes, Route } from 'react-router-dom';
-import Home from './pages/Home';
+import { Container, Heading, Box, Flex, Spacer, Button } from '@chakra-ui/react';
+import { Routes, Route, Link as RouterLink } from 'react-router-dom';
+import { useEffect } from 'react';
+import { flushQueue } from './retryQueue';
+import Entry from './pages/Entry';
+import VisitType from './pages/VisitType';
 import QuestionnaireForm from './pages/QuestionnaireForm';
-import Admin from './pages/Admin';
+import Questions from './pages/Questions';
+import Review from './pages/Review';
+import Done from './pages/Done';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import AdminTemplates from './pages/AdminTemplates';
+import AdminLlm from './pages/AdminLlm';
 import LLMChat from './pages/LLMChat';
 
 export default function App() {
+  useEffect(() => {
+    flushQueue();
+  }, []);
+
   return (
     <Container maxW="container.md" py={10}>
-      <Heading mb={4}>MonshinMate</Heading>
+      <Flex as="header" mb={4} align="center">
+        <Heading size="lg">MonshinMate</Heading>
+        <Spacer />
+        <Button as={RouterLink} to="/admin" colorScheme="purple" size="sm">
+          管理画面
+        </Button>
+      </Flex>
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/form" element={<QuestionnaireForm />} />
-        <Route path="/admin" element={<Admin />} />
+        <Route path="/" element={<Entry />} />
+        <Route path="/visit-type" element={<VisitType />} />
+        <Route path="/questionnaire" element={<QuestionnaireForm />} />
+        <Route path="/questions" element={<Questions />} />
+        <Route path="/review" element={<Review />} />
+        <Route path="/done" element={<Done />} />
+        <Route path="/admin/login" element={<AdminLogin />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/templates" element={<AdminTemplates />} />
+        <Route path="/admin/llm" element={<AdminLlm />} />
         <Route path="/chat" element={<LLMChat />} />
       </Routes>
       <Box as="footer" mt={10} fontSize="sm" color="gray.500">
