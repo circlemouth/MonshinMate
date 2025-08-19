@@ -271,12 +271,12 @@ export default function AdminTemplates() {
           >
             必須
           </Checkbox>
-          <Button onClick={addItem} colorScheme="blue">
+          <Button onClick={addItem} colorScheme="primary">
             追加（ローカル）
           </Button>
         </VStack>
       </Box>
-      <Button onClick={saveTemplate} colorScheme="teal">
+      <Button onClick={saveTemplate} colorScheme="primary">
         テンプレートを保存
       </Button>
       <Box>
@@ -295,7 +295,7 @@ export default function AdminTemplates() {
                 <Td>{t.id}</Td>
                 <Td>{t.visit_type}</Td>
                 <Td>
-                  <Button size="xs" mr={2} onClick={() => { setTemplateId(t.id); setVisitType(t.visit_type as any); }}>編集</Button>
+                  <Button size="xs" mr={2} colorScheme="primary" variant="outline" onClick={() => { setTemplateId(t.id); setVisitType(t.visit_type as any); }}>編集</Button>
                   <Button size="xs" colorScheme="red" variant="outline" onClick={() => deleteTemplateApi(t.id, t.visit_type)}>削除</Button>
                 </Td>
               </Tr>
@@ -324,9 +324,9 @@ export default function AdminTemplates() {
                   onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
                 >
                   <VStack align="start">
-                    {item.options.map((opt) => (
-                      <Radio key={opt} value={opt}>{opt}</Radio>
-                    ))}
+                {item.options.map((opt) => (
+                  <Radio key={opt} value={opt} size="lg">{opt}</Radio>
+                ))}
                   </VStack>
                 </RadioGroup>
               ) : item.type === 'multi' && item.options ? (
@@ -334,9 +334,9 @@ export default function AdminTemplates() {
                   onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
                 >
                   <VStack align="start">
-                    {item.options.map((opt) => (
-                      <Checkbox key={opt} value={opt}>{opt}</Checkbox>
-                    ))}
+                {item.options.map((opt) => (
+                  <Checkbox key={opt} value={opt} size="lg">{opt}</Checkbox>
+                ))}
                   </VStack>
                 </CheckboxGroup>
               ) : (

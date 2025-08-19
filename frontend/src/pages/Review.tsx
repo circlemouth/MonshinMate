@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   VStack,
   FormControl,
@@ -9,9 +9,13 @@ import {
   CheckboxGroup,
   RadioGroup,
   Radio,
+  Box,
+  HStack,
+  Text,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
+import { track } from '../metrics';
 
 interface Item {
   id: string;
@@ -58,8 +62,36 @@ export default function Review() {
     }
   };
 
+  const printable = useMemo(() => {
+    return items.map((it) => ({
+      label: it.label,
+      value: Array.isArray(answers[it.id])
+        ? (answers[it.id] || []).join(', ')
+        : answers[it.id] || '',
+    }));
+  }, [items, answers]);
+
   return (
     <VStack spacing={4} align="stretch">
+      {/* 印刷用（フォーム非表示） */}
+      <Box className="print-only">
+        <Text as="h1" fontSize="xl" mb={4} fontWeight="bold">
+          回答内容（最終確認）
+        </Text>
+        <VStack spacing={2} align="stretch">
+          {printable.map((row, idx) => (
+            <Box key={idx} borderBottom="1px solid" borderColor="neutral.300" py={2}>
+              <Text fontWeight="bold" mb={1}>
+                {row.label}
+              </Text>
+              <Text whiteSpace="pre-wrap">{row.value}</Text>
+            </Box>
+          ))}
+        </VStack>
+      </Box>
+
+      {/* 画面用フォーム（印刷時は非表示） */}
+      <Box className="print-hidden">
       {items.map((item) => (
         <FormControl key={item.id} isRequired={item.required}>
           <FormLabel>{item.label}</FormLabel>
@@ -109,9 +141,23 @@ export default function Review() {
           )}
         </FormControl>
       ))}
-      <Button onClick={finalize} colorScheme="green">
-        確定する
-      </Button>
+      <HStack mt={2}>
+        <Button
+          onClick={() => {
+            track('print', { page: 'Review' });
+            window.print();
+          }}
+          colorScheme="primary"
+          variant="outline"
+          className="print-hidden"
+        >
+          印刷プレビュー
+        </Button>
+        <Button onClick={finalize} colorScheme="success">
+          確定する
+        </Button>
+      </HStack>
+      </Box>
     </VStack>
   );
 }

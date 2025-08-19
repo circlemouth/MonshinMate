@@ -31,7 +31,7 @@ export default function AdminLogin() {
           onChange={(e) => setPassword(e.target.value)}
         />
       </FormControl>
-      <Button onClick={login} colorScheme="blue">
+      <Button onClick={login} colorScheme="primary">
         ログイン
       </Button>
     </VStack>

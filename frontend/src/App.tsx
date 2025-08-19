@@ -1,7 +1,9 @@
 import { Container, Heading, Box, Flex, Spacer, Button } from '@chakra-ui/react';
-import { Routes, Route, Link as RouterLink } from 'react-router-dom';
+import { Routes, Route, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useEffect } from 'react';
 import { flushQueue } from './retryQueue';
+import FlowProgress from './components/FlowProgress';
+import { track } from './metrics';
 import Entry from './pages/Entry';
 import VisitType from './pages/VisitType';
 import QuestionnaireForm from './pages/QuestionnaireForm';
@@ -15,19 +17,24 @@ import AdminLlm from './pages/AdminLlm';
 import LLMChat from './pages/LLMChat';
 
 export default function App() {
+  const location = useLocation();
   useEffect(() => {
     flushQueue();
   }, []);
+  useEffect(() => {
+    track('page_view', { path: location.pathname });
+  }, [location.pathname]);
 
   return (
     <Container maxW="container.md" py={10}>
       <Flex as="header" mb={4} align="center">
         <Heading size="lg">MonshinMate</Heading>
         <Spacer />
-        <Button as={RouterLink} to="/admin" colorScheme="purple" size="sm">
+        <Button as={RouterLink} to="/admin" colorScheme="primary" size="sm">
           管理画面
         </Button>
       </Flex>
+      <FlowProgress />
       <Routes>
         <Route path="/" element={<Entry />} />
         <Route path="/visit-type" element={<VisitType />} />
@@ -41,7 +48,7 @@ export default function App() {
         <Route path="/admin/llm" element={<AdminLlm />} />
         <Route path="/chat" element={<LLMChat />} />
       </Routes>
-      <Box as="footer" mt={10} fontSize="sm" color="gray.500">
+      <Box as="footer" mt={10} fontSize="sm" color="gray.600">
         本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。
       </Box>
     </Container>

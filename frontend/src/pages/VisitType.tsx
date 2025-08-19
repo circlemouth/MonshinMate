@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { VStack, FormControl, FormLabel, RadioGroup, HStack, Radio, Button } from '@chakra-ui/react';
+import { VStack, FormControl, FormLabel, RadioGroup, HStack, Radio, Button, FormHelperText } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 
 /** 初診/再診を選択しセッションを作成するページ。 */
@@ -34,14 +34,15 @@ export default function VisitType() {
     <VStack spacing={4} align="stretch">
       <FormControl>
         <FormLabel>受診種別</FormLabel>
-        <RadioGroup value={visitType} onChange={setVisitType}>
+        <RadioGroup value={visitType} onChange={setVisitType} aria-describedby="visit-type-help">
           <HStack spacing={4}>
             <Radio value="initial">初診</Radio>
             <Radio value="followup">再診</Radio>
           </HStack>
         </RadioGroup>
+        <FormHelperText id="visit-type-help">受付スタッフの案内に従って選択してください。</FormHelperText>
       </FormControl>
-      <Button onClick={handleNext} colorScheme="teal">
+      <Button onClick={handleNext} colorScheme="primary">
         次へ
       </Button>
     </VStack>

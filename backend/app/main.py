@@ -463,3 +463,23 @@ def metrics() -> Response:
     ]
     body = "\n".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4")
+
+
+# --- UI メトリクス受け口（匿名・院内向け） ---
+class UiMetricEvents(BaseModel):
+    events: list[dict]
+
+
+@app.post("/metrics/ui")
+def metrics_ui(payload: UiMetricEvents) -> dict:
+    """UI 側の匿名イベントを受け取り、ログに記録する。
+
+    - 個人特定情報は送らない前提。
+    - 必要に応じてファイルやDBへ積む設計に拡張可能。
+    """
+    try:
+        count = len(payload.events)
+    except Exception:
+        count = 0
+    logger.info("ui_metrics received=%d", count)
+    return {"status": "ok", "received": count}

@@ -85,7 +85,7 @@ export default function AdminLlm() {
             body: JSON.stringify(settings),
           })
         }
-        colorScheme="green"
+        colorScheme="primary"
       >
         LLM設定を保存
       </Button>

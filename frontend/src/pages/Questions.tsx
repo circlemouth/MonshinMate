@@ -76,7 +76,7 @@ export default function Questions() {
         <>
           <Box>{current.text}</Box>
           <Input value={answer} onChange={(e) => setAnswer(e.target.value)} />
-          <Button onClick={submit} colorScheme="teal">
+          <Button onClick={submit} colorScheme="primary">
             送信
           </Button>
         </>

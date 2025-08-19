@@ -13,10 +13,10 @@ export default function AdminDashboard() {
 
   return (
     <VStack spacing={4} align="stretch">
-      <Button as={RouterLink} to="/admin/templates" colorScheme="teal">
+      <Button as={RouterLink} to="/admin/templates" colorScheme="primary">
         テンプレート管理
       </Button>
-      <Button as={RouterLink} to="/admin/llm" colorScheme="purple">
+      <Button as={RouterLink} to="/admin/llm" colorScheme="primary" variant="outline">
         LLM設定
       </Button>
     </VStack>
