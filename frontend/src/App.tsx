@@ -1,5 +1,5 @@
 import { Container, Heading, Box, Flex, Spacer, Button } from '@chakra-ui/react';
-import { Routes, Route, Link as RouterLink, useLocation } from 'react-router-dom';
+import { Routes, Route, Link as RouterLink, useLocation, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import { flushQueue } from './retryQueue';
 import FlowProgress from './components/FlowProgress';
@@ -10,7 +10,6 @@ import Questions from './pages/Questions';
 import Review from './pages/Review';
 import Done from './pages/Done';
 import AdminLogin from './pages/AdminLogin';
-import AdminDashboard from './pages/AdminDashboard';
 import AdminTemplates from './pages/AdminTemplates';
 import AdminLlm from './pages/AdminLlm';
 import AdminSessions from './pages/AdminSessions';
@@ -67,7 +66,7 @@ export default function App() {
 
           {/* 管理者系 */}
           <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+          <Route path="/admin" element={<Navigate to="/admin/templates" replace />} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
           <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />

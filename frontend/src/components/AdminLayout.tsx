@@ -13,7 +13,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const navItems = useMemo(
     () => [
-      { label: 'ダッシュボード', to: '/admin' },
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
