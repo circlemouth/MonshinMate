@@ -151,24 +151,17 @@ export default function QuestionnaireForm() {
                 {helperTexts[item.id]}
               </FormHelperText>
             )}
-            {item.type === 'number' ? (
-              <Input
-                type="number"
-                inputMode="numeric"
-                id={`item-${item.id}`}
-                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+            {item.type === 'yesno' ? (
+              <RadioGroup
                 value={answers[item.id] || ''}
-                onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-              />
-            ) : item.type === 'date' ? (
-              <Input
-                type="date"
-                max={today}
-                id={`item-${item.id}`}
+                onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
                 aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-                value={answers[item.id] || ''}
-                onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-              />
+              >
+                <VStack align="start" spacing={3}>
+                  <Radio value="yes" size="lg">はい</Radio>
+                  <Radio value="no" size="lg">いいえ</Radio>
+                </VStack>
+              </RadioGroup>
             ) : item.type === 'single' && item.options ? (
               <RadioGroup
                 value={answers[item.id] || ''}

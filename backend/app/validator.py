@@ -47,6 +47,11 @@ class Validator:
                     raise HTTPException(status_code=400, detail=f"{key} は単一選択です")
                 if options and value not in list(options):
                     raise HTTPException(status_code=400, detail=f"{key} の値が不正です")
+            elif item_type == "yesno":
+                if not isinstance(value, str):
+                    raise HTTPException(status_code=400, detail=f"{key} は YES/NO を選択してください")
+                if value not in ("yes", "no"):
+                    raise HTTPException(status_code=400, detail=f"{key} は yes/no のいずれかで入力してください")
             elif item_type == "multi":
                 if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                     raise HTTPException(status_code=400, detail=f"{key} は複数選択の配列で入力してください")

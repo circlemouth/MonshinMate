@@ -5,7 +5,6 @@ import { flushQueue } from './retryQueue';
 import FlowProgress from './components/FlowProgress';
 import { track } from './metrics';
 import Entry from './pages/Entry';
-import VisitType from './pages/VisitType';
 import QuestionnaireForm from './pages/QuestionnaireForm';
 import Questions from './pages/Questions';
 import Review from './pages/Review';
@@ -57,7 +56,6 @@ export default function App() {
         {!isChatPage && <FlowProgress />}
         <Routes>
           <Route path="/" element={<Entry />} />
-          <Route path="/visit-type" element={<VisitType />} />
           <Route path="/questionnaire" element={<QuestionnaireForm />} />
           <Route path="/questions" element={<Questions />} />
           <Route path="/review" element={<Review />} />

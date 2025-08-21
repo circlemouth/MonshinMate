@@ -21,7 +21,7 @@
 - 照度: 明るい院内照明（ライトテーマ基本、必要に応じハイコントラストテーマ）。
 
 ## 4. 画面フロー（整合確認）
-- 患者: Entry（氏名/生年月日）→ 初診/再診 → ベース問診 → 追加質問 → 最終確認 → 完了。
+- 患者: Entry（氏名/生年月日＋受診種別）→ ベース問診 → 追加質問 → 最終確認 → 完了。
 - 管理: ログイン → ダッシュボード → テンプレ CRUD → LLM 設定。
 - plannedSystem.md の 1.2/3.5/4 と整合。API 契約は変更しない（追加 UI はフロント内閉域で完結）。
 
@@ -92,7 +92,7 @@
 2. ベースレイアウト（ヘッダー/フッター/コンテナ）とタイポ/スペーシング反映。
 3. フォーム要素（Text/Number/Date/Radio/Checkbox/Select）を設計・差し替え。
 4. Stepper/Progress、Alert/Error、Toast、Modal の整備。
-5. 画面ごとの情報設計（Entry/VisitType/Questionnaire/Questions/Review/Done）。
+5. 画面ごとの情報設計（Entry（受診種別統合）/Questionnaire/Questions/Review/Done）。
 6. アクセシビリティ対応（ラベル、aria、フォーカス、コントラスト）。
 7. 印刷スタイル、計測イベントの配線、E2E 確認。
 

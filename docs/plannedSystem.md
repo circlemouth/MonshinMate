@@ -48,11 +48,11 @@
 - **監視**：/healthz（死活）・/readyz（依存疎通）・/metrics（OpenMetrics）。
 
 ### 2. マイルストーン（MS）
-- **MS1 テンプレ整備**：問診テンプレート CRUD と `get_template_for_visit_type` の動作確認。
+- **MS1 テンプレ整備**：問診テンプレート CRUD と `get_template_for_visit_type` の動作確認（項目型は text/multi/yesno のみ）。
 - **MS2 セッション基盤**：`SessionFSM` 初期化（`remaining_items`/`completion_status`/`attempt_counts`）、`StructuredContextManager` による永続更新。
 - **MS3 追加質問ループ**：`step("answer")` で回答受領→`LLMGateway.generate_question` による未質問項目の質問生成→`Validator.is_complete` 判定→不足時に `LLMGateway.decide_or_ask` で追質問（項目ごと最大3回・セッションあたりの上限N）。
 - **MS4 要約と保存**：必要情報が揃ったら `_finalize_item` を実行し、`collected_data` と `SessionResponse` に反映。全項目完了時にセッション終了。
-- **MS5 フロントエンド**：患者フロー（基本情報→種別→ベース問診→一次送信→追加質問→最終確認→完了）、管理UI（テンプレ編集）。
+- **MS5 フロントエンド**：患者フロー（基本情報＋受診種別→ベース問診→一次送信→追加質問→最終確認→完了）、管理UI（テンプレ編集）。
 - **MS6 ログ/観測性（最小）**：セッション進行ログ、LLM I/O メタ（トークン/所要時間）保存。PII は最小化し、必要に応じマスキング。
 - **MS7 UAT/受け入れ**：想定シナリオでエンドツーエンド検証、受け入れ基準を満たせばリリース。
 
@@ -79,8 +79,7 @@
 
 **フロントエンド**
 1) **患者フロー**：
-   - 画面A：基本情報（患者名・生年月日）
-   - 画面B：初診/再診の選択
+   - 画面A：基本情報（患者名・生年月日＋受診種別）
    - 画面C：ベース問診フォーム（テンプレートに沿った入力）
    - 画面D：一次送信→LLM追加質問の提示と回答（1問ずつ or 複数）
    - 画面E：最終確認（全回答の一覧/その場修正）→確定
@@ -104,7 +103,8 @@
     "visit_type": "initial|followup",
     "items": [
       { "id": "chief_complaint", "label": "主訴", "type": "string", "required": true },
-      { "id": "onset", "label": "発症時期", "type": "date|string", "required": false }
+      { "id": "pain_present", "label": "痛みはありますか？", "type": "yesno", "required": false },
+      { "id": "allergies", "label": "アレルギー", "type": "multi", "options": ["食物", "薬剤", "花粉"], "required": false }
     ]
   }
   ```

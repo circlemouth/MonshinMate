@@ -23,7 +23,7 @@
 - 目的：初診/再診テンプレートのCRUDとプレビューを提供
 - **完了条件**
 - [x] テンプレート一覧/新規/編集/削除が動作
-- [x] 初診/再診タブ切替、項目の型（single/multi/number/date/text）と選択肢設定
+- [x] 初診/再診タブ切替、項目の型（text/multi/yesno）のみとし、複雑さを削減
   - [x] 条件表示（軽量 when）の保存/反映
   - [x] プレビューで患者側画面の疑似レンダリング
     - `when` は `{ "item_id": 参照項目ID, "equals": 値 }` 形式で、条件が満たされた場合にのみ対象項目を表示する。
@@ -52,10 +52,10 @@
 ### MS5：フロント実装（患者/管理）
 - 目的：UI導線と状態管理の実装
 - **完了条件**
-  - [x] **患者**：Entry（氏名/生年月日）→ VisitType → Questionnaire → Questions → Review → Done
+  - [x] **患者**：Entry（氏名/生年月日＋受診種別）→ Questionnaire → Questions → Review → Done
     - [x] Entry で氏名・生年月日を入力
-    - [x] VisitType で初診/再診を選択しセッション作成
-    - [x] Questionnaire で text/number/date/single/multi に応じた入力フォームを表示
+    - [x] Entry で「当院の受診は初めてですか？」を選択（「初めて」= initial / 「受診したことがある」= followup）しセッション作成
+    - [x] Questionnaire で text/multi/yesno に応じた入力フォームを表示
     - [x] Questions で追加質問を順次表示
     - [x] Review で回答一覧を表示しインライン編集後確定へ進む
   - [x] Done で要約を表示
@@ -113,8 +113,7 @@
    - [x] ルーティング骨格、ヘッダー/フッター（注意文常時表示）
    - [x] 管理画面ルートではヘッダー右上ボタンを「戻る」に切替（元の画面へ戻れるよう改善）
 2) **患者向け**
-   - [x] `/`：氏名・生年月日フォーム（次へで `/visit-type`）
-   - [x] `/visit-type`：初診/再診選択（未選択は次へ非活性）
+   - [x] `/`：氏名・生年月日＋受診種別の入力（選択後にセッション作成→`/questionnaire` へ）
    - [x] `/questionnaire`：テンプレに基づくフォーム（軽量条件表示、ドラフト保存）
    - [x] `/questions`：LLM追加質問（モーダル or カード列）と進行インジケータ
    - [x] `/review`：全回答の一覧・インライン編集・確定

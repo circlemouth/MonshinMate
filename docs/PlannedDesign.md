@@ -6,7 +6,7 @@
 
 ## 0. 目的 / スコープ
 - 目的：患者が最小限の入力で問診を完了し、LLMの追加質問で不足情報を補完できるUIを提供する。
-- スコープ：患者向け画面（基本情報→種別→ベース問診→LLM追加質問→最終確認→完了）、および管理画面（問診テンプレート設定、LLM接続設定、簡易プレビュー）。
+- スコープ：患者向け画面（基本情報＋受診種別→ベース問診→LLM追加質問→最終確認→完了）、および管理画面（問診テンプレート設定、LLM接続設定、簡易プレビュー）。
 - 非スコープ：禁忌/赤旗、辞書正規化、同意画面、重複照合/ID発行、ルールベース追質問、緊急分岐。
 
 ---
@@ -15,10 +15,9 @@
 
 ### 患者向け
 1. **/ (Entry)**
-   - 基本情報入力（患者名・生年月日）
+   - 基本情報入力（患者名・生年月日）＋受診種別の選択（初診/再診）
    - 右上：管理画面へのボタン（/admin へ）
-2. **/visit-type**
-   - 初診 / 再診 の選択（ラジオ）
+2. （統合済み）受診種別は Entry に統合（本セクションは廃止）
 3. **/questionnaire**
    - ベース問診フォーム（テンプレートに従う）
    - 送信後、LLMの追加質問フェーズへ遷移
@@ -48,7 +47,7 @@
 - **ヘッダー**：左にロゴ（MonshinMate）、右に「管理画面」ボタン（常時表示、/adminへ）。
 - **フッター**：`本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。` を小さめに常時表示。
 - **ブレッドクラム**：患者向けは非表示（ステップナビで代替）。管理画面のみ簡易パンくず。
-- **ステップナビ（患者向け）**：Entry → 種別 → 問診 → 追加質問 → 確認 → 完了（現在位置を強調）。
+- **ステップナビ（患者向け）**：Entry → 問診 → 追加質問 → 確認 → 完了（現在位置を強調）。
 
 ---
 
@@ -58,16 +57,15 @@
 - **フォーム項目**
   - 氏名（必須、テキスト）
   - 生年月日（必須、日付ピッカー。YYYY-MM-DD）
-- **ボタン**：次へ（/visit-type へ）
+- 受診種別（必須、初診/再診のラジオ）
+- **ボタン**：次へ（セッション作成→/questionnaire へ）
 - **バリデーション**
   - 氏名：1〜64文字、両端空白除去
   - 生年月日：過去日付のみ、妥当な日付形式
 - **UIメモ**：入力ミスはフィールド下に赤字で1文提示。Enterで次へ可。
 
-### 3.2 Visit Type（/visit-type）
-- **選択**：初診 / 再診（ラジオ）
-- **ボタン**：次へ（/questionnaire）／戻る（/）
-- **状態**：選択済が無い場合は次へをdisabled。
+### 3.2 Visit Type（統合済み）
+本セクションは Entry に統合済み（受診種別は Entry で選択）。
 
 ### 3.3 Questionnaire（/questionnaire）
 - **表示**：選択した種別に紐づくテンプレートの項目
@@ -169,8 +167,7 @@
 ## 6. ルーティング / ガード
 - ルート一覧は §1 に準拠。
 - **ガード**：
-  - `/visit-type` は Entry 完了が前提（氏名・生年月日が未入力なら `/` へ）
-  - `/questionnaire` は visitType が未選択なら `/visit-type` へ
+  - `/questionnaire` は `session_id` が未作成なら `/` へ（Entry にて作成）
   - `/questions` は問診送信済が前提
   - `/review` は LLM 追加質問フェーズ完了が前提（またはスキップ）
   - 管理配下は認証必須（未認証は `/admin/login` へ）
@@ -218,7 +215,7 @@
 ---
 
 ## 12. 管理者機能の詳細仕様
-- **テンプレ項目の型**：`single`, `multi`, `number`, `date`, `text`。
+- **テンプレ項目の型**：`text`, `multi`, `yesno`（3種に簡素化）。
 - **条件表示**：`when: { itemId, operator, value }[]`（ANDで評価）
 - **公開/下書き**：公開のみ患者側に配信。編集はドラフトで行い、公開で差替。
 - **プレビュー**：右パネルに患者画面の疑似レンダリング。種別切替可。
@@ -275,7 +272,7 @@
 interface QuestionItem {
   id: string;
   label: string;
-  inputType: 'single' | 'multi' | 'number' | 'date' | 'text';
+  inputType: 'text' | 'multi' | 'yesno';
   required?: boolean;
   description?: string;
   options?: { value: string; label: string }[]; // single/multi
@@ -286,7 +283,7 @@ interface QuestionItem {
 interface LlmQuestion {
   id: string;            // new-xxx など
   text: string;          // 質問文
-  expectedInputType: 'single' | 'multi' | 'number' | 'date' | 'text';
+  expectedInputType: 'text' | 'multi' | 'yesno';
   options?: { value: string; label: string }[];
   priority?: number;     // 低いほど高優先
 }

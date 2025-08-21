@@ -72,7 +72,7 @@ export default function AdminTemplates() {
 
   const addItem = () => {
     if (!newItem.label) return;
-    const options = ['single', 'multi'].includes(newItem.type)
+    const options = ['multi'].includes(newItem.type)
       ? newItem.options
           .split(',')
           .map((v) => v.trim())
@@ -164,14 +164,12 @@ export default function AdminTemplates() {
                   onChange={(e) => updateItem(idx, 'type', e.target.value)}
                 >
                   <option value="string">テキスト</option>
-                  <option value="number">数値</option>
-                  <option value="date">日付</option>
-                  <option value="single">単一選択</option>
                   <option value="multi">複数選択</option>
+                  <option value="yesno">YES/NO</option>
                 </Select>
               </Td>
               <Td>
-                {['single', 'multi'].includes(item.type) ? (
+                {['multi'].includes(item.type) ? (
                   <Input
                     value={item.options?.join(',') || ''}
                     onChange={(e) =>
@@ -243,13 +241,11 @@ export default function AdminTemplates() {
               onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
             >
               <option value="string">テキスト</option>
-              <option value="number">数値</option>
-              <option value="date">日付</option>
-              <option value="single">単一選択</option>
               <option value="multi">複数選択</option>
+              <option value="yesno">YES/NO</option>
             </Select>
           </FormControl>
-          {['single', 'multi'].includes(newItem.type) && (
+          {['multi'].includes(newItem.type) && (
             <FormControl>
               <FormLabel>選択肢（カンマ区切り）</FormLabel>
               <Input
@@ -309,24 +305,19 @@ export default function AdminTemplates() {
           {previewItems.map((item) => (
             <FormControl key={item.id} isRequired={item.required}>
               <FormLabel>{item.label}</FormLabel>
-              {item.type === 'number' ? (
-                <Input
-                  type="number"
-                  onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
-                />
-              ) : item.type === 'date' ? (
-                <Input
-                  type="date"
-                  onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
-                />
-              ) : item.type === 'single' && item.options ? (
-                <RadioGroup
-                  onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
-                >
+              {item.type === 'yesno' ? (
+                <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}>
                   <VStack align="start">
-                {item.options.map((opt) => (
-                  <Radio key={opt} value={opt} size="lg">{opt}</Radio>
-                ))}
+                    <Radio value="yes" size="lg">はい</Radio>
+                    <Radio value="no" size="lg">いいえ</Radio>
+                  </VStack>
+                </RadioGroup>
+              ) : item.type === 'single' && item.options ? (
+                <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}>
+                  <VStack align="start">
+                    {item.options.map((opt) => (
+                      <Radio key={opt} value={opt} size="lg">{opt}</Radio>
+                    ))}
                   </VStack>
                 </RadioGroup>
               ) : item.type === 'multi' && item.options ? (
