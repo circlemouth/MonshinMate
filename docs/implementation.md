@@ -23,7 +23,7 @@
 - 目的：初診/再診テンプレートのCRUDとプレビューを提供
 - **完了条件**
 - [x] テンプレート一覧/新規/編集/削除が動作
-- [x] 初診/再診タブ切替、項目の型（text/multi/yesno）のみとし、複雑さを削減
+- [x] 項目ごとに「初診」「再診」への適用可否をチェックボックスで設定
   - [x] 条件表示（軽量 when）の保存/反映
   - [x] プレビューで患者側画面の疑似レンダリング
     - `when` は `{ "item_id": 参照項目ID, "equals": 値 }` 形式で、条件が満たされた場合にのみ対象項目を表示する。
@@ -60,7 +60,8 @@
     - [x] Review で回答一覧を表示しインライン編集後確定へ進む
   - [x] Done で要約を表示
   - [x] **共通**：ヘッダー右上「管理画面」ボタン、フッター注意文の常時表示
-  - [x] **管理**：ログイン→Dashboard→Templates→LLM設定
+- [x] **管理**：ログイン→Dashboard→Templates→LLM設定
+  - [x] 問診結果一覧と詳細表示
 
 ### MS6：ログ/観測性（最小）
 - 目的：障害時の原因追跡と操作把握
@@ -121,9 +122,11 @@
 3) **管理向け**
    - [x] `/admin/login`：管理者ログイン
    - [x] `/admin`：ダッシュボード
-   - [x] `/admin/templates`：一覧/新規/編集/複製/削除
-   - [x] `/admin/templates/:id`：初診/再診タブと項目CRUD、プレビュー
-   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と疎通テスト
+ - [x] `/admin/templates`：一覧/新規/編集/複製/削除
+  - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否を設定する表とプレビュー
+  - [x] `/admin/sessions`：問診結果の一覧
+  - [x] `/admin/sessions/:id`：質問と回答の詳細表示
+  - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と疎通テスト
 4) **状態管理/永続化**
  - [x] sessionStorageドラフト、画面遷移ガード
   - [x] 再試行キュー（ネットワークエラー時に未送信の回答をsessionStorageに蓄積し再送）
@@ -138,6 +141,7 @@
 - `POST /sessions/:id/llm-answers` → `{ ok, remaining }`
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
 - 管理系：`GET/POST /questionnaires`, `GET/PUT /questionnaires/:id`, `DELETE /questionnaires/:id`, `GET/PUT /admin/llm`, `POST /admin/login`
+- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 

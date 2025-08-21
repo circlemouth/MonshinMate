@@ -20,6 +20,8 @@ from .db import (
     list_templates,
     delete_template,
     save_session,
+    list_sessions as db_list_sessions,
+    get_session as db_get_session,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -308,6 +310,29 @@ class SessionCreateResponse(BaseModel):
     status: str = "created"
 
 
+class SessionSummary(BaseModel):
+    """管理画面で表示するセッションの概要。"""
+
+    id: str
+    patient_name: str
+    dob: str
+    visit_type: str
+    finalized_at: str | None = None
+
+
+class SessionDetail(BaseModel):
+    """管理画面で表示するセッション詳細。"""
+
+    id: str
+    patient_name: str
+    dob: str
+    visit_type: str
+    questionnaire_id: str
+    answers: dict[str, Any]
+    summary: str | None = None
+    finalized_at: str | None = None
+
+
 @app.post("/sessions", response_model=SessionCreateResponse)
 def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     """新しいセッションを作成して返す。"""
@@ -434,6 +459,31 @@ def finalize_session(session_id: str) -> dict:
         "finalized_at": session.finalized_at.isoformat(),
         "status": session.completion_status,
     }
+
+
+@app.get("/admin/sessions", response_model=list[SessionSummary])
+def admin_list_sessions() -> list[SessionSummary]:
+    """保存済みセッションの一覧を返す。"""
+    sessions = db_list_sessions()
+    return [SessionSummary(**s) for s in sessions]
+
+
+@app.get("/admin/sessions/{session_id}", response_model=SessionDetail)
+def admin_get_session(session_id: str) -> SessionDetail:
+    """指定セッションの詳細を返す。"""
+    s = db_get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    return SessionDetail(
+        id=s["id"],
+        patient_name=s["patient_name"],
+        dob=s["dob"],
+        visit_type=s["visit_type"],
+        questionnaire_id=s["questionnaire_id"],
+        answers=s.get("answers", {}),
+        summary=s.get("summary"),
+        finalized_at=s.get("finalized_at"),
+    )
 
 
 # --- 観測用メトリクス（最小実装） ---

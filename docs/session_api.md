@@ -79,6 +79,23 @@
 - **レスポンス**:
   - `{ status: "ok" }`（成功時）
 
+## GET /admin/sessions
+- **概要**: 保存済みセッションの一覧を取得する。
+- **レスポンス**:
+  - `Array<{ id: string, patient_name: string, dob: string, visit_type: string, finalized_at: string | null }>`
+
+## GET /admin/sessions/{session_id}
+- **概要**: 指定セッションの詳細を取得する。
+- **レスポンス**:
+  - `id` (str)
+  - `patient_name` (str)
+  - `dob` (str)
+  - `visit_type` (str)
+  - `questionnaire_id` (str)
+  - `answers` (object)
+  - `summary` (str|null)
+  - `finalized_at` (str|null)
+
 ## GET /questionnaires/{id}/template?visit_type=initial|followup
 - **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
 - **レスポンス**:
