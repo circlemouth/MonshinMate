@@ -15,7 +15,7 @@ export default function AdminLogin() {
     });
     if (res.ok) {
       sessionStorage.setItem('adminLoggedIn', '1');
-      navigate('/admin');
+      navigate('/admin/templates');
     } else {
       alert('ログインに失敗しました');
     }
