@@ -12,6 +12,7 @@ export default defineConfig({
       '/healthz': 'http://localhost:8000',
       '/readyz': 'http://localhost:8000',
       '/metrics': 'http://localhost:8000',
+      '/admin': 'http://localhost:8000',
     },
   },
 });

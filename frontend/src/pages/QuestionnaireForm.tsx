@@ -8,10 +8,10 @@ import {
   Checkbox,
   CheckboxGroup,
   RadioGroup,
-  HStack,
   Radio,
   FormErrorMessage,
   FormHelperText,
+  Box,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
@@ -129,78 +129,87 @@ export default function QuestionnaireForm() {
   }, [attempted, visibleItems, answers]);
 
   return (
-    <VStack spacing={4} align="stretch">
+    <VStack spacing={6} align="stretch">
       <ErrorSummary errors={errorsForSummary} />
       {visibleItems.map((item) => (
-        <FormControl
-          key={item.id}
-          isRequired={item.required}
-          isInvalid={
-            attempted && item.required && (answers[item.id] === undefined || answers[item.id] === '' || (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
-          }
-        >
-          <FormLabel htmlFor={`item-${item.id}`}>{item.label}</FormLabel>
-          {helperTexts[item.id] && (
-            <FormHelperText id={`help-item-${item.id}`}>{helperTexts[item.id]}</FormHelperText>
-          )}
-          {item.type === 'number' ? (
-            <Input
-              type="number"
-              inputMode="numeric"
-              id={`item-${item.id}`}
-              aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-              value={answers[item.id] || ''}
-              onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-            />
-          ) : item.type === 'date' ? (
-            <Input
-              type="date"
-              max={today}
-              id={`item-${item.id}`}
-              aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-              value={answers[item.id] || ''}
-              onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-            />
-          ) : item.type === 'single' && item.options ? (
-            <RadioGroup
-              value={answers[item.id] || ''}
-              onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
-              aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-            >
-              <VStack align="start">
-                {item.options.map((opt) => (
-                  <Radio key={opt} value={opt} size="lg">
-                    {opt}
-                  </Radio>
-                ))}
-              </VStack>
-            </RadioGroup>
-          ) : item.type === 'multi' && item.options ? (
-            <CheckboxGroup
-              value={answers[item.id] || []}
-              onChange={(vals) => setAnswers({ ...answers, [item.id]: vals })}
-              aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-            >
-              <VStack align="start">
-                {item.options.map((opt) => (
-                  <Checkbox key={opt} value={opt} size="lg">
-                    {opt}
-                  </Checkbox>
-                ))}
-              </VStack>
-            </CheckboxGroup>
-          ) : (
-            <Input
-              id={`item-${item.id}`}
-              aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-              value={answers[item.id] || ''}
-              onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-            />
-          )}
-          <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
-        </FormControl>
+        <Box key={item.id} bg="white" p={6} borderRadius="lg" boxShadow="sm">
+          <FormControl
+            isRequired={item.required}
+            isInvalid={
+              attempted &&
+              item.required &&
+              (answers[item.id] === undefined ||
+                answers[item.id] === '' ||
+                (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
+            }
+          >
+            <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
+              {item.label}
+            </FormLabel>
+            {helperTexts[item.id] && (
+              <FormHelperText id={`help-item-${item.id}`} mb={4}>
+                {helperTexts[item.id]}
+              </FormHelperText>
+            )}
+            {item.type === 'number' ? (
+              <Input
+                type="number"
+                inputMode="numeric"
+                id={`item-${item.id}`}
+                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+                value={answers[item.id] || ''}
+                onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
+              />
+            ) : item.type === 'date' ? (
+              <Input
+                type="date"
+                max={today}
+                id={`item-${item.id}`}
+                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+                value={answers[item.id] || ''}
+                onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
+              />
+            ) : item.type === 'single' && item.options ? (
+              <RadioGroup
+                value={answers[item.id] || ''}
+                onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+              >
+                <VStack align="start" spacing={3}>
+                  {item.options.map((opt) => (
+                    <Radio key={opt} value={opt} size="lg">
+                      {opt}
+                    </Radio>
+                  ))}
+                </VStack>
+              </RadioGroup>
+            ) : item.type === 'multi' && item.options ? (
+              <CheckboxGroup
+                value={answers[item.id] || []}
+                onChange={(vals) => setAnswers({ ...answers, [item.id]: vals })}
+                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+              >
+                <VStack align="start" spacing={3}>
+                  {item.options.map((opt) => (
+                    <Checkbox key={opt} value={opt} size="lg">
+                      {opt}
+                    </Checkbox>
+                  ))}
+                </VStack>
+              </CheckboxGroup>
+            ) : (
+              <Input
+                id={`item-${item.id}`}
+                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+                value={answers[item.id] || ''}
+                onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
+              />
+            )}
+            <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
+          </FormControl>
+        </Box>
       ))}
-      <Button onClick={handleSubmit} colorScheme="primary" isDisabled={missingRequired}>
+      <Button onClick={handleSubmit} colorScheme="primary" size="lg" py={7} isDisabled={missingRequired}>
         次へ
       </Button>
     </VStack>

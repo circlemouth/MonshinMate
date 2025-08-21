@@ -163,11 +163,11 @@ export default function AdminTemplates() {
                   value={item.type}
                   onChange={(e) => updateItem(idx, 'type', e.target.value)}
                 >
-                  <option value="string">text</option>
-                  <option value="number">number</option>
-                  <option value="date">date</option>
-                  <option value="single">single</option>
-                  <option value="multi">multi</option>
+                  <option value="string">テキスト</option>
+                  <option value="number">数値</option>
+                  <option value="date">日付</option>
+                  <option value="single">単一選択</option>
+                  <option value="multi">複数選択</option>
                 </Select>
               </Td>
               <Td>
@@ -221,10 +221,10 @@ export default function AdminTemplates() {
         <Input value={templateId} onChange={(e) => setTemplateId(e.target.value)} />
       </FormControl>
       <FormControl>
-        <FormLabel>visit_type</FormLabel>
+        <FormLabel>受診種別</FormLabel>
         <Select value={visitType} onChange={(e) => setVisitType(e.target.value as any)}>
-          <option value="initial">initial</option>
-          <option value="followup">followup</option>
+          <option value="initial">初診</option>
+          <option value="followup">再診</option>
         </Select>
       </FormControl>
       <Box borderWidth="1px" borderRadius="md" p={4}>
@@ -242,11 +242,11 @@ export default function AdminTemplates() {
               value={newItem.type}
               onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
             >
-              <option value="string">text</option>
-              <option value="number">number</option>
-              <option value="date">date</option>
-              <option value="single">single</option>
-              <option value="multi">multi</option>
+              <option value="string">テキスト</option>
+              <option value="number">数値</option>
+              <option value="date">日付</option>
+              <option value="single">単一選択</option>
+              <option value="multi">複数選択</option>
             </Select>
           </FormControl>
           {['single', 'multi'].includes(newItem.type) && (
@@ -285,7 +285,7 @@ export default function AdminTemplates() {
           <Thead>
             <Tr>
               <Th>ID</Th>
-              <Th>visit_type</Th>
+              <Th>受診種別</Th>
               <Th>操作</Th>
             </Tr>
           </Thead>

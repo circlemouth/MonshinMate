@@ -5,6 +5,7 @@ import time
 import logging
 
 from pydantic import BaseModel
+import httpx
 
 
 class LLMSettings(BaseModel):
@@ -15,6 +16,9 @@ class LLMSettings(BaseModel):
     temperature: float
     system_prompt: str = ""
     enabled: bool = True
+    # リモート接続用設定（任意）。空の場合はスタブ動作を維持する。
+    base_url: str | None = None
+    api_key: str | None = None
 
 
 class LLMGateway:
@@ -36,8 +40,33 @@ class LLMGateway:
         Returns:
             dict[str, str]: ステータスを示す辞書。
         """
-        # 本来は HTTP 経由でモデルへ疎通確認を行う。ここでは常に成功を返す。
-        return {"status": "ok"}
+        # base_url が指定されていなければ常に OK（ローカル/スタブ運用）。
+        s = self.settings
+        if not s.enabled:
+            return {"status": "ok"}
+        if not s.base_url:
+            return {"status": "ok"}
+
+        try:
+            # プロバイダ毎に最小の疎通確認を行う
+            timeout = httpx.Timeout(3.0)
+            if s.provider == "ollama":
+                # /api/tags は軽量で認証不要
+                url = s.base_url.rstrip("/") + "/api/tags"
+                r = httpx.get(url, timeout=timeout)
+                r.raise_for_status()
+                return {"status": "ok"}
+            else:
+                # LM Studio（OpenAI 互換）: /v1/models
+                url = s.base_url.rstrip("/") + "/v1/models"
+                headers = {}
+                if s.api_key:
+                    headers["Authorization"] = f"Bearer {s.api_key}"
+                r = httpx.get(url, headers=headers, timeout=timeout)
+                r.raise_for_status()
+                return {"status": "ok"}
+        except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
+            return {"status": "ng", "detail": str(e)}
 
     def generate_question(
         self,
@@ -73,10 +102,83 @@ class LLMGateway:
         """チャット形式での応答を模擬的に返す。"""
         start = time.perf_counter()
         s = self.settings
+        # リモート設定が有効な場合は HTTP 経由で実行し、失敗時はスタブへフォールバック
+        if s.enabled and s.base_url:
+            try:
+                reply = self._chat_remote(message)
+                duration = (time.perf_counter() - start) * 1000
+                logging.getLogger("llm").info("chat(remote) took_ms=%.1f", duration)
+                return reply
+            except Exception:
+                logging.getLogger("llm").exception("remote_chat_failed; falling back to stub")
+
+        # フォールバック（スタブ）
         result = f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
         duration = (time.perf_counter() - start) * 1000
-        logging.getLogger("llm").info("chat took_ms=%.1f", duration)
+        logging.getLogger("llm").info("chat(stub) took_ms=%.1f", duration)
         return result
+
+    def _chat_remote(self, message: str) -> str:
+        """リモート LLM へチャットリクエストを送信する。
+
+        provider に応じて Ollama または OpenAI 互換（LM Studio）を呼び分ける。
+        エラー時は例外を送出する（呼び出し側でフォールバック）。
+        """
+        s = self.settings
+        assert s.base_url, "base_url is required for remote chat"
+        timeout = httpx.Timeout(15.0)
+        if s.provider == "ollama":
+            # Ollama Chat API
+            url = s.base_url.rstrip("/") + "/api/chat"
+            messages = []
+            if s.system_prompt:
+                messages.append({"role": "system", "content": s.system_prompt})
+            messages.append({"role": "user", "content": message})
+            payload: dict[str, Any] = {
+                "model": s.model,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": s.temperature},
+            }
+            r = httpx.post(url, json=payload, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            # Ollama の応答は data["message"]["content"] に入る
+            content = (
+                (data.get("message") or {}).get("content")
+                or data.get("response")  # generate API 互換の可能性も考慮
+                or ""
+            )
+            if not content:
+                raise RuntimeError("empty response from ollama")
+            return content
+        else:
+            # LM Studio (OpenAI 互換) Chat Completions API
+            url = s.base_url.rstrip("/") + "/v1/chat/completions"
+            headers = {"Content-Type": "application/json"}
+            if s.api_key:
+                headers["Authorization"] = f"Bearer {s.api_key}"
+            messages = []
+            if s.system_prompt:
+                messages.append({"role": "system", "content": s.system_prompt})
+            messages.append({"role": "user", "content": message})
+            payload = {
+                "model": s.model,
+                "messages": messages,
+                "temperature": s.temperature,
+                "stream": False,
+            }
+            r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+            r.raise_for_status()
+            data = r.json()
+            choices = data.get("choices") or []
+            if not choices:
+                raise RuntimeError("no choices in response")
+            msg = choices[0].get("message") or {}
+            content = msg.get("content") or ""
+            if not content:
+                raise RuntimeError("empty content in choice")
+            return content
 
     def summarize(self, answers: dict[str, Any]) -> str:
         """回答内容を簡易に要約した文字列を返す。
