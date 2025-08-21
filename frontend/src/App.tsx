@@ -13,6 +13,8 @@ import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTemplates from './pages/AdminTemplates';
 import AdminLlm from './pages/AdminLlm';
+import AdminSessions from './pages/AdminSessions';
+import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
 
 export default function App() {
@@ -63,6 +65,8 @@ export default function App() {
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/templates" element={<AdminTemplates />} />
+          <Route path="/admin/sessions" element={<AdminSessions />} />
+          <Route path="/admin/sessions/:id" element={<AdminSessionDetail />} />
           <Route path="/admin/llm" element={<AdminLlm />} />
           <Route path="/chat" element={<LLMChat />} />
         </Routes>

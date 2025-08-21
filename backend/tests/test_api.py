@@ -182,6 +182,32 @@ def test_llm_disabled() -> None:
     client.put("/llm/settings", json=settings)
 
 
+def test_admin_session_list_and_detail() -> None:
+    """管理用セッション一覧と詳細取得を確認する。"""
+    payload = {
+        "patient_name": "一覧太郎",
+        "dob": "1980-01-01",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "発熱"},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    session_id = res.json()["id"]
+    fin = client.post(f"/sessions/{session_id}/finalize")
+    assert fin.status_code == 200
+
+    list_res = client.get("/admin/sessions")
+    assert list_res.status_code == 200
+    sessions = list_res.json()
+    assert any(s["id"] == session_id for s in sessions)
+
+    detail_res = client.get(f"/admin/sessions/{session_id}")
+    assert detail_res.status_code == 200
+    detail = detail_res.json()
+    assert detail["patient_name"] == "一覧太郎"
+    assert detail["answers"]["chief_complaint"] == "発熱"
+
+
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
     payload = {

@@ -203,6 +203,18 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
         conn.close()
 
 
+def list_sessions(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
+    """保存済みセッションの概要一覧を取得する。"""
+    conn = get_conn(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions ORDER BY COALESCE(finalized_at, '') DESC"
+        ).fetchall()
+        return list(rows)
+    finally:
+        conn.close()
+
+
 def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     """DB からセッションを取得する。"""
     conn = get_conn(db_path)

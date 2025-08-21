@@ -27,22 +27,34 @@ interface Item {
   required: boolean;
   options?: string[];
   when?: { item_id: string; equals: string };
+  use_initial: boolean;
+  use_followup: boolean;
 }
 
 /** テンプレート管理画面。 */
 export default function AdminTemplates() {
   const [items, setItems] = useState<Item[]>([]);
-  const [newItem, setNewItem] = useState<{ label: string; type: string; required: boolean; options: string; when: string }>({
+  const [newItem, setNewItem] = useState<{
+    label: string;
+    type: string;
+    required: boolean;
+    options: string;
+    when: string;
+    use_initial: boolean;
+    use_followup: boolean;
+  }>({
     label: '',
     type: 'string',
     required: false,
     options: '',
     when: '',
+    use_initial: true,
+    use_followup: true,
   });
   const [templateId, setTemplateId] = useState('default');
-  const [visitType, setVisitType] = useState<'initial' | 'followup'>('initial');
-  const [templates, setTemplates] = useState<{ id: string; visit_type: string }[]>([]);
+  const [templates, setTemplates] = useState<{ id: string }[]>([]);
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
+  const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -50,25 +62,40 @@ export default function AdminTemplates() {
       navigate('/admin/login');
       return;
     }
-    fetch(`/questionnaires/${templateId}/template?visit_type=${visitType}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setItems(data.items);
-        setPreviewAnswers({});
-      });
+    loadTemplates(templateId);
     fetch('/questionnaires')
       .then((res) => res.json())
-      .then((data) => setTemplates(data));
+      .then((data) => {
+        const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id) => ({ id }));
+        setTemplates(ids);
+      });
   }, []);
 
   useEffect(() => {
-    fetch(`/questionnaires/${templateId}/template?visit_type=${visitType}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setItems(data.items);
-        setPreviewAnswers({});
+    loadTemplates(templateId);
+  }, [templateId]);
+
+  const loadTemplates = (id: string) => {
+    Promise.all([
+      fetch(`/questionnaires/${id}/template?visit_type=initial`).then((r) => r.json()),
+      fetch(`/questionnaires/${id}/template?visit_type=followup`).then((r) => r.json()),
+    ]).then(([init, follow]) => {
+      const map = new Map<string, Item>();
+      (init.items || []).forEach((it: any) =>
+        map.set(it.id, { ...it, use_initial: true, use_followup: false })
+      );
+      (follow.items || []).forEach((it: any) => {
+        const exist = map.get(it.id);
+        if (exist) {
+          map.set(it.id, { ...exist, ...it, use_initial: exist.use_initial, use_followup: true });
+        } else {
+          map.set(it.id, { ...it, use_initial: false, use_followup: true });
+        }
       });
-  }, [templateId, visitType]);
+      setItems(Array.from(map.values()));
+      setPreviewAnswers({});
+    });
+  };
 
   const addItem = () => {
     if (!newItem.label) return;
@@ -93,9 +120,19 @@ export default function AdminTemplates() {
         required: newItem.required,
         options,
         when,
+        use_initial: newItem.use_initial,
+        use_followup: newItem.use_followup,
       },
     ]);
-    setNewItem({ label: '', type: 'string', required: false, options: '', when: '' });
+    setNewItem({
+      label: '',
+      type: 'string',
+      required: false,
+      options: '',
+      when: '',
+      use_initial: true,
+      use_followup: true,
+    });
   };
 
   const updateItem = (index: number, field: keyof Item, value: any) => {
@@ -110,26 +147,45 @@ export default function AdminTemplates() {
   };
 
   const saveTemplate = async () => {
+    const initialItems = items
+      .filter((it) => it.use_initial)
+      .map(({ use_initial, use_followup, ...rest }) => rest);
+    const followupItems = items
+      .filter((it) => it.use_followup)
+      .map(({ use_initial, use_followup, ...rest }) => rest);
     await fetch('/questionnaires', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: templateId, visit_type: visitType, items }),
+      body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems }),
+    });
+    await fetch('/questionnaires', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems }),
     });
     const res = await fetch('/questionnaires');
-    setTemplates(await res.json());
+    const data = await res.json();
+    const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id: string) => ({ id }));
+    setTemplates(ids);
   };
 
-  const deleteTemplateApi = async (id: string, vt: string) => {
-    await fetch(`/questionnaires/${id}?visit_type=${vt}`, { method: 'DELETE' });
+  const deleteTemplateApi = async (id: string) => {
+    await Promise.all([
+      fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
+      fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
+    ]);
     const res = await fetch('/questionnaires');
-    setTemplates(await res.json());
-    if (id === templateId && vt === visitType) {
+    const data = await res.json();
+    const ids = Array.from(new Set(data.map((t: any) => t.id))).map((i: string) => ({ id: i }));
+    setTemplates(ids);
+    if (id === templateId) {
       setTemplateId('default');
-      setVisitType('initial');
     }
   };
 
   const previewItems = items.filter((item) => {
+    if (previewVisitType === 'initial' && !item.use_initial) return false;
+    if (previewVisitType === 'followup' && !item.use_followup) return false;
     if (!item.when) return true;
     return previewAnswers[item.when.item_id] === item.when.equals;
   });
@@ -145,6 +201,8 @@ export default function AdminTemplates() {
             <Th>選択肢</Th>
             <Th>表示条件</Th>
             <Th>必須</Th>
+            <Th>初診</Th>
+            <Th>再診</Th>
             <Th></Th>
           </Tr>
         </Thead>
@@ -206,6 +264,18 @@ export default function AdminTemplates() {
                 />
               </Td>
               <Td>
+                <Checkbox
+                  isChecked={item.use_initial}
+                  onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                />
+              </Td>
+              <Td>
+                <Checkbox
+                  isChecked={item.use_followup}
+                  onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                />
+              </Td>
+              <Td>
                 <Button size="xs" onClick={() => removeItem(idx)} colorScheme="red" variant="outline">
                   削除
                 </Button>
@@ -217,13 +287,6 @@ export default function AdminTemplates() {
       <FormControl>
         <FormLabel>テンプレートID</FormLabel>
         <Input value={templateId} onChange={(e) => setTemplateId(e.target.value)} />
-      </FormControl>
-      <FormControl>
-        <FormLabel>受診種別</FormLabel>
-        <Select value={visitType} onChange={(e) => setVisitType(e.target.value as any)}>
-          <option value="initial">初診</option>
-          <option value="followup">再診</option>
-        </Select>
       </FormControl>
       <Box borderWidth="1px" borderRadius="md" p={4}>
         <VStack spacing={2} align="stretch">
@@ -267,6 +330,18 @@ export default function AdminTemplates() {
           >
             必須
           </Checkbox>
+          <Checkbox
+            isChecked={newItem.use_initial}
+            onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
+          >
+            初診に含める
+          </Checkbox>
+          <Checkbox
+            isChecked={newItem.use_followup}
+            onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
+          >
+            再診に含める
+          </Checkbox>
           <Button onClick={addItem} colorScheme="primary">
             追加（ローカル）
           </Button>
@@ -281,7 +356,6 @@ export default function AdminTemplates() {
           <Thead>
             <Tr>
               <Th>ID</Th>
-              <Th>受診種別</Th>
               <Th>操作</Th>
             </Tr>
           </Thead>
@@ -289,10 +363,24 @@ export default function AdminTemplates() {
             {templates.map((t, i) => (
               <Tr key={i}>
                 <Td>{t.id}</Td>
-                <Td>{t.visit_type}</Td>
                 <Td>
-                  <Button size="xs" mr={2} colorScheme="primary" variant="outline" onClick={() => { setTemplateId(t.id); setVisitType(t.visit_type as any); }}>編集</Button>
-                  <Button size="xs" colorScheme="red" variant="outline" onClick={() => deleteTemplateApi(t.id, t.visit_type)}>削除</Button>
+                  <Button
+                    size="xs"
+                    mr={2}
+                    colorScheme="primary"
+                    variant="outline"
+                    onClick={() => setTemplateId(t.id)}
+                  >
+                    編集
+                  </Button>
+                  <Button
+                    size="xs"
+                    colorScheme="red"
+                    variant="outline"
+                    onClick={() => deleteTemplateApi(t.id)}
+                  >
+                    削除
+                  </Button>
                 </Td>
               </Tr>
             ))}
@@ -301,6 +389,19 @@ export default function AdminTemplates() {
       </Box>
       <Box borderWidth="1px" borderRadius="md" p={4} w="100%">
         <Box fontWeight="bold" mb={2}>プレビュー</Box>
+        <FormControl mb={4}>
+          <FormLabel>受診種別</FormLabel>
+          <Select
+            value={previewVisitType}
+            onChange={(e) => {
+              setPreviewVisitType(e.target.value as any);
+              setPreviewAnswers({});
+            }}
+          >
+            <option value="initial">初診</option>
+            <option value="followup">再診</option>
+          </Select>
+        </FormControl>
         <VStack spacing={3} align="stretch">
           {previewItems.map((item) => (
             <FormControl key={item.id} isRequired={item.required}>

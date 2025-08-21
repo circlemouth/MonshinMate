@@ -16,6 +16,9 @@ export default function AdminDashboard() {
       <Button as={RouterLink} to="/admin/templates" colorScheme="primary">
         テンプレート管理
       </Button>
+      <Button as={RouterLink} to="/admin/sessions" colorScheme="primary" variant="outline">
+        問診結果一覧
+      </Button>
       <Button as={RouterLink} to="/admin/llm" colorScheme="primary" variant="outline">
         LLM設定
       </Button>
