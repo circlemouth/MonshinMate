@@ -16,6 +16,7 @@ import AdminLlm from './pages/AdminLlm';
 import AdminSessions from './pages/AdminSessions';
 import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
+import AdminLayout from './components/AdminLayout';
 
 export default function App() {
   const location = useLocation();
@@ -44,7 +45,7 @@ export default function App() {
           <Spacer />
           {isAdminPage ? (
             <Button as={RouterLink} to="/" colorScheme="primary" variant="outline" size="sm">
-              戻る
+              問診画面に戻る
             </Button>
           ) : (
             <Button as={RouterLink} to="/admin" colorScheme="primary" size="sm">
@@ -62,13 +63,15 @@ export default function App() {
           <Route path="/questions" element={<Questions />} />
           <Route path="/review" element={<Review />} />
           <Route path="/done" element={<Done />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/admin/templates" element={<AdminTemplates />} />
-          <Route path="/admin/sessions" element={<AdminSessions />} />
-          <Route path="/admin/sessions/:id" element={<AdminSessionDetail />} />
-          <Route path="/admin/llm" element={<AdminLlm />} />
           <Route path="/chat" element={<LLMChat />} />
+
+          {/* 管理者系 */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<AdminLayout><AdminDashboard /></AdminLayout>} />
+          <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
+          <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
+          <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
+          <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
         </Routes>
       </Box>
 
