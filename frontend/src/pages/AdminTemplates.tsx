@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   VStack,
   FormControl,
@@ -17,7 +17,13 @@ import {
   RadioGroup,
   Radio,
   CheckboxGroup,
+  HStack,
+  IconButton,
+  Heading,
+  Text,
+  Spinner,
 } from '@chakra-ui/react';
+import { DeleteIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
 
 interface Item {
@@ -26,10 +32,11 @@ interface Item {
   type: string;
   required: boolean;
   options?: string[];
-  when?: { item_id: string; equals: string };
   use_initial: boolean;
   use_followup: boolean;
 }
+
+type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 /** テンプレート管理画面。 */
 export default function AdminTemplates() {
@@ -38,42 +45,67 @@ export default function AdminTemplates() {
     label: string;
     type: string;
     required: boolean;
-    options: string;
-    when: string;
+    options: string[];
     use_initial: boolean;
     use_followup: boolean;
   }>({
     label: '',
     type: 'string',
     required: false,
-    options: '',
-    when: '',
+    options: [],
     use_initial: true,
     use_followup: true,
   });
-  const [templateId, setTemplateId] = useState('default');
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
+  const [newTemplateId, setNewTemplateId] = useState('');
+  const [isAddingNewItem, setIsAddingNewItem] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
   const navigate = useNavigate();
+  const isInitialMount = useRef(true);
 
   useEffect(() => {
     if (!sessionStorage.getItem('adminLoggedIn')) {
       navigate('/admin/login');
       return;
     }
-    loadTemplates(templateId);
     fetch('/questionnaires')
       .then((res) => res.json())
       .then((data) => {
         const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id) => ({ id }));
         setTemplates(ids);
+        setTemplateId('default');
       });
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
-    loadTemplates(templateId);
-  }, [templateId]);
+    if (templateId && templates.some(t => t.id === templateId)) {
+        loadTemplates(templateId);
+    } else {
+        setItems([]);
+    }
+    setIsAddingNewItem(false);
+  }, [templateId, templates]);
+
+  // --- 自動保存ロジック ---
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (!templateId) return;
+
+    setSaveStatus('saving');
+    const handler = setTimeout(() => {
+      saveTemplate();
+    }, 1500); // 1.5秒待ってから保存
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [items]);
 
   const loadTemplates = (id: string) => {
     Promise.all([
@@ -94,32 +126,23 @@ export default function AdminTemplates() {
       });
       setItems(Array.from(map.values()));
       setPreviewAnswers({});
+      setSaveStatus('idle'); // ロード完了時はidleに
     });
   };
 
   const addItem = () => {
     if (!newItem.label) return;
     const options = ['multi'].includes(newItem.type)
-      ? newItem.options
-          .split(',')
-          .map((v) => v.trim())
-          .filter((v) => v)
-      : undefined;
-    const when = newItem.when
-      ? (() => {
-          const [id, val] = newItem.when.split('=').map((v) => v.trim());
-          return id && val ? { item_id: id, equals: val } : undefined;
-        })()
+      ? newItem.options.filter((v) => v)
       : undefined;
     setItems([
       ...items,
       {
-        id: `item${items.length + 1}`,
+        id: crypto.randomUUID(),
         label: newItem.label,
         type: newItem.type,
         required: newItem.required,
         options,
-        when,
         use_initial: newItem.use_initial,
         use_followup: newItem.use_followup,
       },
@@ -128,11 +151,11 @@ export default function AdminTemplates() {
       label: '',
       type: 'string',
       required: false,
-      options: '',
-      when: '',
+      options: [],
       use_initial: true,
       use_followup: true,
     });
+    setIsAddingNewItem(false);
   };
 
   const updateItem = (index: number, field: keyof Item, value: any) => {
@@ -147,297 +170,404 @@ export default function AdminTemplates() {
   };
 
   const saveTemplate = async () => {
-    const initialItems = items
-      .filter((it) => it.use_initial)
-      .map(({ use_initial, use_followup, ...rest }) => rest);
-    const followupItems = items
-      .filter((it) => it.use_followup)
-      .map(({ use_initial, use_followup, ...rest }) => rest);
-    await fetch('/questionnaires', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems }),
-    });
-    await fetch('/questionnaires', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems }),
-    });
-    const res = await fetch('/questionnaires');
-    const data = await res.json();
-    const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id: string) => ({ id }));
-    setTemplates(ids);
+    if (!templateId) return;
+    setSaveStatus('saving');
+    try {
+        const initialItems = items
+        .filter((it) => it.use_initial)
+        .map(({ use_initial, use_followup, ...rest }) => rest);
+        const followupItems = items
+        .filter((it) => it.use_followup)
+        .map(({ use_initial, use_followup, ...rest }) => rest);
+        await fetch('/questionnaires', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems }),
+        });
+        await fetch('/questionnaires', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems }),
+        });
+        
+        if (!templates.some(t => t.id === templateId)) {
+            setTemplates([...templates, { id: templateId }]);
+        }
+        setSaveStatus('success');
+    } catch (error) {
+        console.error("Failed to save template:", error);
+        setSaveStatus('error');
+    }
   };
 
   const deleteTemplateApi = async (id: string) => {
-    await Promise.all([
-      fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
-      fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
-    ]);
-    const res = await fetch('/questionnaires');
-    const data = await res.json();
-    const ids = Array.from(new Set(data.map((t: any) => t.id))).map((i: string) => ({ id: i }));
-    setTemplates(ids);
-    if (id === templateId) {
-      setTemplateId('default');
+    if (window.confirm(`テンプレート「${id}」を削除しますか？`)) {
+        try {
+            await Promise.all([
+                fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
+                fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
+            ]);
+            
+            const newTemplates = templates.filter(t => t.id !== id);
+            setTemplates(newTemplates);
+
+            if (id === templateId) {
+                setTemplateId('default');
+            }
+            alert('テンプレートを削除しました。');
+        } catch (error) {
+            console.error("Failed to delete template:", error);
+            alert("テンプレートの削除に失敗しました。");
+        }
+    }
+  };
+
+  const handleCreateNewTemplate = () => {
+    const newId = newTemplateId.trim();
+    if (!newId) {
+        alert("IDを入力してください。");
+        return;
+    }
+    if (templates.some(t => t.id === newId)) {
+        alert("そのIDは既に使用されています。");
+        return;
+    }
+    setTemplates([...templates, { id: newId }]);
+    setTemplateId(newId);
+    setItems([]);
+    setNewTemplateId('');
+  };
+
+  const SaveStatusIndicator = () => {
+    switch (saveStatus) {
+      case 'saving':
+        return <HStack><Spinner size="sm" /><Text>保存中...</Text></HStack>;
+      case 'success':
+        return <HStack><CheckCircleIcon color="green.500" /><Text>保存済み</Text></HStack>;
+      case 'error':
+        return <HStack><WarningIcon color="red.500" /><Text>保存エラー</Text></HStack>;
+      default:
+        return null;
     }
   };
 
   const previewItems = items.filter((item) => {
     if (previewVisitType === 'initial' && !item.use_initial) return false;
     if (previewVisitType === 'followup' && !item.use_followup) return false;
-    if (!item.when) return true;
-    return previewAnswers[item.when.item_id] === item.when.equals;
+    return true;
   });
 
   return (
-    <VStack spacing={4} align="stretch">
-      <Table size="sm">
-        <Thead>
-          <Tr>
-            <Th>ID</Th>
-            <Th>ラベル</Th>
-            <Th>型</Th>
-            <Th>選択肢</Th>
-            <Th>表示条件</Th>
-            <Th>必須</Th>
-            <Th>初診</Th>
-            <Th>再診</Th>
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {items.map((item, idx) => (
-            <Tr key={item.id}>
-              <Td>{item.id}</Td>
-              <Td>
-                <Input
-                  value={item.label}
-                  onChange={(e) => updateItem(idx, 'label', e.target.value)}
-                />
-              </Td>
-              <Td>
-                <Select
-                  value={item.type}
-                  onChange={(e) => updateItem(idx, 'type', e.target.value)}
-                >
-                  <option value="string">テキスト</option>
-                  <option value="multi">複数選択</option>
-                  <option value="yesno">YES/NO</option>
-                </Select>
-              </Td>
-              <Td>
-                {['multi'].includes(item.type) ? (
-                  <Input
-                    value={item.options?.join(',') || ''}
-                    onChange={(e) =>
-                      updateItem(
-                        idx,
-                        'options',
-                        e.target.value
-                          .split(',')
-                          .map((v) => v.trim())
-                          .filter((v) => v)
-                      )
-                    }
-                  />
-                ) : null}
-              </Td>
-              <Td>
-                <Input
-                  placeholder="id=値"
-                  value={item.when ? `${item.when.item_id}=${item.when.equals}` : ''}
-                  onChange={(e) => {
-                    const [id, val] = e.target.value.split('=');
-                    updateItem(
-                      idx,
-                      'when',
-                      id && val ? { item_id: id.trim(), equals: val.trim() } : undefined,
-                    );
-                  }}
-                />
-              </Td>
-              <Td>
-                <Checkbox
-                  isChecked={item.required}
-                  onChange={(e) => updateItem(idx, 'required', e.target.checked)}
-                />
-              </Td>
-              <Td>
-                <Checkbox
-                  isChecked={item.use_initial}
-                  onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
-                />
-              </Td>
-              <Td>
-                <Checkbox
-                  isChecked={item.use_followup}
-                  onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
-                />
-              </Td>
-              <Td>
-                <Button size="xs" onClick={() => removeItem(idx)} colorScheme="red" variant="outline">
-                  削除
-                </Button>
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
-      <FormControl>
-        <FormLabel>テンプレートID</FormLabel>
-        <Input value={templateId} onChange={(e) => setTemplateId(e.target.value)} />
-      </FormControl>
-      <Box borderWidth="1px" borderRadius="md" p={4}>
-        <VStack spacing={2} align="stretch">
-          <FormControl>
-            <FormLabel>新規項目ラベル</FormLabel>
-            <Input
-              value={newItem.label}
-              onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
-            />
-          </FormControl>
-          <FormControl>
-            <FormLabel>型</FormLabel>
-            <Select
-              value={newItem.type}
-              onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
-            >
-              <option value="string">テキスト</option>
-              <option value="multi">複数選択</option>
-              <option value="yesno">YES/NO</option>
-            </Select>
-          </FormControl>
-          {['multi'].includes(newItem.type) && (
-            <FormControl>
-              <FormLabel>選択肢（カンマ区切り）</FormLabel>
-              <Input
-                value={newItem.options}
-                onChange={(e) => setNewItem({ ...newItem, options: e.target.value })}
-              />
-            </FormControl>
-          )}
-          <FormControl>
-            <FormLabel>表示条件（id=値）</FormLabel>
-            <Input
-              value={newItem.when}
-              onChange={(e) => setNewItem({ ...newItem, when: e.target.value })}
-            />
-          </FormControl>
-          <Checkbox
-            isChecked={newItem.required}
-            onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}
-          >
-            必須
-          </Checkbox>
-          <Checkbox
-            isChecked={newItem.use_initial}
-            onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
-          >
-            初診に含める
-          </Checkbox>
-          <Checkbox
-            isChecked={newItem.use_followup}
-            onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
-          >
-            再診に含める
-          </Checkbox>
-          <Button onClick={addItem} colorScheme="primary">
-            追加（ローカル）
-          </Button>
-        </VStack>
-      </Box>
-      <Button onClick={saveTemplate} colorScheme="primary">
-        テンプレートを保存
-      </Button>
-      <Box>
-        既存テンプレ一覧:
-        <Table size="sm" mt={2}>
-          <Thead>
-            <Tr>
-              <Th>ID</Th>
-              <Th>操作</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {templates.map((t, i) => (
-              <Tr key={i}>
-                <Td>{t.id}</Td>
-                <Td>
-                  <Button
-                    size="xs"
-                    mr={2}
-                    colorScheme="primary"
-                    variant="outline"
-                    onClick={() => setTemplateId(t.id)}
-                  >
-                    編集
-                  </Button>
-                  <Button
-                    size="xs"
-                    colorScheme="red"
-                    variant="outline"
-                    onClick={() => deleteTemplateApi(t.id)}
-                  >
-                    削除
-                  </Button>
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </Box>
-      <Box borderWidth="1px" borderRadius="md" p={4} w="100%">
-        <Box fontWeight="bold" mb={2}>プレビュー</Box>
-        <FormControl mb={4}>
-          <FormLabel>受診種別</FormLabel>
-          <Select
-            value={previewVisitType}
-            onChange={(e) => {
-              setPreviewVisitType(e.target.value as any);
-              setPreviewAnswers({});
-            }}
-          >
-            <option value="initial">初診</option>
-            <option value="followup">再診</option>
-          </Select>
-        </FormControl>
-        <VStack spacing={3} align="stretch">
-          {previewItems.map((item) => (
-            <FormControl key={item.id} isRequired={item.required}>
-              <FormLabel>{item.label}</FormLabel>
-              {item.type === 'yesno' ? (
-                <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}>
-                  <VStack align="start">
-                    <Radio value="yes" size="lg">はい</Radio>
-                    <Radio value="no" size="lg">いいえ</Radio>
-                  </VStack>
-                </RadioGroup>
-              ) : item.type === 'single' && item.options ? (
-                <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}>
-                  <VStack align="start">
-                    {item.options.map((opt) => (
-                      <Radio key={opt} value={opt} size="lg">{opt}</Radio>
+    <VStack spacing={8} align="stretch">
+        <Box borderWidth="1px" borderRadius="md" p={4}>
+            <Heading size="lg" mb={4}>テンプレート管理</Heading>
+            <VStack align="stretch" spacing={6}>
+                <Box>
+                    <Heading size="md" mb={2}>新規テンプレート作成</Heading>
+                    <HStack>
+                        <Input 
+                            placeholder="新しいテンプレートのID" 
+                            value={newTemplateId}
+                            onChange={(e) => setNewTemplateId(e.target.value)}
+                        />
+                        <Button onClick={handleCreateNewTemplate} colorScheme="green">作成して編集</Button>
+                    </HStack>
+                </Box>
+                <Box>
+                    <Heading size="md" mb={2}>既存テンプレート一覧</Heading>
+                    <Table size="sm">
+                        <Thead>
+                            <Tr>
+                                <Th>ID</Th>
+                                <Th>操作</Th>
+                            </Tr>
+                        </Thead>
+                        <Tbody>
+                            {templates.map((t) => (
+                            <Tr 
+                                key={t.id} 
+                                bg={t.id === templateId ? 'blue.100' : 'transparent'}
+                                onClick={() => setTemplateId(t.id)}
+                                sx={{ cursor: 'pointer' }}
+                                _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
+                            >
+                                <Td fontWeight={t.id === templateId ? 'bold' : 'normal'}>{t.id}</Td>
+                                <Td onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                    size="xs"
+                                    colorScheme="red"
+                                    variant="outline"
+                                    onClick={() => deleteTemplateApi(t.id)}
+                                    isDisabled={t.id === 'default'}
+                                >
+                                    削除
+                                </Button>
+                                </Td>
+                            </Tr>
+                            ))}
+                        </Tbody>
+                    </Table>
+                </Box>
+            </VStack>
+        </Box>
+
+        {templateId && (
+            <Box borderWidth="1px" borderRadius="md" p={4}>
+                <HStack justifyContent="space-between" mb={4}>
+                    <VStack align="start" spacing={0}>
+                        <Heading size="lg">問診内容一覧</Heading>
+                        <Text fontSize="sm" color="gray.500">テンプレート: {templateId}</Text>
+                    </VStack>
+                    <SaveStatusIndicator />
+                </HStack>
+                
+                <Table size="sm">
+                    <Thead>
+                    <Tr>
+                        <Th>問診内容</Th>
+                        <Th>入力方法</Th>
+                        <Th>選択肢</Th>
+                        <Th>必須</Th>
+                        <Th>初診</Th>
+                        <Th>再診</Th>
+                        <Th></Th>
+                    </Tr>
+                    </Thead>
+                    <Tbody>
+                    {items.map((item, idx) => (
+                        <Tr key={item.id}>
+                        <Td>
+                            <Input
+                            value={item.label}
+                            onChange={(e) => updateItem(idx, 'label', e.target.value)}
+                            />
+                        </Td>
+                        <Td>
+                            <Select
+                            value={item.type}
+                            onChange={(e) => updateItem(idx, 'type', e.target.value)}
+                            >
+                            <option value="string">テキスト</option>
+                            <option value="multi">複数選択</option>
+                            <option value="yesno">YES/NO</option>
+                            </Select>
+                        </Td>
+                        <Td>
+                            {['multi'].includes(item.type) ? (
+                            <VStack align="stretch">
+                                {item.options?.map((opt, optIdx) => (
+                                <HStack key={optIdx}>
+                                    <Input
+                                    value={opt}
+                                    onChange={(e) => {
+                                        const newOptions = [...(item.options || [])];
+                                        newOptions[optIdx] = e.target.value;
+                                        updateItem(idx, 'options', newOptions);
+                                    }}
+                                    />
+                                    <IconButton
+                                    aria-label="Delete option"
+                                    icon={<DeleteIcon />}
+                                    size="sm"
+                                    onClick={() => {
+                                        const newOptions = [...(item.options || [])];
+                                        newOptions.splice(optIdx, 1);
+                                        updateItem(idx, 'options', newOptions);
+                                    }}
+                                    />
+                                </HStack>
+                                ))}
+                                <Button
+                                size="xs"
+                                onClick={() => {
+                                    const newOptions = [...(item.options || []), ''];
+                                    updateItem(idx, 'options', newOptions);
+                                }}
+                                >
+                                選択肢を追加
+                                </Button>
+                            </VStack>
+                            ) : null}
+                        </Td>
+                        <Td>
+                            <Checkbox
+                            isChecked={item.required}
+                            onChange={(e) => updateItem(idx, 'required', e.target.checked)}
+                            />
+                        </Td>
+                        <Td>
+                            <Checkbox
+                            isChecked={item.use_initial}
+                            onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                            />
+                        </Td>
+                        <Td>
+                            <Checkbox
+                            isChecked={item.use_followup}
+                            onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                            />
+                        </Td>
+                        <Td>
+                            <Button size="xs" onClick={() => removeItem(idx)} colorScheme="red" variant="outline">
+                            削除
+                            </Button>
+                        </Td>
+                        </Tr>
                     ))}
-                  </VStack>
-                </RadioGroup>
-              ) : item.type === 'multi' && item.options ? (
-                <CheckboxGroup
-                  onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
-                >
-                  <VStack align="start">
-                {item.options.map((opt) => (
-                  <Checkbox key={opt} value={opt} size="lg">{opt}</Checkbox>
-                ))}
-                  </VStack>
-                </CheckboxGroup>
-              ) : (
-                <Input onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })} />
-              )}
+                    </Tbody>
+                </Table>
+
+                {!isAddingNewItem && (
+                    <Button onClick={() => setIsAddingNewItem(true)} mt={6} colorScheme="teal">
+                        新規項目を追加
+                    </Button>
+                )}
+
+                {isAddingNewItem && (
+                    <Box borderWidth="1px" borderRadius="md" p={4} mt={6}>
+                        <Heading size="md" mb={4}>新規項目を追加</Heading>
+                        <VStack spacing={4} align="stretch">
+                        <FormControl>
+                            <FormLabel>新規問診内容</FormLabel>
+                            <Input
+                            value={newItem.label}
+                            onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
+                            />
+                        </FormControl>
+                        <FormControl>
+                            <FormLabel>入力方法</FormLabel>
+                            <Select
+                            value={newItem.type}
+                            onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}
+                            >
+                            <option value="string">テキスト</option>
+                            <option value="multi">複数選択</option>
+                            <option value="yesno">YES/NO</option>
+                            </Select>
+                        </FormControl>
+                        {['multi'].includes(newItem.type) && (
+                            <FormControl>
+                            <FormLabel>選択肢</FormLabel>
+                            <VStack align="stretch">
+                                {newItem.options.map((opt, optIdx) => (
+                                <HStack key={optIdx}>
+                                    <Input
+                                    value={opt}
+                                    onChange={(e) => {
+                                        const newOptions = [...newItem.options];
+                                        newOptions[optIdx] = e.target.value;
+                                        setNewItem({ ...newItem, options: newOptions });
+                                    }}
+                                    />
+                                    <IconButton
+                                    aria-label="Delete option"
+                                    icon={<DeleteIcon />}
+                                    size="sm"
+                                    onClick={() => {
+                                        const newOptions = [...newItem.options];
+                                        newOptions.splice(optIdx, 1);
+                                        setNewItem({ ...newItem, options: newOptions });
+                                    }}
+                                    />
+                                </HStack>
+                                ))}
+                                <Button
+                                size="xs"
+                                onClick={() => {
+                                    const newOptions = [...newItem.options, ''];
+                                    setNewItem({ ...newItem, options: newOptions });
+                                }}
+                                >
+                                選択肢を追加
+                                </Button>
+                            </VStack>
+                            </FormControl>
+                        )}
+                        <HStack>
+                            <Checkbox
+                                isChecked={newItem.required}
+                                onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}
+                            >
+                                必須
+                            </Checkbox>
+                            <Checkbox
+                                isChecked={newItem.use_initial}
+                                onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
+                            >
+                                初診に含める
+                            </Checkbox>
+                            <Checkbox
+                                isChecked={newItem.use_followup}
+                                onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
+                            >
+                                再診に含める
+                            </Checkbox>
+                        </HStack>
+                        <HStack justifyContent="flex-end">
+                            <Button onClick={() => setIsAddingNewItem(false)} variant="ghost">キャンセル</Button>
+                            <Button onClick={addItem} colorScheme="primary">
+                                確定
+                            </Button>
+                        </HStack>
+                        </VStack>
+                    </Box>
+                )}
+            </Box>
+        )}
+
+        <Box borderWidth="1px" borderRadius="md" p={4} w="100%" mt={8}>
+            <Heading size="lg" mb={4}>プレビュー</Heading>
+            {items.length > 0 ? (
+            <>
+            <FormControl mb={4}>
+            <FormLabel>受診種別</FormLabel>
+            <Select
+                value={previewVisitType}
+                onChange={(e) => {
+                setPreviewVisitType(e.target.value as any);
+                setPreviewAnswers({});
+                }}
+            >
+                <option value="initial">初診</option>
+                <option value="followup">再診</option>
+            </Select>
             </FormControl>
-          ))}
-        </VStack>
-      </Box>
+            <VStack spacing={3} align="stretch">
+            {previewItems.map((item) => (
+                <FormControl key={item.id} isRequired={item.required}>
+                <FormLabel>{item.label}</FormLabel>
+                {item.type === 'yesno' ? (
+                    <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })} value={previewAnswers[item.id] || ''}>
+                    <VStack align="start">
+                        <Radio value="yes" size="lg">はい</Radio>
+                        <Radio value="no" size="lg">いいえ</Radio>
+                    </VStack>
+                    </RadioGroup>
+                ) : item.type === 'multi' && item.options ? (
+                    <CheckboxGroup
+                    onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
+                    value={previewAnswers[item.id] || []}
+                    >
+                    <VStack align="start">
+                    {item.options.map((opt) => (
+                    <Checkbox key={opt} value={opt} size="lg">{opt}</Checkbox>
+                    ))}
+                    </VStack>
+                    </CheckboxGroup>
+                ) : (
+                    <Input 
+                        onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })} 
+                        value={previewAnswers[item.id] || ''}
+                    />
+                )}
+                </FormControl>
+            ))}
+            </VStack>
+            </>
+            ) : (
+                <Box>プレビューする項目がありません。</Box>
+            )}
+        </Box>
     </VStack>
   );
 }

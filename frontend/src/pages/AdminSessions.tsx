@@ -37,10 +37,13 @@ export default function AdminSessions() {
       </Thead>
       <Tbody>
         {sessions.map((s) => (
-          <Tr key={s.id}>
-            <Td>
-              <Link as={RouterLink} to={`/admin/sessions/${s.id}`}>{s.patient_name}</Link>
-            </Td>
+          <Tr 
+            key={s.id}
+            onClick={() => navigate(`/admin/sessions/${s.id}`)}
+            sx={{ cursor: 'pointer' }}
+            _hover={{ bg: 'gray.100' }}
+          >
+            <Td>{s.patient_name}</Td>
             <Td>{s.dob}</Td>
             <Td>{s.visit_type}</Td>
             <Td>{s.finalized_at || '-'}</Td>
