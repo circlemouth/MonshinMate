@@ -34,7 +34,7 @@ export default function AdminSessionDetail() {
     const fetchData = async () => {
       try {
         const res = await fetch(`/admin/sessions/${id}`);
-        if (!res.ok) throw new Error('Session not found');
+        if (!res.ok) throw new Error('セッションが見つかりません');
         const data: SessionDetail = await res.json();
         setDetail(data);
 
@@ -61,7 +61,23 @@ export default function AdminSessionDetail() {
       return <Text as="pre" whiteSpace="pre-wrap">{JSON.stringify(answer, null, 2)}</Text>;
     }
     return <Text>{String(answer)}</Text>;
-  }
+  };
+
+  const visitTypeLabel = (type: string) => {
+    switch (type) {
+      case 'initial':
+        return '初診';
+      case 'followup':
+        return '再診';
+      default:
+        return type;
+    }
+  };
+
+  /** サマリー文字列を改行付きで整形する。 */
+  const formatSummaryText = (summary: string) => {
+    return summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
+  };
 
   return (
     <VStack align="stretch" spacing={6}>
@@ -81,7 +97,7 @@ export default function AdminSessionDetail() {
           <VStack align="stretch" spacing={2}>
               <Text><strong>患者名:</strong> {detail.patient_name}</Text>
               <Text><strong>生年月日:</strong> {detail.dob}</Text>
-              <Text><strong>受診種別:</strong> {detail.visit_type}</Text>
+              <Text><strong>受診種別:</strong> {visitTypeLabel(detail.visit_type)}</Text>
               <Text><strong>テンプレートID:</strong> {detail.questionnaire_id}</Text>
               <Text><strong>確定日時:</strong> {detail.finalized_at || '-'}</Text>
           </VStack>
@@ -101,7 +117,7 @@ export default function AdminSessionDetail() {
           <VStack align="stretch" spacing={4} mt={4}>
               <Heading size="md">自動生成サマリー</Heading>
               <Box p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
-                  <Text whiteSpace="pre-wrap">{detail.summary}</Text>
+                  <Text whiteSpace="pre-wrap">{formatSummaryText(detail.summary)}</Text>
               </Box>
           </VStack>
       )}

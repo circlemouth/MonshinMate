@@ -349,7 +349,7 @@ export default function AdminTemplates() {
                             >
                             <option value="string">テキスト</option>
                             <option value="multi">複数選択</option>
-                            <option value="yesno">YES/NO</option>
+                            <option value="yesno">はい/いいえ</option>
                             </Select>
                         </Td>
                         <Td>
@@ -366,7 +366,7 @@ export default function AdminTemplates() {
                                     }}
                                     />
                                     <IconButton
-                                    aria-label="Delete option"
+                                    aria-label="選択肢を削除"
                                     icon={<DeleteIcon />}
                                     size="sm"
                                     onClick={() => {
@@ -442,7 +442,7 @@ export default function AdminTemplates() {
                             >
                             <option value="string">テキスト</option>
                             <option value="multi">複数選択</option>
-                            <option value="yesno">YES/NO</option>
+                            <option value="yesno">はい/いいえ</option>
                             </Select>
                         </FormControl>
                         {['multi'].includes(newItem.type) && (
@@ -460,7 +460,7 @@ export default function AdminTemplates() {
                                     }}
                                     />
                                     <IconButton
-                                    aria-label="Delete option"
+                                    aria-label="選択肢を削除"
                                     icon={<DeleteIcon />}
                                     size="sm"
                                     onClick={() => {
