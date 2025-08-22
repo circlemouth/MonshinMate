@@ -6,6 +6,7 @@ import {
   Input,
   Button,
   Table,
+  TableContainer,
   Thead,
   Tr,
   Th,
@@ -22,6 +23,17 @@ import {
   Heading,
   Text,
   Spinner,
+  Card,
+  CardHeader,
+  CardBody,
+  SimpleGrid,
+  useDisclosure,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 import { useNavigate } from 'react-router-dom';
@@ -63,6 +75,7 @@ export default function AdminTemplates() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
+  const previewModal = useDisclosure();
   const navigate = useNavigate();
   const isInitialMount = useRef(true);
 
@@ -266,7 +279,7 @@ export default function AdminTemplates() {
                     <Heading size="md" mb={2}>新規テンプレート作成</Heading>
                     <HStack>
                         <Input 
-                            placeholder="新しいテンプレートのID" 
+                            placeholder="新しいテンプレート名" 
                             value={newTemplateId}
                             onChange={(e) => setNewTemplateId(e.target.value)}
                         />
@@ -274,39 +287,41 @@ export default function AdminTemplates() {
                     </HStack>
                 </Box>
                 <Box>
-                    <Heading size="md" mb={2}>既存テンプレート一覧</Heading>
-                    <Table size="sm">
-                        <Thead>
-                            <Tr>
-                                <Th>ID</Th>
-                                <Th>操作</Th>
-                            </Tr>
-                        </Thead>
-                        <Tbody>
-                            {templates.map((t) => (
-                            <Tr 
-                                key={t.id} 
-                                bg={t.id === templateId ? 'blue.100' : 'transparent'}
-                                onClick={() => setTemplateId(t.id)}
-                                sx={{ cursor: 'pointer' }}
-                                _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
-                            >
-                                <Td fontWeight={t.id === templateId ? 'bold' : 'normal'}>{t.id}</Td>
-                                <Td onClick={(e) => e.stopPropagation()}>
-                                <Button
-                                    size="xs"
-                                    colorScheme="red"
-                                    variant="outline"
-                                    onClick={() => deleteTemplateApi(t.id)}
-                                    isDisabled={t.id === 'default'}
+                    <Heading size="md" mb={2}>保存済みテンプレート一覧</Heading>
+                    <TableContainer overflowX="auto">
+                        <Table size="sm" minWidth="480px">
+                            <Thead>
+                                <Tr>
+                                    <Th>テンプレート名</Th>
+                                    <Th>操作</Th>
+                                </Tr>
+                            </Thead>
+                            <Tbody>
+                                {templates.map((t) => (
+                                <Tr 
+                                    key={t.id} 
+                                    bg={t.id === templateId ? 'blue.100' : 'transparent'}
+                                    onClick={() => setTemplateId(t.id)}
+                                    sx={{ cursor: 'pointer' }}
+                                    _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
                                 >
-                                    削除
-                                </Button>
-                                </Td>
-                            </Tr>
-                            ))}
-                        </Tbody>
-                    </Table>
+                                    <Td fontWeight={t.id === templateId ? 'bold' : 'normal'}>{t.id === 'default' ? 'デフォルト' : t.id}</Td>
+                                    <Td onClick={(e) => e.stopPropagation()}>
+                                    <Button
+                                        size="xs"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        onClick={() => deleteTemplateApi(t.id)}
+                                        isDisabled={t.id === 'default'}
+                                    >
+                                        削除
+                                    </Button>
+                                    </Td>
+                                </Tr>
+                                ))}
+                            </Tbody>
+                        </Table>
+                    </TableContainer>
                 </Box>
             </VStack>
         </Box>
@@ -316,106 +331,113 @@ export default function AdminTemplates() {
                 <HStack justifyContent="space-between" mb={4}>
                     <VStack align="start" spacing={0}>
                         <Heading size="lg">問診内容一覧</Heading>
-                        <Text fontSize="sm" color="gray.500">テンプレート: {templateId}</Text>
+                        <Text fontSize="sm" color="gray.500">テンプレート: {templateId === 'default' ? 'デフォルト' : templateId}</Text>
                     </VStack>
-                    <SaveStatusIndicator />
+                    <HStack>
+                      <Button onClick={previewModal.onOpen} variant="outline">プレビュー</Button>
+                      <SaveStatusIndicator />
+                    </HStack>
                 </HStack>
-                
-                <Table size="sm">
-                    <Thead>
-                    <Tr>
-                        <Th>問診内容</Th>
-                        <Th>入力方法</Th>
-                        <Th>選択肢</Th>
-                        <Th>必須</Th>
-                        <Th>初診</Th>
-                        <Th>再診</Th>
-                        <Th></Th>
-                    </Tr>
-                    </Thead>
-                    <Tbody>
+                {/* カード表示（常時） */}
+                  <VStack align="stretch" spacing={4}>
                     {items.map((item, idx) => (
-                        <Tr key={item.id}>
-                        <Td>
-                            <Input
-                            value={item.label}
-                            onChange={(e) => updateItem(idx, 'label', e.target.value)}
-                            />
-                        </Td>
-                        <Td>
-                            <Select
-                            value={item.type}
-                            onChange={(e) => updateItem(idx, 'type', e.target.value)}
-                            >
-                            <option value="string">テキスト</option>
-                            <option value="multi">複数選択</option>
-                            <option value="yesno">はい/いいえ</option>
-                            </Select>
-                        </Td>
-                        <Td>
-                            {['multi'].includes(item.type) ? (
-                            <VStack align="stretch">
+                      <Card key={item.id} variant="outline">
+                        <CardHeader pb={2}>
+                          <VStack align="stretch" spacing={2}>
+                            <FormControl>
+                              <FormLabel m={0}>問診内容</FormLabel>
+                              <Input
+                                value={item.label}
+                                onChange={(e) => updateItem(idx, 'label', e.target.value)}
+                              />
+                            </FormControl>
+                            <HStack justifyContent="space-between">
+                              <FormControl maxW="360px">
+                                <FormLabel m={0}>入力方法</FormLabel>
+                                <Select
+                                  value={item.type}
+                                  onChange={(e) => updateItem(idx, 'type', e.target.value)}
+                                >
+                                  <option value="string">テキスト</option>
+                                  <option value="multi">複数選択</option>
+                                  <option value="yesno">はい/いいえ</option>
+                                </Select>
+                              </FormControl>
+                              <IconButton
+                                aria-label="項目を削除"
+                                icon={<DeleteIcon />}
+                                size="sm"
+                                colorScheme="red"
+                                variant="outline"
+                                onClick={() => removeItem(idx)}
+                              />
+                            </HStack>
+                          </VStack>
+                        </CardHeader>
+                        <CardBody pt={2}>
+                          {['multi'].includes(item.type) && (
+                            <Box mb={3}>
+                              <FormLabel m={0} mb={2}>選択肢</FormLabel>
+                              <VStack align="stretch">
                                 {item.options?.map((opt, optIdx) => (
-                                <HStack key={optIdx}>
+                                  <HStack key={optIdx}>
                                     <Input
-                                    value={opt}
-                                    onChange={(e) => {
+                                      value={opt}
+                                      onChange={(e) => {
                                         const newOptions = [...(item.options || [])];
                                         newOptions[optIdx] = e.target.value;
                                         updateItem(idx, 'options', newOptions);
-                                    }}
+                                      }}
                                     />
                                     <IconButton
-                                    aria-label="選択肢を削除"
-                                    icon={<DeleteIcon />}
-                                    size="sm"
-                                    onClick={() => {
+                                      aria-label="選択肢を削除"
+                                      icon={<DeleteIcon />}
+                                      size="sm"
+                                      onClick={() => {
                                         const newOptions = [...(item.options || [])];
                                         newOptions.splice(optIdx, 1);
                                         updateItem(idx, 'options', newOptions);
-                                    }}
+                                      }}
                                     />
-                                </HStack>
+                                  </HStack>
                                 ))}
                                 <Button
-                                size="xs"
-                                onClick={() => {
+                                  size="xs"
+                                  onClick={() => {
                                     const newOptions = [...(item.options || []), ''];
                                     updateItem(idx, 'options', newOptions);
-                                }}
+                                  }}
                                 >
-                                選択肢を追加
+                                  選択肢を追加
                                 </Button>
-                            </VStack>
-                            ) : null}
-                        </Td>
-                        <Td>
+                              </VStack>
+                            </Box>
+                          )}
+                          <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
                             <Checkbox
-                            isChecked={item.required}
-                            onChange={(e) => updateItem(idx, 'required', e.target.checked)}
-                            />
-                        </Td>
-                        <Td>
+                              isChecked={item.required}
+                              onChange={(e) => updateItem(idx, 'required', e.target.checked)}
+                            >
+                              必須
+                            </Checkbox>
                             <Checkbox
-                            isChecked={item.use_initial}
-                            onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
-                            />
-                        </Td>
-                        <Td>
+                              isChecked={item.use_initial}
+                              onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                            >
+                              初診
+                            </Checkbox>
                             <Checkbox
-                            isChecked={item.use_followup}
-                            onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
-                            />
-                        </Td>
-                        <Td>
-                            <Button size="xs" onClick={() => removeItem(idx)} colorScheme="red" variant="outline">
-                            削除
-                            </Button>
-                        </Td>
-                        </Tr>
+                              isChecked={item.use_followup}
+                              onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                            >
+                              再診
+                            </Checkbox>
+                          </SimpleGrid>
+                        </CardBody>
+                      </Card>
                     ))}
-                    </Tbody>
-                </Table>
+                  </VStack>
+                
 
                 {!isAddingNewItem && (
                     <Button onClick={() => setIsAddingNewItem(true)} mt={6} colorScheme="teal">
@@ -515,59 +537,66 @@ export default function AdminTemplates() {
             </Box>
         )}
 
-        <Box borderWidth="1px" borderRadius="md" p={4} w="100%" mt={8}>
-            <Heading size="lg" mb={4}>プレビュー</Heading>
-            {items.length > 0 ? (
-            <>
-            <FormControl mb={4}>
-            <FormLabel>受診種別</FormLabel>
-            <Select
-                value={previewVisitType}
-                onChange={(e) => {
-                setPreviewVisitType(e.target.value as any);
-                setPreviewAnswers({});
-                }}
-            >
-                <option value="initial">初診</option>
-                <option value="followup">再診</option>
-            </Select>
-            </FormControl>
-            <VStack spacing={3} align="stretch">
-            {previewItems.map((item) => (
-                <FormControl key={item.id} isRequired={item.required}>
-                <FormLabel>{item.label}</FormLabel>
-                {item.type === 'yesno' ? (
-                    <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })} value={previewAnswers[item.id] || ''}>
-                    <VStack align="start">
-                        <Radio value="yes" size="lg">はい</Radio>
-                        <Radio value="no" size="lg">いいえ</Radio>
-                    </VStack>
-                    </RadioGroup>
-                ) : item.type === 'multi' && item.options ? (
-                    <CheckboxGroup
-                    onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
-                    value={previewAnswers[item.id] || []}
+        {/* プレビューモーダル */}
+        <Modal isOpen={previewModal.isOpen} onClose={previewModal.onClose} size="xl" scrollBehavior="inside">
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>プレビュー</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              {items.length > 0 ? (
+                <>
+                  <FormControl mb={4}>
+                    <FormLabel>受診種別</FormLabel>
+                    <Select
+                      value={previewVisitType}
+                      onChange={(e) => {
+                        setPreviewVisitType(e.target.value as any);
+                        setPreviewAnswers({});
+                      }}
                     >
-                    <VStack align="start">
-                    {item.options.map((opt) => (
-                    <Checkbox key={opt} value={opt} size="lg">{opt}</Checkbox>
+                      <option value="initial">初診</option>
+                      <option value="followup">再診</option>
+                    </Select>
+                  </FormControl>
+                  <VStack spacing={3} align="stretch">
+                    {previewItems.map((item) => (
+                      <FormControl key={item.id} isRequired={item.required}>
+                        <FormLabel>{item.label}</FormLabel>
+                        {item.type === 'yesno' ? (
+                          <RadioGroup onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })} value={previewAnswers[item.id] || ''}>
+                            <VStack align="start">
+                              <Radio value="yes" size="lg">はい</Radio>
+                              <Radio value="no" size="lg">いいえ</Radio>
+                            </VStack>
+                          </RadioGroup>
+                        ) : item.type === 'multi' && item.options ? (
+                          <CheckboxGroup
+                            onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
+                            value={previewAnswers[item.id] || []}
+                          >
+                            <VStack align="start">
+                              {item.options.map((opt) => (
+                                <Checkbox key={opt} value={opt} size="lg">{opt}</Checkbox>
+                              ))}
+                            </VStack>
+                          </CheckboxGroup>
+                        ) : (
+                          <Input
+                            onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
+                            value={previewAnswers[item.id] || ''}
+                          />
+                        )}
+                      </FormControl>
                     ))}
-                    </VStack>
-                    </CheckboxGroup>
-                ) : (
-                    <Input 
-                        onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })} 
-                        value={previewAnswers[item.id] || ''}
-                    />
-                )}
-                </FormControl>
-            ))}
-            </VStack>
-            </>
-            ) : (
+                  </VStack>
+                </>
+              ) : (
                 <Box>プレビューする項目がありません。</Box>
-            )}
-        </Box>
+              )}
+            </ModalBody>
+          </ModalContent>
+        </Modal>
     </VStack>
   );
 }
