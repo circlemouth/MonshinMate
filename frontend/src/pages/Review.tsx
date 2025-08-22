@@ -24,6 +24,7 @@ interface Item {
   type: string;
   required: boolean;
   options?: string[];
+  allow_freetext?: boolean;
 }
 
 /** 全回答を確認しインライン編集後に確定するページ。 */
@@ -36,6 +37,7 @@ export default function Review() {
   const [answers, setAnswers] = useState<Record<string, any>>(
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
+  const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!sessionId) {
@@ -46,6 +48,21 @@ export default function Review() {
       navigate('/questionnaire');
     }
   }, [navigate, sessionId]);
+
+  useEffect(() => {
+    const ft: Record<string, string> = {};
+    items.forEach((item) => {
+      if (item.type === 'multi' && item.allow_freetext) {
+        const ans = answers[item.id];
+        if (Array.isArray(ans)) {
+          const opts = new Set(item.options || []);
+          const other = ans.find((v: string) => !opts.has(v));
+          if (other) ft[item.id] = other;
+        }
+      }
+    });
+    setFreeTexts(ft);
+  }, [items]);
 
   const finalize = async () => {
     if (!sessionId) return;
@@ -121,18 +138,39 @@ export default function Review() {
               </VStack>
             </RadioGroup>
           ) : item.type === 'multi' && item.options ? (
-            <CheckboxGroup
-              value={answers[item.id] || []}
-              onChange={(vals) => setAnswers({ ...answers, [item.id]: vals })}
-            >
-              <VStack align="start">
-                {item.options.map((opt) => (
-                  <Checkbox key={opt} value={opt}>
-                    {opt}
-                  </Checkbox>
-                ))}
-              </VStack>
-            </CheckboxGroup>
+            <>
+              <CheckboxGroup
+                value={(answers[item.id] || []).filter((v: string) => v !== freeTexts[item.id])}
+                onChange={(vals) => {
+                  const other = freeTexts[item.id];
+                  const newVals = other ? [...vals, other] : vals;
+                  setAnswers({ ...answers, [item.id]: newVals });
+                }}
+              >
+                <VStack align="start">
+                  {item.options.map((opt) => (
+                    <Checkbox key={opt} value={opt}>
+                      {opt}
+                    </Checkbox>
+                  ))}
+                </VStack>
+              </CheckboxGroup>
+              {item.allow_freetext && (
+                <Input
+                  mt={2}
+                  placeholder="自由記述"
+                  value={freeTexts[item.id] || ''}
+                  onChange={(e) => {
+                    const prev = freeTexts[item.id] || '';
+                    const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                    const val = e.target.value;
+                    const updated = val ? [...selected, val] : selected;
+                    setFreeTexts({ ...freeTexts, [item.id]: val });
+                    setAnswers({ ...answers, [item.id]: updated });
+                  }}
+                />
+              )}
+            </>
           ) : (
             <Input
               value={answers[item.id] || ''}

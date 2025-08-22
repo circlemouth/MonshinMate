@@ -227,6 +227,7 @@ def test_questionnaire_options() -> None:
                 "type": "multi",
                 "required": False,
                 "options": ["apple", "banana"],
+                "allow_freetext": True,
             },
         ],
     }
@@ -237,6 +238,7 @@ def test_questionnaire_options() -> None:
     data = get_res.json()
     assert data["items"][0]["options"] == ["red", "blue"]
     assert data["items"][1]["type"] == "multi"
+    assert data["items"][1]["allow_freetext"] is True
     # 後片付け
     del_res = client.delete("/questionnaires/opt?visit_type=initial")
     assert del_res.status_code == 200

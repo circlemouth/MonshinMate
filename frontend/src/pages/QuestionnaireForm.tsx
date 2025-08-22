@@ -26,6 +26,7 @@ interface Item {
   required: boolean;
   options?: string[];
   when?: { item_id: string; equals: string };
+  allow_freetext?: boolean;
 }
 
 /** 患者向けの問診フォーム画面。 */
@@ -34,6 +35,7 @@ export default function QuestionnaireForm() {
   const [answers, setAnswers] = useState<Record<string, any>>(
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
+  const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
   const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
   const visitType = sessionStorage.getItem('visit_type') || 'initial';
   const navigate = useNavigate();
@@ -50,6 +52,21 @@ export default function QuestionnaireForm() {
         sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
       });
   }, [visitType, sessionId, navigate]);
+
+  useEffect(() => {
+    const ft: Record<string, string> = {};
+    items.forEach((item) => {
+      if (item.type === 'multi' && item.allow_freetext) {
+        const ans = answers[item.id];
+        if (Array.isArray(ans)) {
+          const opts = new Set(item.options || []);
+          const other = ans.find((v: string) => !opts.has(v));
+          if (other) ft[item.id] = other;
+        }
+      }
+    });
+    setFreeTexts(ft);
+  }, [items]);
 
   const [attempted, setAttempted] = useState(false);
 
@@ -178,19 +195,40 @@ export default function QuestionnaireForm() {
                 </VStack>
               </RadioGroup>
             ) : item.type === 'multi' && item.options ? (
-              <CheckboxGroup
-                value={answers[item.id] || []}
-                onChange={(vals) => setAnswers({ ...answers, [item.id]: vals })}
-                aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
-              >
-                <VStack align="start" spacing={3}>
-                  {item.options.map((opt) => (
-                    <Checkbox key={opt} value={opt} size="lg">
-                      {opt}
-                    </Checkbox>
-                  ))}
-                </VStack>
-              </CheckboxGroup>
+              <>
+                <CheckboxGroup
+                  value={(answers[item.id] || []).filter((v: string) => v !== freeTexts[item.id])}
+                  onChange={(vals) => {
+                    const other = freeTexts[item.id];
+                    const newVals = other ? [...vals, other] : vals;
+                    setAnswers({ ...answers, [item.id]: newVals });
+                  }}
+                  aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
+                >
+                  <VStack align="start" spacing={3}>
+                    {item.options.map((opt) => (
+                      <Checkbox key={opt} value={opt} size="lg">
+                        {opt}
+                      </Checkbox>
+                    ))}
+                  </VStack>
+                </CheckboxGroup>
+                {item.allow_freetext && (
+                  <Input
+                    mt={2}
+                    placeholder="自由記述"
+                    value={freeTexts[item.id] || ''}
+                    onChange={(e) => {
+                      const prev = freeTexts[item.id] || '';
+                      const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                      const val = e.target.value;
+                      const updated = val ? [...selected, val] : selected;
+                      setFreeTexts({ ...freeTexts, [item.id]: val });
+                      setAnswers({ ...answers, [item.id]: updated });
+                    }}
+                  />
+                )}
+              </>
             ) : item.type === 'date' ? (
               <DateSelect
                 value={answers[item.id] || ''}

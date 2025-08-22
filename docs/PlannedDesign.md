@@ -283,6 +283,7 @@ interface QuestionItem {
   required?: boolean;
   description?: string;
   options?: { value: string; label: string }[]; // single/multi
+  allowFreeText?: boolean; // multi のときに自由記述欄を表示
   when?: { itemId: string; operator: 'eq' | 'ne' | 'in' | 'nin'; value: any }[];
 }
 
