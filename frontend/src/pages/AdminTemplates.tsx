@@ -37,6 +37,7 @@ import {
   ModalBody,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
+import DateSelect from '../components/DateSelect';
 
 interface Item {
   id: string;
@@ -487,6 +488,7 @@ export default function AdminTemplates() {
                           <option value="string">テキスト</option>
                           <option value="multi">複数選択</option>
                           <option value="yesno">はい/いいえ</option>
+                          <option value="date">日付</option>
                         </Select>
                       </FormControl>
                       <IconButton
@@ -583,6 +585,7 @@ export default function AdminTemplates() {
                     <option value="string">テキスト</option>
                     <option value="multi">複数選択</option>
                     <option value="yesno">はい/いいえ</option>
+                    <option value="date">日付</option>
                   </Select>
                 </FormControl>
                 {['multi'].includes(newItem.type) && (
@@ -707,6 +710,11 @@ export default function AdminTemplates() {
                             ))}
                           </VStack>
                         </CheckboxGroup>
+                      ) : item.type === 'date' ? (
+                        <DateSelect
+                          value={previewAnswers[item.id] || ''}
+                          onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
+                        />
                       ) : (
                         <Input
                           onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}

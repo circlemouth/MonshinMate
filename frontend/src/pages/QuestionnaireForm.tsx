@@ -17,6 +17,7 @@ import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import ErrorSummary from '../components/ErrorSummary';
 import { track } from '../metrics';
+import DateSelect from '../components/DateSelect';
 
 interface Item {
   id: string;
@@ -190,6 +191,11 @@ export default function QuestionnaireForm() {
                   ))}
                 </VStack>
               </CheckboxGroup>
+            ) : item.type === 'date' ? (
+              <DateSelect
+                value={answers[item.id] || ''}
+                onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+              />
             ) : (
               <Input
                 id={`item-${item.id}`}
