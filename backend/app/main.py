@@ -249,6 +249,31 @@ def test_llm_settings() -> dict:
     return llm_gateway.test_connection()
 
 
+class ListModelsRequest(BaseModel):
+    """モデル一覧取得リクエスト。"""
+
+    provider: str
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+@app.post("/llm/list-models")
+def list_llm_models(req: ListModelsRequest) -> list[str]:
+    """指定された設定で利用可能なLLMモデルの一覧を返す。"""
+    # リクエストから一時的な設定でゲートウェイを作成
+    temp_settings = LLMSettings(
+        provider=req.provider,
+        base_url=req.base_url,
+        api_key=req.api_key,
+        # 他のフィールドは list_models では使われないのでダミー値
+        model="",
+        temperature=0,
+        enabled=True,  # 有効化しないと空リストが返る
+    )
+    gateway = LLMGateway(temp_settings)
+    return gateway.list_models()
+
+
 class AdminLoginRequest(BaseModel):
     """管理者ログインリクエスト。"""
 

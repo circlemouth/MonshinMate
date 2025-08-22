@@ -68,6 +68,39 @@ class LLMGateway:
         except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
             return {"status": "ng", "detail": str(e)}
 
+    def list_models(self) -> list[str]:
+        """利用可能なモデル名の一覧を返す。
+
+        Returns:
+            list[str]: モデル名のリスト。
+        """
+        s = self.settings
+        if not s.enabled or not s.base_url:
+            return []
+
+        try:
+            timeout = httpx.Timeout(5.0)
+            if s.provider == "ollama":
+                url = s.base_url.rstrip("/") + "/api/tags"
+                r = httpx.get(url, timeout=timeout)
+                r.raise_for_status()
+                data = r.json()
+                # "models" キーの中の "name" を抽出
+                return sorted([m.get("name") for m in data.get("models", []) if m.get("name")])
+            else:  # LM Studio or other OpenAI compatible
+                url = s.base_url.rstrip("/") + "/v1/models"
+                headers = {}
+                if s.api_key:
+                    headers["Authorization"] = f"Bearer {s.api_key}"
+                r = httpx.get(url, headers=headers, timeout=timeout)
+                r.raise_for_status()
+                data = r.json()
+                # "data" キーの中の "id" を抽出
+                return sorted([m.get("id") for m in data.get("data", []) if m.get("id")])
+        except Exception as e:
+            logging.getLogger("llm").error(f"Failed to list models: {e}")
+            return []
+
     def generate_question(
         self,
         missing_item_id: str,

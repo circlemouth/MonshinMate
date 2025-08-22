@@ -20,12 +20,12 @@ MonshinMate は、問診票のテンプレート管理・患者回答の収集�
 
 2) API を起動
 - `cd backend`
-- `uvicorn app.main:app --reload`（デフォルトで `http://localhost:8000`）
+- `uvicorn app.main:app --reload`（デフォルトで `http://localhost:8001`）
   - 初回アクセス時に `backend/app/app.sqlite3` が作成されます（テンプレートテーブルを自動初期化）
 
 3) 動作確認
-- `curl http://localhost:8000/healthz` → `{ "status": "ok" }`
-- `curl 'http://localhost:8000/questionnaires/default/template?visit_type=initial'`
+- `curl http://localhost:8001/healthz` → `{ "status": "ok" }`
+- `curl 'http://localhost:8001/questionnaires/default/template?visit_type=initial'`
 
 4) テスト実行
 - `cd backend && pytest`
@@ -46,12 +46,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/questionnaires': 'http://localhost:8000',
-      '/sessions': 'http://localhost:8000',
-      '/llm': 'http://localhost:8000',
-      '/healthz': 'http://localhost:8000',
-      '/readyz': 'http://localhost:8000',
-      '/metrics': 'http://localhost:8000',
+      '/questionnaires': 'http://localhost:8001',
+      '/sessions': 'http://localhost:8001',
+      '/llm': 'http://localhost:8001',
+      '/healthz': 'http://localhost:8001',
+      '/readyz': 'http://localhost:8001',
+      '/metrics': 'http://localhost:8001',
     },
   },
 });
@@ -72,7 +72,7 @@ chmod +x dev.sh && ./dev.sh
 make dev
 ```
 
-- バックエンド: `http://localhost:8000`
+- バックエンド: `http://localhost:8001`
 - フロントエンド: `http://localhost:5173`
 - 停止は Ctrl-C（両プロセスをまとめて終了）
 

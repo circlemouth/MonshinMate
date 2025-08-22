@@ -31,11 +31,10 @@ else
   source "$VENV_DIR/bin/activate"
 fi
 
-echo "[start] backend: http://localhost:8000"
+echo "[start] backend: http://localhost:8001"
 (
   cd "$ROOT_DIR/backend"
-  exec uvicorn app.main:app --reload --port 8000
-) &
+  exec uvicorn app.main:app --reload --port 8001 &
 BACKEND_PID=$!
 
 echo "[start] frontend: http://localhost:5173"

@@ -1,6 +1,6 @@
-import { ReactNode, useMemo } from 'react';
-import { Box, Flex, VStack, Button, Text } from '@chakra-ui/react';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { ReactNode, useMemo, useEffect } from 'react';
+import { Box, Flex, VStack, Button, Text, Spacer } from '@chakra-ui/react';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
 /**
  * 管理画面用レイアウト。
@@ -9,7 +9,14 @@ import { Link as RouterLink, useLocation } from 'react-router-dom';
  */
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const current = location.pathname;
+
+  useEffect(() => {
+    if (!sessionStorage.getItem('adminLoggedIn')) {
+      navigate('/admin/login');
+    }
+  }, [navigate]);
 
   const navItems = useMemo(
     () => [
@@ -20,10 +27,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     []
   );
 
+  const logout = () => {
+    sessionStorage.removeItem('adminLoggedIn');
+    navigate('/admin/login');
+  };
+
   return (
-    <Flex align="stretch" gap={6}>
+    <Flex align="stretch" gap={6} height="100vh">
       <Box as="nav" minW={{ base: '180px', md: '220px' }}>
-        <VStack align="stretch" spacing={2}>
+        <VStack align="stretch" spacing={2} height="100%">
           <Text fontSize="sm" color="gray.500" mb={1}>
             管理メニュー
           </Text>
@@ -42,6 +54,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               </Button>
             );
           })}
+          <Spacer />
+          <Button onClick={logout} justifyContent="flex-start" variant="ghost">
+            ログアウト
+          </Button>
         </VStack>
       </Box>
       <Box flex="1" minW={0}>

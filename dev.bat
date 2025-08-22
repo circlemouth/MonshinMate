@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal
 
 :: システム全体を一括起動するスクリプト (Windows版)
@@ -23,10 +23,10 @@ if not exist "%VENV_DIR%\Scripts\uvicorn.exe" (
   call "%VENV_DIR%\Scripts\activate.bat"
 )
 
-echo [start] backend: http://localhost:8000
+echo [start] backend: http://localhost:8001
 :: 新しいウィンドウでバックエンドを起動
 :: /k オプションでコマンド実行後もウィンドウを開いたままにし、ログを確認できるようにします
-start "Backend Server" cmd /k "call ""%VENV_DIR%\Scripts\activate.bat"" && cd /d ""%ROOT_DIR%\backend"" && uvicorn app.main:app --reload --port 8000"
+start "Backend Server" cmd /k "call \"%VENV_DIR%\Scripts\activate.bat\" && cd /d \"%ROOT_DIR%\backend\" && uvicorn app.main:app --reload --port 8001"
 
 echo [start] frontend: http://localhost:5173
 
@@ -48,7 +48,7 @@ if %errorlevel% equ 0 (
 )
 
 :: 新しいウィンドウでフロントエンドを起動
-start "Frontend Server" cmd /k "cd /d ""%ROOT_DIR%\frontend"" && %FRONTEND_CMD%"
+start "Frontend Server" cmd /k "cd /d \"%ROOT_DIR%\frontend\" && %FRONTEND_CMD%"
 
 
 echo.
