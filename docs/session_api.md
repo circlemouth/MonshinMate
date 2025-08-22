@@ -121,6 +121,13 @@
 - **レスポンス**:
   - `{ status: "ok" }`
 
+## POST /questionnaires/{id}/duplicate
+- **概要**: 指定テンプレートを新しいIDで複製する。
+- **リクエストボディ**:
+  - `new_id` (str): 複製先のテンプレートID
+- **レスポンス**:
+  - `{ status: "ok" }`
+
 ## GET /health
 - **概要**: 死活監視用の簡易エンドポイント。`{"status":"ok"}` を返す。
 

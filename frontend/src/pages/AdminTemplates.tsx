@@ -282,6 +282,28 @@ export default function AdminTemplates() {
     }
   };
 
+  const duplicateTemplateApi = async (id: string) => {
+    const newId = window.prompt(`テンプレート「${id}」の複製先IDを入力してください`, `${id}_copy`);
+    if (!newId) return;
+    if (templates.some((t) => t.id === newId)) {
+      alert('そのIDは既に使用されています。');
+      return;
+    }
+    try {
+      await fetch(`/questionnaires/${id}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_id: newId }),
+      });
+      setTemplates([...templates, { id: newId }]);
+      setTemplateId(newId);
+      alert('テンプレートを複製しました。');
+    } catch (error) {
+      console.error('Failed to duplicate template:', error);
+      alert('テンプレートの複製に失敗しました。');
+    }
+  };
+
   const handleCreateNewTemplate = () => {
     const newId = newTemplateId.trim();
     if (!newId) {
@@ -400,15 +422,24 @@ export default function AdminTemplates() {
                         {t.id === 'default' ? 'デフォルト' : t.id}
                       </Td>
                       <Td onClick={(e) => e.stopPropagation()}>
-                        <Button
-                          size="xs"
-                          colorScheme="red"
-                          variant="outline"
-                          onClick={() => deleteTemplateApi(t.id)}
-                          isDisabled={t.id === 'default'}
-                        >
-                          削除
-                        </Button>
+                        <HStack spacing={1}>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => duplicateTemplateApi(t.id)}
+                          >
+                            複製
+                          </Button>
+                          <Button
+                            size="xs"
+                            colorScheme="red"
+                            variant="outline"
+                            onClick={() => deleteTemplateApi(t.id)}
+                            isDisabled={t.id === 'default'}
+                          >
+                            削除
+                          </Button>
+                        </HStack>
                       </Td>
                     </Tr>
                   ))}

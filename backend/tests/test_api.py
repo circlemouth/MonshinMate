@@ -296,6 +296,57 @@ def test_questionnaire_when() -> None:
     assert del_res.status_code == 200
 
 
+def test_duplicate_questionnaire() -> None:
+    """テンプレート複製APIが内容を引き継ぐことを確認する。"""
+    on_startup()
+    src_initial = {
+        "id": "dup_src",
+        "visit_type": "initial",
+        "items": [{"id": "q1", "label": "Q1", "type": "string", "required": True}],
+    }
+    src_follow = {
+        "id": "dup_src",
+        "visit_type": "followup",
+        "items": [{"id": "q2", "label": "Q2", "type": "string", "required": False}],
+    }
+    client.post("/questionnaires", json=src_initial)
+    client.post("/questionnaires", json=src_follow)
+    client.post(
+        "/questionnaires/dup_src/summary-prompt",
+        json={"visit_type": "initial", "prompt": "init", "enabled": True},
+    )
+    client.post(
+        "/questionnaires/dup_src/summary-prompt",
+        json={"visit_type": "followup", "prompt": "fup", "enabled": False},
+    )
+
+    res = client.post("/questionnaires/dup_src/duplicate", json={"new_id": "dup_copy"})
+    assert res.status_code == 200
+
+    init_copy = client.get(
+        "/questionnaires/dup_copy/template?visit_type=initial"
+    ).json()
+    follow_copy = client.get(
+        "/questionnaires/dup_copy/template?visit_type=followup"
+    ).json()
+    assert init_copy["items"][0]["label"] == "Q1"
+    assert follow_copy["items"][0]["label"] == "Q2"
+
+    init_prompt = client.get(
+        "/questionnaires/dup_copy/summary-prompt?visit_type=initial"
+    ).json()
+    follow_prompt = client.get(
+        "/questionnaires/dup_copy/summary-prompt?visit_type=followup"
+    ).json()
+    assert init_prompt["prompt"] == "init" and init_prompt["enabled"] is True
+    assert follow_prompt["prompt"] == "fup" and follow_prompt["enabled"] is False
+
+    client.delete("/questionnaires/dup_src?visit_type=initial")
+    client.delete("/questionnaires/dup_src?visit_type=followup")
+    client.delete("/questionnaires/dup_copy?visit_type=initial")
+    client.delete("/questionnaires/dup_copy?visit_type=followup")
+
+
 def test_session_persisted() -> None:
     """セッションと回答がDBに保存されることを確認する。"""
     on_startup()
