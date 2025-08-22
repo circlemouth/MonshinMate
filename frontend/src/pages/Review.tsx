@@ -16,6 +16,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import { track } from '../metrics';
+import DateSelect from '../components/DateSelect';
 
 interface Item {
   id: string;
@@ -102,10 +103,9 @@ export default function Review() {
               onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
             />
           ) : item.type === 'date' ? (
-            <Input
-              type="date"
+            <DateSelect
               value={answers[item.id] || ''}
-              onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
+              onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
             />
           ) : item.type === 'single' && item.options ? (
             <RadioGroup

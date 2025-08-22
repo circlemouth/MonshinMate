@@ -18,6 +18,13 @@ def test_validate_number() -> None:
         Validator.validate_partial(items, {"age": "thirty"})
 
 
+def test_validate_date() -> None:
+    items = [QuestionnaireItem(id="visit", label="受診日", type="date", required=False)]
+    Validator.validate_partial(items, {"visit": "2024-01-30"})
+    with pytest.raises(HTTPException):
+        Validator.validate_partial(items, {"visit": "2024-02-30"})
+
+
 def test_missing_required() -> None:
     items = [QuestionnaireItem(id="cc", label="主訴", type="string", required=True)]
     missing = Validator.missing_required(items, {})

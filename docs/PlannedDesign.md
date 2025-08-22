@@ -222,7 +222,7 @@
 ---
 
 ## 12. 管理者機能の詳細仕様
-- **テンプレ項目の型**：`text`, `multi`, `yesno`（3種に簡素化）。
+- **テンプレ項目の型**：`text`, `multi`, `yesno`, `date`（4種。`date`は年・月・日をプルダウン選択）。
 - **条件表示**：`when: { itemId, operator, value }[]`（ANDで評価）
 - **公開/下書き**：公開のみ患者側に配信。編集はドラフトで行い、公開で差替。
 - **プレビュー**：右パネルに患者画面の疑似レンダリング。種別切替可。
@@ -279,7 +279,7 @@
 interface QuestionItem {
   id: string;
   label: string;
-  inputType: 'text' | 'multi' | 'yesno';
+  inputType: 'text' | 'multi' | 'yesno' | 'date';
   required?: boolean;
   description?: string;
   options?: { value: string; label: string }[]; // single/multi
@@ -290,7 +290,7 @@ interface QuestionItem {
 interface LlmQuestion {
   id: string;            // new-xxx など
   text: string;          // 質問文
-  expectedInputType: 'text' | 'multi' | 'yesno';
+  expectedInputType: 'text' | 'multi' | 'yesno' | 'date';
   options?: { value: string; label: string }[];
   priority?: number;     // 低いほど高優先
 }

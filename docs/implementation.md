@@ -58,7 +58,7 @@
   - [x] **患者**：Entry（氏名/生年月日＋受診種別）→ Questionnaire → Questions → Review → Done
     - [x] Entry で氏名・生年月日を入力
     - [x] Entry で「当院の受診は初めてですか？」を選択（「初めて」= initial / 「受診したことがある」= followup）しセッション作成
-    - [x] Questionnaire で text/multi/yesno に応じた入力フォームを表示
+    - [x] Questionnaire で text/multi/yesno/date に応じた入力フォームを表示
     - [x] Questions で追加質問を順次表示
     - [x] Review で回答一覧を表示しインライン編集後確定へ進む
   - [x] Done で要約を表示
