@@ -44,6 +44,26 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             """,
         )
 
+        # サマリープロンプト（テンプレート/種別ごとに管理）
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS summary_prompts (
+                id TEXT NOT NULL,
+                visit_type TEXT NOT NULL,
+                prompt_text TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (id, visit_type)
+            )
+            """,
+        )
+        # 既存DB向けに enabled カラムを後付け（存在時は無視）
+        try:
+            conn.execute(
+                "ALTER TABLE summary_prompts ADD COLUMN enabled INTEGER NOT NULL DEFAULT 0"
+            )
+        except Exception:
+            pass
+
         # セッション本体
         conn.execute(
             """
@@ -75,6 +95,16 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 ts TEXT NOT NULL,
                 PRIMARY KEY (session_id, item_id),
                 FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            )
+            """,
+        )
+
+        # LLM 設定（単一行）
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS llm_settings (
+                id TEXT PRIMARY KEY,
+                json TEXT NOT NULL
             )
             """,
         )
@@ -130,6 +160,86 @@ def list_templates(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
             "SELECT id, visit_type FROM questionnaire_templates ORDER BY id, visit_type"
         ).fetchall()
         return list(rows)
+    finally:
+        conn.close()
+
+
+def upsert_summary_prompt(
+    template_id: str,
+    visit_type: str,
+    prompt_text: str,
+    enabled: bool = False,
+    db_path: str = DEFAULT_DB_PATH,
+) -> None:
+    """サマリー生成用プロンプトと有効設定を保存/更新する。"""
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO summary_prompts (id, visit_type, prompt_text, enabled)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id, visit_type) DO UPDATE SET
+                prompt_text=excluded.prompt_text,
+                enabled=excluded.enabled
+            """,
+            (template_id, visit_type, prompt_text, 1 if enabled else 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_summary_config(
+    template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
+) -> dict[str, Any] | None:
+    """サマリー生成用プロンプトと有効設定を取得する。未設定なら None。"""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute(
+            "SELECT prompt_text, enabled FROM summary_prompts WHERE id=? AND visit_type=?",
+            (template_id, visit_type),
+        ).fetchone()
+        if not row:
+            return None
+        return {"prompt": row["prompt_text"], "enabled": bool(row["enabled"]) }
+    finally:
+        conn.close()
+
+def get_summary_prompt(
+    template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
+) -> str | None:
+    cfg = get_summary_config(template_id, visit_type, db_path)
+    return cfg["prompt"] if cfg else None
+
+
+def save_llm_settings(settings: dict[str, Any], db_path: str = DEFAULT_DB_PATH) -> None:
+    """LLM 設定を JSON として保存（単一行: id='global'）。"""
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO llm_settings (id, json)
+            VALUES ('global', ?)
+            ON CONFLICT(id) DO UPDATE SET json=excluded.json
+            """,
+            (json.dumps(settings, ensure_ascii=False),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_llm_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
+    """保存済み LLM 設定を取得。無ければ None。"""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute("SELECT json FROM llm_settings WHERE id='global'").fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["json"]) or None
+        except Exception:
+            return None
     finally:
         conn.close()
 

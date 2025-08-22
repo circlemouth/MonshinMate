@@ -4,6 +4,7 @@ import {
   FormControl,
   FormLabel,
   Input,
+  Textarea,
   Button,
   Table,
   TableContainer,
@@ -52,6 +53,8 @@ type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 /** テンプレート管理画面。 */
 export default function AdminTemplates() {
   const [items, setItems] = useState<Item[]>([]);
+  const [initialPrompt, setInitialPrompt] = useState<string>("");
+  const [followupPrompt, setFollowupPrompt] = useState<string>("");
   const [newItem, setNewItem] = useState<{
     label: string;
     type: string;
@@ -77,6 +80,10 @@ export default function AdminTemplates() {
   const previewModal = useDisclosure();
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
+  // サマリー設定（初診/再診）
+  const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
+  const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
+  const [canUseSummary, setCanUseSummary] = useState<boolean>(false);
 
   useEffect(() => {
     fetch('/questionnaires')
@@ -88,11 +95,37 @@ export default function AdminTemplates() {
       });
   }, []);
 
+  // LLM の疎通状況を確認し、サマリー機能のオン可否を制御
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const s = await fetch('/llm/settings').then((r) => r.json());
+        if (!s?.enabled || !s?.base_url) {
+          if (!cancelled) setCanUseSummary(false);
+          return;
+        }
+        const t = await fetch('/llm/settings/test', { method: 'POST' }).then((r) => r.json());
+        if (!cancelled) setCanUseSummary(t?.status === 'ok');
+      } catch (e) {
+        if (!cancelled) setCanUseSummary(false);
+      }
+    };
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     if (templateId && templates.some((t) => t.id === templateId)) {
       loadTemplates(templateId);
     } else {
       setItems([]);
+      setInitialPrompt("");
+      setFollowupPrompt("");
+      setInitialEnabled(false);
+      setFollowupEnabled(false);
       setIsLoading(false);
     }
     setIsAddingNewItem(false);
@@ -114,14 +147,16 @@ export default function AdminTemplates() {
     return () => {
       clearTimeout(handler);
     };
-  }, [items, isLoading]);
+  }, [items, initialPrompt, followupPrompt, initialEnabled, followupEnabled, isLoading]);
 
   const loadTemplates = (id: string) => {
     setIsLoading(true);
     Promise.all([
       fetch(`/questionnaires/${id}/template?visit_type=initial`).then((r) => r.json()),
       fetch(`/questionnaires/${id}/template?visit_type=followup`).then((r) => r.json()),
-    ]).then(([init, follow]) => {
+      fetch(`/questionnaires/${id}/summary-prompt?visit_type=initial`).then((r) => r.json()),
+      fetch(`/questionnaires/${id}/summary-prompt?visit_type=followup`).then((r) => r.json()),
+    ]).then(([init, follow, pInit, pFollow]) => {
       const map = new Map<string, Item>();
       (init.items || []).forEach((it: any) => map.set(it.id, { ...it, use_initial: true, use_followup: false }));
       (follow.items || []).forEach((it: any) => {
@@ -133,6 +168,10 @@ export default function AdminTemplates() {
         }
       });
       setItems(Array.from(map.values()));
+      setInitialPrompt(pInit?.prompt || "");
+      setFollowupPrompt(pFollow?.prompt || "");
+      setInitialEnabled(!!pInit?.enabled);
+      setFollowupEnabled(!!pFollow?.enabled);
       setPreviewAnswers({});
       setSaveStatus('idle'); // ロード完了時はidleに
       setIsLoading(false);
@@ -192,6 +231,17 @@ export default function AdminTemplates() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems }),
       });
+      // サマリー用プロンプトも保存（有効/無効を含む）
+      await fetch(`/questionnaires/${templateId}/summary-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_type: 'initial', prompt: initialPrompt || '', enabled: initialEnabled }),
+      });
+      await fetch(`/questionnaires/${templateId}/summary-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_type: 'followup', prompt: followupPrompt || '', enabled: followupEnabled }),
+      });
 
       if (!templates.some((t) => t.id === templateId)) {
         setTemplates([...templates, { id: templateId }]);
@@ -237,7 +287,28 @@ export default function AdminTemplates() {
     }
     setTemplates([...templates, { id: newId }]);
     setTemplateId(newId);
-    setItems([]);
+    // 新規テンプレート作成時のデフォルト問診項目は「質問文形式」で初期化する
+    setItems([
+      {
+        id: crypto.randomUUID(),
+        label: '主訴は何ですか？',
+        type: 'string',
+        required: true,
+        use_initial: true,
+        use_followup: true,
+      },
+      {
+        id: crypto.randomUUID(),
+        label: '発症時期はいつからですか？',
+        type: 'string',
+        required: false,
+        use_initial: true,
+        use_followup: true,
+      },
+    ]);
+    const defaultPrompt = '以下の問診項目と回答をもとに、簡潔で読みやすい日本語のサマリーを作成してください。重要項目（主訴・発症時期）は冒頭にまとめてください。';
+    setInitialPrompt(defaultPrompt);
+    setFollowupPrompt(defaultPrompt);
     setNewTemplateId('');
   };
 
@@ -293,7 +364,7 @@ export default function AdminTemplates() {
                 onChange={(e) => setNewTemplateId(e.target.value)}
               />
               <Button onClick={handleCreateNewTemplate} colorScheme="green">
-                作成して編集
+                作成
               </Button>
             </HStack>
           </Box>
@@ -357,6 +428,48 @@ export default function AdminTemplates() {
               <SaveStatusIndicator />
             </HStack>
           </HStack>
+          {/* サマリー生成設定＋プロンプト編集 */}
+          <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
+            <Heading size="sm" mb={2}>サマリー自動作成</Heading>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={1}>
+              <Checkbox isChecked={initialEnabled} isDisabled={!canUseSummary} onChange={(e) => setInitialEnabled(e.target.checked)}>
+                初診
+              </Checkbox>
+              <Checkbox isChecked={followupEnabled} isDisabled={!canUseSummary} onChange={(e) => setFollowupEnabled(e.target.checked)}>
+                再診
+              </Checkbox>
+            </SimpleGrid>
+            {!canUseSummary && (
+              <Text fontSize="sm" color="gray.500" mb={3}>
+                サマリー作成は、LLM設定が有効かつ疎通テストが成功している場合のみオンにできます。
+              </Text>
+            )}
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+              {initialEnabled && (
+                <FormControl>
+                  <FormLabel>初診用プロンプト</FormLabel>
+                  <Textarea
+                    placeholder="初診サマリーの生成方針を記述（システムプロンプト）"
+                    value={initialPrompt}
+                    onChange={(e) => setInitialPrompt(e.target.value)}
+                    rows={6}
+                  />
+                </FormControl>
+              )}
+              {followupEnabled && (
+                <FormControl>
+                  <FormLabel>再診用プロンプト</FormLabel>
+                  <Textarea
+                    placeholder="再診サマリーの生成方針を記述（システムプロンプト）"
+                    value={followupPrompt}
+                    onChange={(e) => setFollowupPrompt(e.target.value)}
+                    rows={6}
+                  />
+                </FormControl>
+              )}
+            </SimpleGrid>
+          </Box>
+
           {/* カード表示（常時） */}
           <VStack align="stretch" spacing={4}>
             {items.map((item, idx) => (
@@ -458,7 +571,11 @@ export default function AdminTemplates() {
               <VStack spacing={4} align="stretch">
                 <FormControl>
                   <FormLabel>新規問診内容</FormLabel>
-                  <Input value={newItem.label} onChange={(e) => setNewItem({ ...newItem, label: e.target.value })} />
+                  <Input
+                    placeholder="例: 主訴は何ですか？"
+                    value={newItem.label}
+                    onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
+                  />
                 </FormControl>
                 <FormControl>
                   <FormLabel>入力方法</FormLabel>
@@ -609,4 +726,3 @@ export default function AdminTemplates() {
     </VStack>
   );
 }
-

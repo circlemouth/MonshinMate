@@ -22,7 +22,8 @@
 ### MS1：管理UI/テンプレ整備
 - 目的：初診/再診テンプレートのCRUDとプレビューを提供
 - **完了条件**
-- [x] テンプレート一覧/新規/編集/削除が動作
+  - [x] テンプレート一覧/新規/編集/削除が動作
+  - [x] 新規テンプレートの既定問診項目ラベルを「質問文形式」に統一（例："主訴は何ですか？"、"発症時期はいつからですか？"）
 - [x] 項目ごとに「初診」「再診」への適用可否をチェックボックスで設定
   - [x] 条件表示（軽量 when）の保存/反映
   - [x] プレビューで患者側画面の疑似レンダリング
@@ -48,6 +49,8 @@
   - [x] `/review` で全回答を一望しインライン編集可能
   - [x] `POST /sessions/{id}/finalize` が `summaryText` と `allAnswers` を返す
   - [x] 完了ステータスとタイムスタンプ保存
+  - [x] LLM 設定が有効かつ疎通OKの場合、バックグラウンドでカスタムプロンプトを用いたサマリー生成を実行（UIは非ブロッキング）
+  - [x] サマリープロンプトはテンプレート管理画面から「初診」「再診」それぞれ編集/保存可能
 
 ### MS5：フロント実装（患者/管理）
 - 目的：UI導線と状態管理の実装
@@ -106,6 +109,7 @@
    - [x] `POST /sessions/{id}/llm-answers`（追加質問への回答の保存）
    - [x] `POST /sessions/{id}/finalize`（要約生成と確定）
    - [x] 管理系：`GET/POST /questionnaires`, `GET /questionnaires/{id}/template`, `DELETE /questionnaires/{id}`
+   - [x] 管理系（サマリープロンプト）：`GET /questionnaires/{id}/summary-prompt?visit_type=...`, `POST /questionnaires/{id}/summary-prompt`
 4) **観測性**
    - [x] /readyz, /health, /metrics（簡易）
 

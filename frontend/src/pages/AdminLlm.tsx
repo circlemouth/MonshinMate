@@ -5,8 +5,10 @@ import {
   FormLabel,
   Input,
   Select,
-  NumberInput,
-  NumberInputField,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
   Textarea,
   Button,
   HStack,
@@ -27,6 +29,12 @@ interface Settings {
 
 /** LLM 設定画面。 */
 export default function AdminLlm() {
+  // temperature の正規化（0〜2の範囲、NaN は 0.2 にフォールバック）
+  const normalizeTemp = (val: any): number => {
+    const n = typeof val === 'number' ? val : parseFloat(val);
+    if (!Number.isFinite(n)) return 0.2;
+    return Math.min(2, Math.max(0, n));
+  };
   const [settings, setSettings] = useState<Settings>({
     provider: 'ollama',
     model: '',
@@ -43,17 +51,22 @@ export default function AdminLlm() {
   useEffect(() => {
     fetch('/llm/settings')
       .then((res) => res.json())
-      .then((data) =>
-        setSettings({
+      .then((data) => {
+        const loaded = {
           provider: data.provider ?? 'ollama',
           model: data.model ?? '',
-          temperature: data.temperature ?? 0.2,
+          temperature: normalizeTemp(data.temperature ?? 0.2),
           system_prompt: data.system_prompt ?? '',
           enabled: data.enabled ?? true,
           base_url: data.base_url ?? '',
           api_key: data.api_key ?? '',
-        })
-      );
+        } as Settings;
+        setSettings(loaded);
+        // 保存済みのモデル名がある場合、モデル一覧が空でも選択肢に含めて表示できるようにする
+        if (loaded.model) {
+          setModels((prev) => (prev.includes(loaded.model) ? prev : [loaded.model, ...prev]));
+        }
+      });
   }, []);
 
   const fetchModels = async () => {
@@ -153,15 +166,23 @@ export default function AdminLlm() {
 
       <FormControl>
         <FormLabel>temperature</FormLabel>
-        <NumberInput
-          value={settings.temperature}
-          onChange={(_, val) => setSettings({ ...settings, temperature: val })}
-          min={0}
-          max={2}
-          step={0.1}
-        >
-          <NumberInputField />
-        </NumberInput>
+        {/* スライダー形式（0.0〜2.0 を 0.1 刻み） */}
+        <HStack>
+          <Slider
+            min={0}
+            max={2}
+            step={0.1}
+            value={Number.isFinite(settings.temperature) ? settings.temperature : 0.2}
+            onChange={(val) => setSettings({ ...settings, temperature: normalizeTemp(val) })}
+            flex={1}
+          >
+            <SliderTrack>
+              <SliderFilledTrack />
+            </SliderTrack>
+            <SliderThumb />
+          </Slider>
+          <Text width="48px" textAlign="right">{(Number.isFinite(settings.temperature) ? settings.temperature : 0.2).toFixed(1)}</Text>
+        </HStack>
       </FormControl>
       <FormControl>
         <FormLabel>システムプロンプト</FormLabel>

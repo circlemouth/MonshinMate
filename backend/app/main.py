@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 import os
 
-from fastapi import FastAPI, HTTPException, Response, Request
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks
 import sqlite3
 from pydantic import BaseModel
 
@@ -22,6 +22,11 @@ from .db import (
     save_session,
     list_sessions as db_list_sessions,
     get_session as db_get_session,
+    upsert_summary_prompt,
+    get_summary_prompt,
+    get_summary_config,
+    save_llm_settings,
+    load_llm_settings,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -59,12 +64,21 @@ def on_startup() -> None:
     init_db()
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     base_items = [
-        {"id": "chief_complaint", "label": "主訴", "type": "string", "required": True},
-        {"id": "onset", "label": "発症時期", "type": "string", "required": False},
+        # 既定の問診項目は「質問文形式」のラベルに統一する
+        {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
+        {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
     ]
     # デフォルト ID を用意
     upsert_template("default", "initial", base_items)
     upsert_template("default", "followup", base_items)
+
+    # 保存済みの LLM 設定があれば読み込む
+    try:
+        stored = load_llm_settings()
+        if stored:
+            llm_gateway.update_settings(LLMSettings(**stored))
+    except Exception:
+        logging.getLogger(__name__).exception("failed to load stored llm settings; using defaults")
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger(__name__).info("startup completed")
@@ -151,6 +165,14 @@ class QuestionnaireUpsert(BaseModel):
     items: list[QuestionnaireItem]
 
 
+class SummaryPromptUpsert(BaseModel):
+    """サマリー生成プロンプト保存用モデル。"""
+
+    visit_type: str
+    prompt: str
+    enabled: bool = False
+
+
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
 def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questionnaire:
     """DB から問診テンプレートを取得する。無い場合は既定テンプレを返す。
@@ -174,8 +196,8 @@ def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questi
             "id": "default",
             "visit_type": visit_type,
             "items": [
-                {"id": "chief_complaint", "label": "主訴", "type": "string", "required": True},
-                {"id": "onset", "label": "発症時期", "type": "string", "required": False},
+                {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
+                {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
             ],
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
@@ -204,6 +226,33 @@ def upsert_questionnaire(payload: QuestionnaireUpsert) -> dict:
 def delete_questionnaire(questionnaire_id: str, visit_type: str) -> dict:
     """テンプレートを削除する。"""
     delete_template(questionnaire_id, visit_type)
+    return {"status": "ok"}
+
+
+@app.get("/questionnaires/{questionnaire_id}/summary-prompt")
+def get_summary_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
+    """テンプレート/受診種別ごとのサマリー生成プロンプトを取得する。"""
+    cfg = get_summary_config(questionnaire_id, visit_type)
+    if cfg is None:
+        cfg = {
+            "prompt": (
+                "以下の問診項目と回答をもとに、簡潔で読みやすい日本語のサマリーを作成してください。"
+                "重要項目（主訴・発症時期）は冒頭にまとめてください。"
+            ),
+            "enabled": False,
+        }
+    return {
+        "id": questionnaire_id,
+        "visit_type": visit_type,
+        "prompt": cfg.get("prompt", ""),
+        "enabled": bool(cfg.get("enabled", False)),
+    }
+
+
+@app.post("/questionnaires/{questionnaire_id}/summary-prompt")
+def upsert_summary_prompt_api(questionnaire_id: str, payload: SummaryPromptUpsert) -> dict:
+    """テンプレート/受診種別ごとのサマリープロンプトを保存する。"""
+    upsert_summary_prompt(questionnaire_id, payload.visit_type, payload.prompt, payload.enabled)
     return {"status": "ok"}
 
 
@@ -236,10 +285,87 @@ def get_llm_settings() -> LLMSettings:
 
 
 @app.put("/llm/settings", response_model=LLMSettings)
-def update_llm_settings(settings: LLMSettings) -> LLMSettings:
-    """LLM 設定を更新する。"""
+def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> LLMSettings:
+    """LLM 設定を更新する。必要条件を満たす場合は既存セッションのサマリーをBG再生成。"""
 
     llm_gateway.update_settings(settings)
+    try:
+        # DB にも保存（永続化）
+        save_llm_settings(settings.model_dump())
+    except Exception:
+        logger.exception("failed to persist llm settings")
+
+    def _bg_regen_summaries() -> None:
+        try:
+            rows = db_list_sessions()
+            for r in rows:
+                sid = r.get("id")
+                if not sid:
+                    continue
+                srow = db_get_session(sid)
+                if not srow:
+                    continue
+                # finalized のみ対象
+                if srow.get("completion_status") != "finalized":
+                    continue
+                # サマリー設定（テンプレID→default）
+                cfg = get_summary_config(srow.get("questionnaire_id"), srow.get("visit_type")) or get_summary_config(
+                    "default", srow.get("visit_type")
+                )
+                if not cfg or not bool(cfg.get("enabled")):
+                    continue
+                prompt = cfg.get("prompt") or ""
+                # ラベルはテンプレから取得
+                tpl = db_get_template(srow.get("questionnaire_id"), srow.get("visit_type")) or db_get_template(
+                    "default", srow.get("visit_type")
+                )
+                labels = {}
+                try:
+                    for it in (tpl.get("items") or []):
+                        labels[it.get("id")] = it.get("label")
+                except Exception:
+                    labels = {}
+                # 生成
+                new_summary = llm_gateway.summarize_with_prompt(prompt, srow.get("answers", {}), labels)
+                # 保存（必要フィールドを埋めて save_session を再利用）
+                from types import SimpleNamespace
+
+                finalized_at_val = None
+                try:
+                    finalized_at = srow.get("finalized_at")
+                    if finalized_at:
+                        finalized_at_val = datetime.fromisoformat(finalized_at)
+                except Exception:
+                    finalized_at_val = None
+
+                session_obj = SimpleNamespace(
+                    id=srow.get("id"),
+                    patient_name=srow.get("patient_name"),
+                    dob=srow.get("dob"),
+                    visit_type=srow.get("visit_type"),
+                    questionnaire_id=srow.get("questionnaire_id"),
+                    answers=srow.get("answers", {}),
+                    summary=new_summary,
+                    remaining_items=srow.get("remaining_items", []),
+                    completion_status=srow.get("completion_status"),
+                    attempt_counts=srow.get("attempt_counts", {}),
+                    additional_questions_used=srow.get("additional_questions_used", 0),
+                    max_additional_questions=srow.get("max_additional_questions", 5),
+                    finalized_at=finalized_at_val,
+                )
+                save_session(session_obj)
+                logger.info("summary_regenerated id=%s", sid)
+        except Exception:
+            logger.exception("bg_regen_summaries_failed")
+
+    # LLM 接続が有効で疎通OKのときのみバックグラウンドで再生成を起動
+    try:
+        ok = llm_gateway.settings.enabled and bool(getattr(llm_gateway.settings, "base_url", None))
+        if ok and llm_gateway.test_connection().get("status") == "ok":
+            background.add_task(_bg_regen_summaries)
+    except Exception:
+        logger.exception("llm_settings_post_update_check_failed")
+
     return llm_gateway.settings
 
 
@@ -369,8 +495,8 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         tpl = {
             "id": "default",
             "items": [
-                {"id": "chief_complaint", "label": "主訴", "type": "string", "required": True},
-                {"id": "onset", "label": "発症時期", "type": "string", "required": False},
+                {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
+                {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
             ],
         }
     items = [QuestionnaireItem(**it) for it in tpl["items"]]
@@ -462,7 +588,7 @@ def get_llm_questions(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/finalize")
-def finalize_session(session_id: str) -> dict:
+def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
     """セッションを確定し要約を返す。"""
 
     session = sessions.get(session_id)
@@ -470,16 +596,46 @@ def finalize_session(session_id: str) -> dict:
         raise HTTPException(status_code=404, detail="session not found")
     SessionFSM(session, llm_gateway).update_completion()
     # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
-    summary = llm_gateway.summarize(session.answers)
-    session.summary = summary
+    session.summary = llm_gateway.summarize(session.answers)
     session.finalized_at = datetime.utcnow()
     session.completion_status = "finalized"
     global METRIC_SUMMARIES
     METRIC_SUMMARIES += 1
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
+    # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
+    def _bg_summary_task(sid: str) -> None:
+        s = sessions.get(sid)
+        if not s:
+            return
+        labels = {it.id: it.label for it in s.template_items}
+        prompt = (
+            get_summary_prompt(s.questionnaire_id, s.visit_type)
+            or get_summary_prompt("default", s.visit_type)
+            or (
+                "以下の問診項目と回答をもとに、簡潔で読みやすい日本語のサマリーを作成してください。"
+                "重要項目（主訴・発症時期）は冒頭にまとめてください。"
+            )
+        )
+        if getattr(llm_gateway.settings, "enabled", True):
+            new_summary = llm_gateway.summarize_with_prompt(prompt, s.answers, labels)
+            s.summary = new_summary
+            save_session(s)
+
+    # サマリー生成の有効設定（テンプレID→default の順に確認）
+    cfg = get_summary_config(session.questionnaire_id, session.visit_type) or get_summary_config(
+        "default", session.visit_type
+    )
+    if (
+        cfg
+        and bool(cfg.get("enabled"))
+        and getattr(llm_gateway.settings, "enabled", True)
+        and getattr(llm_gateway.settings, "base_url", None)
+    ):
+        background.add_task(_bg_summary_task, session.id)
+
     return {
-        "summary": summary,
+        "summary": session.summary,
         "answers": session.answers,
         "finalized_at": session.finalized_at.isoformat(),
         "status": session.completion_status,

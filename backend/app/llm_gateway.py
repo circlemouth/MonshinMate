@@ -234,3 +234,85 @@ class LLMGateway:
         duration = (time.perf_counter() - start) * 1000
         logging.getLogger("llm").info("summarize took_ms=%.1f", duration)
         return result
+
+    # --- カスタムプロンプトを用いたサマリー生成（可能ならリモート） ---
+    def summarize_with_prompt(
+        self,
+        system_prompt: str,
+        answers: dict[str, Any],
+        labels: dict[str, str] | None = None,
+    ) -> str:
+        """カスタムのシステムプロンプトと問診回答を用いてサマリーを生成する。
+
+        リモート設定が有効かつ base_url がある場合はリモート LLM に投げ、
+        失敗時はスタブ的な要約にフォールバックする。
+        """
+        try:
+            s = self.settings
+            # 質問と回答のペアを整形
+            lines: list[str] = []
+            for k, v in answers.items():
+                label = labels.get(k) if labels else k
+                lines.append(f"- {label}: {v}")
+            pairs_text = "\n".join(lines)
+
+            # リモート可能なら OpenAI/Ollama 互換のチャットで生成
+            if s.enabled and s.base_url:
+                timeout = httpx.Timeout(20.0)
+                if s.provider == "ollama":
+                    url = s.base_url.rstrip("/") + "/api/chat"
+                    messages = []
+                    if system_prompt:
+                        messages.append({"role": "system", "content": system_prompt})
+                    messages.append({
+                        "role": "user",
+                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
+                    })
+                    payload: dict[str, Any] = {
+                        "model": s.model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": s.temperature},
+                    }
+                    r = httpx.post(url, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    content = (
+                        (data.get("message") or {}).get("content")
+                        or data.get("response")
+                        or ""
+                    )
+                    if content:
+                        return content
+                else:
+                    url = s.base_url.rstrip("/") + "/v1/chat/completions"
+                    headers = {"Content-Type": "application/json"}
+                    if s.api_key:
+                        headers["Authorization"] = f"Bearer {s.api_key}"
+                    messages = []
+                    if system_prompt:
+                        messages.append({"role": "system", "content": system_prompt})
+                    messages.append({
+                        "role": "user",
+                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
+                    })
+                    payload = {
+                        "model": s.model,
+                        "messages": messages,
+                        "temperature": s.temperature,
+                        "stream": False,
+                    }
+                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    choices = data.get("choices") or []
+                    if choices:
+                        msg = choices[0].get("message") or {}
+                        content = msg.get("content") or ""
+                        if content:
+                            return content
+        except Exception as e:  # noqa: BLE001 - フォールバックへ
+            logging.getLogger("llm").exception("summarize_with_prompt failed: %s", e)
+
+        # フォールバック（スタブ要約）
+        return self.summarize(answers)

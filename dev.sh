@@ -19,22 +19,26 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-# venv と最小依存確認（存在しなければ作成）
-if [[ ! -x "$VENV_DIR/bin/uvicorn" ]]; then
+# venvの確認と有効化
+if [[ ! -d "$VENV_DIR" ]]; then
   echo "[setup] venv が未作成のため作成します"
   python3 -m venv "$VENV_DIR"
-  source "$VENV_DIR/bin/activate"
-  python -m pip install --upgrade pip
-  # 最小限の依存をインストール（必要に応じて拡張）
-  pip install fastapi uvicorn httpx
-else
-  source "$VENV_DIR/bin/activate"
 fi
+source "$VENV_DIR/bin/activate"
+
+# 依存関係のインストール
+echo "[setup] backend の依存関係をインストールします"
+"$VENV_DIR/bin/python" -m pip install --upgrade pip --break-system-packages
+(
+  cd "$ROOT_DIR/backend"
+  "$VENV_DIR/bin/python" -m pip install -e . --break-system-packages
+)
 
 echo "[start] backend: http://localhost:8001"
 (
   cd "$ROOT_DIR/backend"
-  exec uvicorn app.main:app --reload --port 8001 &
+  exec uvicorn app.main:app --reload --port 8001
+) &
 BACKEND_PID=$!
 
 echo "[start] frontend: http://localhost:5173"
@@ -63,4 +67,3 @@ echo "[ready] Ctrl-C で両方のプロセスを終了します"
 while kill -0 "$BACKEND_PID" >/dev/null 2>&1 && kill -0 "$FRONTEND_PID" >/dev/null 2>&1; do
   sleep 1
 done
-
