@@ -63,15 +63,80 @@ def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
-    base_items = [
-        # 既定の問診項目は「質問文形式」のラベルに統一する
-        {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
-        {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
+    initial_items = [
+        {"id": "name", "label": "氏名を教えてください。", "type": "string", "required": True},
+        {"id": "dob", "label": "生年月日はいつですか？", "type": "date", "required": True},
+        {"id": "sex", "label": "性別を選んでください。", "type": "single", "options": ["男性", "女性", "その他"], "required": True},
+        {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
+        {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
+        {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
+        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "symptom_location",
+            "label": "症状があるのはどこですか？",
+            "type": "multi",
+            "options": ["顔", "首", "体幹", "四肢"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "onset",
+            "label": "いつからの症状ですか？",
+            "type": "single",
+            "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "prior_treatments",
+            "label": "その症状について、これまで治療を受けたことがあれば、その内容を記入してください。",
+            "type": "string",
+            "required": False,
+        },
+        {"id": "past_diseases", "label": "今までにかかったことのある病気はありますか？", "type": "string", "required": False},
+        {"id": "surgeries", "label": "手術を受けたことはありますか？なんの手術を受けましたか？", "type": "string", "required": False},
+        {"id": "current_medications", "label": "現在服用している処方薬はありますか？", "type": "string", "required": False},
+        {"id": "supplements_otc", "label": "現在服用しているサプリメントや使っている市販薬はありますか？", "type": "string", "required": False},
+        {"id": "drug_allergies", "label": "アレルギーがある薬があれば記入してください。", "type": "string", "required": False},
+        {"id": "food_metal_allergies", "label": "食物・金属などのアレルギーがあれば記入してください。", "type": "string", "required": False},
+        {
+            "id": "smoking",
+            "label": "タバコは吸いますか？",
+            "type": "single",
+            "options": ["吸わない", "時々吸う", "毎日吸う"],
+            "required": False,
+        },
+        {
+            "id": "alcohol",
+            "label": "お酒はのみますか？",
+            "type": "single",
+            "options": ["のまない", "ときどき", "よく飲む"],
+            "required": False,
+        },
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
     ]
-    # デフォルト ID を用意
-    upsert_template("default", "initial", base_items)
-    upsert_template("default", "followup", base_items)
-
+    followup_items = [
+        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "symptom_location",
+            "label": "症状があるのはどこですか？",
+            "type": "multi",
+            "options": ["顔", "首", "体幹", "四肢"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "onset",
+            "label": "いつからの症状ですか？",
+            "type": "single",
+            "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+            "allow_freetext": True,
+            "required": True,
+        },
+    ]
+    upsert_template("default", "initial", initial_items)
+    upsert_template("default", "followup", followup_items)
     # 保存済みの LLM 設定があれば読み込む
     try:
         stored = load_llm_settings()
