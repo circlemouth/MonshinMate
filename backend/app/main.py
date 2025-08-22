@@ -146,6 +146,7 @@ class QuestionnaireItem(BaseModel):
     type: str
     required: bool = False
     options: list[str] | None = None
+    allow_freetext: bool = False
     when: WhenCondition | None = None
 
 

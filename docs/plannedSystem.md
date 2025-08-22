@@ -105,10 +105,11 @@
     "items": [
       { "id": "chief_complaint", "label": "主訴", "type": "string", "required": true },
       { "id": "pain_present", "label": "痛みはありますか？", "type": "yesno", "required": false },
-      { "id": "allergies", "label": "アレルギー", "type": "multi", "options": ["食物", "薬剤", "花粉"], "required": false }
+      { "id": "allergies", "label": "アレルギー", "type": "multi", "options": ["食物", "薬剤", "花粉"], "allow_freetext": true, "required": false }
     ]
   }
   ```
+  - `allow_freetext`: `type` が `multi` のときに任意文字列の追加入力を許可するフラグ（省略時は `false`）。
 - **POST /sessions**：
   ```json
   {

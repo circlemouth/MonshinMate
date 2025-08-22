@@ -47,6 +47,7 @@ interface Item {
   options?: string[];
   use_initial: boolean;
   use_followup: boolean;
+  allow_freetext?: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -63,6 +64,7 @@ export default function AdminTemplates() {
     options: string[];
     use_initial: boolean;
     use_followup: boolean;
+    allow_freetext: boolean;
   }>({
     label: '',
     type: 'string',
@@ -70,6 +72,7 @@ export default function AdminTemplates() {
     options: [],
     use_initial: true,
     use_followup: true,
+    allow_freetext: false,
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
@@ -81,6 +84,7 @@ export default function AdminTemplates() {
   const previewModal = useDisclosure();
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [previewFreeTexts, setPreviewFreeTexts] = useState<Record<string, string>>({});
   // サマリー設定（初診/再診）
   const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
@@ -192,6 +196,7 @@ export default function AdminTemplates() {
         options,
         use_initial: newItem.use_initial,
         use_followup: newItem.use_followup,
+        allow_freetext: newItem.allow_freetext,
       },
     ]);
     setNewItem({
@@ -201,6 +206,7 @@ export default function AdminTemplates() {
       options: [],
       use_initial: true,
       use_followup: true,
+      allow_freetext: false,
     });
     setIsAddingNewItem(false);
   };
@@ -543,6 +549,15 @@ export default function AdminTemplates() {
                       </VStack>
                     </Box>
                   )}
+                  {item.type === 'multi' && (
+                    <Checkbox
+                      isChecked={item.allow_freetext}
+                      onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
+                      mb={3}
+                    >
+                      自由記述を許可
+                    </Checkbox>
+                  )}
                   <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
                     <Checkbox isChecked={item.required} onChange={(e) => updateItem(idx, 'required', e.target.checked)}>
                       必須
@@ -626,6 +641,14 @@ export default function AdminTemplates() {
                     </VStack>
                   </FormControl>
                 )}
+                {newItem.type === 'multi' && (
+                  <Checkbox
+                    isChecked={newItem.allow_freetext}
+                    onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
+                  >
+                    自由記述を許可
+                  </Checkbox>
+                )}
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
                     必須
@@ -698,18 +721,35 @@ export default function AdminTemplates() {
                           </VStack>
                         </RadioGroup>
                       ) : item.type === 'multi' && item.options ? (
-                        <CheckboxGroup
-                          onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
-                          value={previewAnswers[item.id] || []}
-                        >
-                          <VStack align="start">
-                            {item.options.map((opt) => (
-                              <Checkbox key={opt} value={opt} size="lg">
-                                {opt}
-                              </Checkbox>
-                            ))}
-                          </VStack>
-                        </CheckboxGroup>
+                        <>
+                          <CheckboxGroup
+                            onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
+                            value={previewAnswers[item.id] || []}
+                          >
+                            <VStack align="start">
+                              {item.options.map((opt) => (
+                                <Checkbox key={opt} value={opt} size="lg">
+                                  {opt}
+                                </Checkbox>
+                              ))}
+                            </VStack>
+                          </CheckboxGroup>
+                          {item.allow_freetext && (
+                            <Input
+                              mt={2}
+                              placeholder="自由記述"
+                              value={previewFreeTexts[item.id] || ''}
+                              onChange={(e) => {
+                                const prev = previewFreeTexts[item.id] || '';
+                                const selected = (previewAnswers[item.id] || []).filter((v: string) => v !== prev);
+                                const val = e.target.value;
+                                const updated = val ? [...selected, val] : selected;
+                                setPreviewFreeTexts({ ...previewFreeTexts, [item.id]: val });
+                                setPreviewAnswers({ ...previewAnswers, [item.id]: updated });
+                              }}
+                            />
+                          )}
+                        </>
                       ) : item.type === 'date' ? (
                         <DateSelect
                           value={previewAnswers[item.id] || ''}

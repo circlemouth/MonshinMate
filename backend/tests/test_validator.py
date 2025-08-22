@@ -31,3 +31,27 @@ def test_missing_required() -> None:
     assert missing == ["cc"]
     missing2 = Validator.missing_required(items, {"cc": "頭痛"})
     assert missing2 == []
+
+
+def test_validate_multi_freetext() -> None:
+    items = [
+        QuestionnaireItem(
+            id="symptoms",
+            label="症状",
+            type="multi",
+            options=["咳", "頭痛"],
+            allow_freetext=True,
+        )
+    ]
+    Validator.validate_partial(items, {"symptoms": ["咳", "その他"]})
+    items_no_free = [
+        QuestionnaireItem(
+            id="symptoms",
+            label="症状",
+            type="multi",
+            options=["咳", "頭痛"],
+            allow_freetext=False,
+        )
+    ]
+    with pytest.raises(HTTPException):
+        Validator.validate_partial(items_no_free, {"symptoms": ["咳", "その他"]})

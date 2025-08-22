@@ -55,8 +55,17 @@ class Validator:
             elif item_type == "multi":
                 if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                     raise HTTPException(status_code=400, detail=f"{key} は複数選択の配列で入力してください")
-                if options and any(v not in list(options) for v in value):
-                    raise HTTPException(status_code=400, detail=f"{key} の選択肢に不正な値があります")
+                allow_freetext = (
+                    getattr(spec, "allow_freetext", None)
+                    if not isinstance(spec, dict)
+                    else spec.get("allow_freetext")
+                ) or False
+                if options:
+                    invalid = [v for v in value if v not in list(options)]
+                    if invalid and not allow_freetext:
+                        raise HTTPException(status_code=400, detail=f"{key} の選択肢に不正な値があります")
+                    if invalid and allow_freetext and any(not v.strip() for v in invalid):
+                        raise HTTPException(status_code=400, detail=f"{key} の自由記述が不正です")
 
     @staticmethod
     def missing_required(items: Sequence[Any], answers: dict[str, Any]) -> list[str]:

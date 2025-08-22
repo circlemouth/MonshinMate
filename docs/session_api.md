@@ -112,6 +112,7 @@
   - `id` (str): テンプレートID
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
+    - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when? }`
 - **レスポンス**:
   - `{ status: "ok" }`
 
