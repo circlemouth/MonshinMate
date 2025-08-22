@@ -144,7 +144,7 @@
 - `POST /sessions/:id/llm-questions` → `LlmQuestion[]`
 - `POST /sessions/:id/llm-answers` → `{ ok, remaining }`
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
-- 管理系：`GET/POST /questionnaires`, `GET/PUT /questionnaires/:id`, `DELETE /questionnaires/:id`, `GET/PUT /admin/llm`, `POST /admin/login`
+- 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `POST /admin/login`
 - 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。

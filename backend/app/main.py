@@ -239,6 +239,12 @@ class SummaryPromptUpsert(BaseModel):
     enabled: bool = False
 
 
+class QuestionnaireDuplicate(BaseModel):
+    """テンプレート複製用モデル。"""
+
+    new_id: str
+
+
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
 def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questionnaire:
     """DB から問診テンプレートを取得する。無い場合は既定テンプレを返す。
@@ -292,6 +298,27 @@ def upsert_questionnaire(payload: QuestionnaireUpsert) -> dict:
 def delete_questionnaire(questionnaire_id: str, visit_type: str) -> dict:
     """テンプレートを削除する。"""
     delete_template(questionnaire_id, visit_type)
+    return {"status": "ok"}
+
+
+@app.post("/questionnaires/{questionnaire_id}/duplicate")
+def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplicate) -> dict:
+    """既存テンプレートを別IDで複製する。"""
+    # 新IDが既に存在する場合はエラー
+    if any(t["id"] == payload.new_id for t in list_templates()):
+        raise HTTPException(status_code=400, detail="id already exists")
+    for vt in ("initial", "followup"):
+        tpl = db_get_template(questionnaire_id, vt)
+        if tpl:
+            upsert_template(payload.new_id, vt, tpl["items"])
+        cfg = get_summary_config(questionnaire_id, vt)
+        if cfg:
+            upsert_summary_prompt(
+                payload.new_id,
+                vt,
+                cfg.get("prompt", ""),
+                cfg.get("enabled", False),
+            )
     return {"status": "ok"}
 
 
