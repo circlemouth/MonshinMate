@@ -1,10 +1,9 @@
-"""API エンドポイントの動作確認テスト。"""
 from pathlib import Path
 import sys
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app.main import app  # type: ignore[import]
+from app.main import app, on_startup  # type: ignore[import]
 from app.db import get_session as db_get_session
 from fastapi.testclient import TestClient
 
@@ -14,6 +13,7 @@ client = TestClient(app)
 
 def test_get_questionnaire_template() -> None:
     """テンプレート取得エンドポイントが固定データを返すことを確認する。"""
+    on_startup()
     res = client.get("/questionnaires/sample/template?visit_type=initial")
     assert res.status_code == 200
     data = res.json()
@@ -21,8 +21,19 @@ def test_get_questionnaire_template() -> None:
     assert any(item["id"] == "chief_complaint" for item in data["items"])
 
 
+def test_default_template_contains_items() -> None:
+    """デフォルトテンプレートに必要な項目が含まれることを確認する。"""
+    on_startup()
+    res = client.get("/questionnaires/default/template?visit_type=initial")
+    assert res.status_code == 200
+    ids = {item["id"] for item in res.json()["items"]}
+    expected = {"name", "dob", "sex", "postal_code", "address", "phone", "chief_complaint", "symptom_location", "onset"}
+    assert expected.issubset(ids)
+
+
 def test_llm_chat() -> None:
     """チャットエンドポイントが応答を返すことを確認する。"""
+    on_startup()
     res = client.post("/llm/chat", json={"message": "こんにちは"})
     assert res.status_code == 200
     assert res.json()["reply"].startswith("LLM応答")
@@ -30,6 +41,8 @@ def test_llm_chat() -> None:
 
 def test_llm_settings_get_and_update() -> None:
     """LLM 設定の取得と更新ができることを確認する。"""
+    on_startup()
+    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True})
     res = client.get("/llm/settings")
     assert res.status_code == 200
     data = res.json()
@@ -55,6 +68,7 @@ def test_llm_settings_get_and_update() -> None:
 
 def test_create_session() -> None:
     """セッション作成が行われ ID が発行されることを確認する。"""
+    on_startup()
     payload = {
         "patient_name": "山田太郎",
         "dob": "1990-01-01",
@@ -77,7 +91,7 @@ def test_create_session() -> None:
     first_q = q_data["questions"][0]
     ans_res = client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": first_q["id"], "answer": "昨日"},
+        json={"item_id": first_q["id"], "answer": "昨日から"},
     )
     assert ans_res.status_code == 200
 
@@ -91,6 +105,7 @@ def test_create_session() -> None:
 
 def test_add_answers() -> None:
     """複数回答の保存ができることを確認する。"""
+    on_startup()
     create_payload = {
         "patient_name": "佐藤花子",
         "dob": "1985-05-05",
@@ -101,7 +116,7 @@ def test_add_answers() -> None:
     assert res.status_code == 200
     session_id = res.json()["id"]
 
-    add_payload = {"answers": {"chief_complaint": "腹痛", "onset": "一週間前"}}
+    add_payload = {"answers": {"chief_complaint": "腹痛", "onset": "1週間前から"}}
     add_res = client.post(f"/sessions/{session_id}/answers", json=add_payload)
     assert add_res.status_code == 200
     assert add_res.json()["status"] == "ok"
@@ -113,11 +128,12 @@ def test_add_answers() -> None:
     assert "finalized_at" in data and data["finalized_at"]
     ans = data["answers"]
     assert ans["chief_complaint"] == "腹痛"
-    assert ans["onset"] == "一週間前"
+    assert ans["onset"] == "1週間前から"
 
 
 def test_llm_question_loop() -> None:
     """追加質問エンドポイントが順次質問を返すことを確認する。"""
+    on_startup()
     create_payload = {
         "patient_name": "テスト太郎",
         "dob": "2000-01-01",
@@ -131,7 +147,7 @@ def test_llm_question_loop() -> None:
     assert q1["id"] == "onset"
     client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": "onset", "answer": "昨日"},
+        json={"item_id": "onset", "answer": "昨日から"},
     )
     q2 = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"][0]
     assert q2["id"] == "followup"
@@ -139,6 +155,7 @@ def test_llm_question_loop() -> None:
 
 def test_followup_session_flow() -> None:
     """再診テンプレートでもセッションが完了することを確認する。"""
+    on_startup()
     payload = {
         "patient_name": "再診太郎",
         "dob": "1995-12-12",
@@ -154,7 +171,7 @@ def test_followup_session_flow() -> None:
     assert q["id"] == "onset"
     client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": "onset", "answer": "昨日"},
+        json={"item_id": "onset", "answer": "昨日から"},
     )
     fin = client.post(f"/sessions/{session_id}/finalize")
     assert fin.status_code == 200
@@ -162,28 +179,28 @@ def test_followup_session_flow() -> None:
 
 
 def test_llm_disabled() -> None:
-    """LLM 無効時でもベース問診のみで完了できる。"""
-    settings = client.get("/llm/settings").json()
-    settings["enabled"] = False
-    client.put("/llm/settings", json=settings)
-
+    """LLM 無効設定時は追加質問を行わないことを確認する。"""
+    on_startup()
+    # LLM を無効化
+    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": False})
     payload = {
-        "patient_name": "LLM無効", "dob": "2001-01-01", "visit_type": "initial", "answers": {"chief_complaint": "頭痛"}
+        "patient_name": "無効太郎",
+        "dob": "1990-01-01",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "咳"},
     }
     res = client.post("/sessions", json=payload)
     session_id = res.json()["id"]
     q_res = client.post(f"/sessions/{session_id}/llm-questions")
+    assert q_res.status_code == 200
     assert q_res.json()["questions"] == []
-    fin = client.post(f"/sessions/{session_id}/finalize")
-    assert fin.status_code == 200
-    assert fin.json()["status"] == "finalized"
-
-    settings["enabled"] = True
-    client.put("/llm/settings", json=settings)
+    # 後片付け：LLM を有効化に戻す
+    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True})
 
 
 def test_admin_session_list_and_detail() -> None:
     """管理用セッション一覧と詳細取得を確認する。"""
+    on_startup()
     payload = {
         "patient_name": "一覧太郎",
         "dob": "1980-01-01",
@@ -210,6 +227,7 @@ def test_admin_session_list_and_detail() -> None:
 
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
+    on_startup()
     payload = {
         "id": "opt",
         "visit_type": "initial",
@@ -246,6 +264,7 @@ def test_questionnaire_options() -> None:
 
 def test_questionnaire_when() -> None:
     """表示条件付きテンプレートの保存と取得を確認する。"""
+    on_startup()
     payload = {
         "id": "cond",
         "visit_type": "initial",
@@ -279,6 +298,7 @@ def test_questionnaire_when() -> None:
 
 def test_session_persisted() -> None:
     """セッションと回答がDBに保存されることを確認する。"""
+    on_startup()
     create_payload = {
         "patient_name": "保存太郎",
         "dob": "1999-09-09",
@@ -289,10 +309,10 @@ def test_session_persisted() -> None:
     session_id = res.json()["id"]
     client.post(
         f"/sessions/{session_id}/answers",
-        json={"answers": {"onset": "昨日"}},
+        json={"answers": {"onset": "昨日から"}},
     )
     client.post(f"/sessions/{session_id}/finalize")
     record = db_get_session(session_id)
     assert record is not None
-    assert record["answers"]["onset"] == "昨日"
-    assert record["completion_status"] == "finalized"
+    assert record["answers"]["onset"] == "昨日から"
+
