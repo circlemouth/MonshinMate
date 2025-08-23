@@ -175,15 +175,28 @@ def healthz() -> dict:
 @app.get("/readyz")
 def readyz() -> dict:
     """依存疎通確認用のエンドポイント。"""
+    db_ok = False
+    llm_ok = False
+    llm_detail = "disabled"
     try:
-        # DB に触れてみる
         _ = list_templates()
-        # LLM 疎通
-        if llm_gateway.test_connection().get("status") != "ok":
-            raise RuntimeError("llm not ok")
+        db_ok = True
+    except Exception:
+        pass
+
+    if llm_gateway.settings.enabled:
+        try:
+            res = llm_gateway.test_connection()
+            if res.get("status") == "ok":
+                llm_ok = True
+            llm_detail = res.get("detail", "ng")
+        except Exception as e:
+            llm_detail = str(e)
+
+    if db_ok and llm_ok:
         return {"status": "ready"}
-    except Exception as e:  # noqa: BLE001 - 依存の死活用途のため握りつぶす
-        return {"status": "not_ready", "detail": str(e)}
+
+    return {"status": "not_ready", "detail": f"db={db_ok} llm={llm_ok} ({llm_detail})"}
 
 
 @app.get("/")
