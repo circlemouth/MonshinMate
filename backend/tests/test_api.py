@@ -367,3 +367,29 @@ def test_session_persisted() -> None:
     assert record is not None
     assert record["answers"]["onset"] == "昨日から"
 
+
+def test_llm_followup_disabled_by_template() -> None:
+    """テンプレートでLLM追加質問を無効化した場合、質問が返らないことを確認する。"""
+    on_startup()
+    payload = {
+        "id": "nofup",
+        "visit_type": "initial",
+        "items": [
+            {"id": "symptom", "label": "症状は？", "type": "string", "required": True}
+        ],
+        "llm_followup_enabled": False,
+    }
+    client.post("/questionnaires", json=payload)
+    create_payload = {
+        "patient_name": "テスト",
+        "dob": "2000-01-01",
+        "visit_type": "initial",
+        "answers": {"symptom": "痛み"},
+        "questionnaire_id": "nofup",
+    }
+    res = client.post("/sessions", json=create_payload)
+    session_id = res.json()["id"]
+    q_res = client.post(f"/sessions/{session_id}/llm-questions").json()
+    assert q_res["questions"] == []
+    client.delete("/questionnaires/nofup?visit_type=initial")
+

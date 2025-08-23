@@ -99,7 +99,7 @@
 ## GET /questionnaires/{id}/template?visit_type=initial|followup
 - **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
 - **レスポンス**:
-  - `Questionnaire`: `{ id: string, items: QuestionnaireItem[] }`
+  - `Questionnaire`: `{ id: string, items: QuestionnaireItem[], llm_followup_enabled: bool }`
 
 ## GET /questionnaires
 - **概要**: 登録済みテンプレートの一覧（id と visit_type）を返す。
@@ -113,6 +113,7 @@
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
     - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when? }`
+  - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
 - **レスポンス**:
   - `{ status: "ok" }`
 
