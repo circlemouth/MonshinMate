@@ -363,3 +363,7 @@
 - [x] 管理ログイン：TOTP 必須時の二段階目認証UIを追加（`/admin/login`→`/admin/login/totp`）。
 - [x] 「パスワードをお忘れですか？」から TOTP を用いたリセット（トークン発行→新PW確定）を実装。
 - [x] 参照エンドポイントを `/admin/auth/status` に統一（旧 `/admin/password/status` は廃止）。
+
+## 39. パスワード設定後の Authenticator 有効化確認（2025-11-02）
+- [x] パスワードの設定または変更直後に、Authenticator を有効にするかどうか確認するダイアログを追加。
+- [x] Authenticator を有効化しない場合はパスワードのリセットができない旨を警告。
