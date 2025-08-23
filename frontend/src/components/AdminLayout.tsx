@@ -20,6 +20,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const navItems = useMemo(
     () => [
+      { label: 'システム表示名', to: '/admin/system-name' },
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
@@ -33,8 +34,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Flex align="stretch" gap={6} height="100vh">
-      <Box as="nav" minW={{ base: '180px', md: '220px' }}>
+    <Flex align="stretch" gap={4} height="100vh" px={{ base: 2, md: 3 }}>
+      <Box
+        as="nav"
+        minW={{ base: '160px', md: '200px' }}
+        position="sticky"
+        top={0}
+        alignSelf="flex-start"
+        maxH="100vh"
+        overflowY="auto"
+      >
         <VStack align="stretch" spacing={2} height="100%">
           <Text fontSize="sm" color="gray.500" mb={1}>
             管理メニュー
@@ -55,9 +64,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             );
           })}
           <Spacer />
-          <Button onClick={logout} justifyContent="flex-start" variant="ghost">
-            ログアウト
-          </Button>
         </VStack>
       </Box>
       <Box flex="1" minW={0}>
@@ -66,4 +72,3 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     </Flex>
   );
 }
-

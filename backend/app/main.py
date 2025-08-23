@@ -27,6 +27,8 @@ from .db import (
     get_summary_config,
     save_llm_settings,
     load_llm_settings,
+    save_app_settings,
+    load_app_settings,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -64,8 +66,7 @@ def on_startup() -> None:
     init_db()
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     initial_items = [
-        {"id": "name", "label": "氏名を教えてください。", "type": "string", "required": True},
-        {"id": "dob", "label": "生年月日はいつですか？", "type": "date", "required": True},
+        # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
         {"id": "sex", "label": "性別を選んでください。", "type": "single", "options": ["男性", "女性", "その他"], "required": True},
         {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
         {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
@@ -75,13 +76,13 @@ def on_startup() -> None:
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
             "type": "multi",
-            "options": ["顔", "首", "体幹", "四肢"],
+            "options": ["顔", "首", "体", "手足"],
             "allow_freetext": True,
             "required": True,
         },
         {
             "id": "onset",
-            "label": "いつからの症状ですか？",
+            "label": "いつから症状がありますか？",
             "type": "single",
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
@@ -93,10 +94,10 @@ def on_startup() -> None:
             "type": "string",
             "required": False,
         },
-        {"id": "past_diseases", "label": "今までにかかったことのある病気はありますか？", "type": "string", "required": False},
-        {"id": "surgeries", "label": "手術を受けたことはありますか？なんの手術を受けましたか？", "type": "string", "required": False},
-        {"id": "current_medications", "label": "現在服用している処方薬はありますか？", "type": "string", "required": False},
-        {"id": "supplements_otc", "label": "現在服用しているサプリメントや使っている市販薬はありますか？", "type": "string", "required": False},
+        {"id": "past_diseases", "label": "今までにかかったことのある病気があれば記入してください？", "type": "string", "required": False},
+        {"id": "surgeries", "label": "手術を受けたことがあれば記入してください", "type": "string", "required": False},
+        {"id": "current_medications", "label": "現在服用している処方薬があれば記入してください？", "type": "string", "required": False},
+        {"id": "supplements_otc", "label": "現在服用しているサプリメントや使っている市販薬があれば記入してください？", "type": "string", "required": False},
         {"id": "drug_allergies", "label": "アレルギーがある薬があれば記入してください。", "type": "string", "required": False},
         {"id": "food_metal_allergies", "label": "食物・金属などのアレルギーがあれば記入してください。", "type": "string", "required": False},
         {
@@ -122,7 +123,7 @@ def on_startup() -> None:
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
             "type": "multi",
-            "options": ["顔", "首", "体幹", "四肢"],
+            "options": ["顔", "首", "体", "手足"],
             "allow_freetext": True,
             "required": True,
         },
@@ -402,8 +403,21 @@ def llm_chat(req: ChatRequest) -> ChatResponse:
 
 @app.get("/llm/settings", response_model=LLMSettings)
 def get_llm_settings() -> LLMSettings:
-    """現在の LLM 設定を取得する。"""
+    """現在の LLM 設定を取得する。
 
+    原則としてDBに永続化された値を優先し、存在しない場合はメモリ上の設定を返す。
+    これによりプロセス再起動後や他所での変更がUIに確実に反映される。
+    """
+
+    try:
+        stored = load_llm_settings()
+        if stored:
+            # DB 側が真ならメモリへも反映して返す
+            s = LLMSettings(**stored)
+            llm_gateway.update_settings(s)
+            return s
+    except Exception:
+        logger.exception("failed_to_load_llm_settings_on_get")
     return llm_gateway.settings
 
 
@@ -521,6 +535,38 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
     )
     gateway = LLMGateway(temp_settings)
     return gateway.list_models()
+
+
+# --- システム表示名 API ---
+class DisplayNameSettings(BaseModel):
+    display_name: str
+
+
+@app.get("/system/display-name", response_model=DisplayNameSettings)
+def get_display_name() -> DisplayNameSettings:
+    """システムの表示名（ヘッダーに出す名称）を返す。未設定時は既定値。"""
+    DEFAULT = "Monshinクリニック"
+    try:
+        stored = load_app_settings() or {}
+        name = stored.get("display_name") or DEFAULT
+        return DisplayNameSettings(display_name=name)
+    except Exception:
+        logger.exception("get_display_name_failed")
+        return DisplayNameSettings(display_name=DEFAULT)
+
+
+@app.put("/system/display-name", response_model=DisplayNameSettings)
+def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
+    """システムの表示名を保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["display_name"] = payload.display_name or "Monshinクリニック"
+        save_app_settings(current)
+        return DisplayNameSettings(display_name=current["display_name"])
+    except Exception:
+        logger.exception("set_display_name_failed")
+        # 失敗時は受け取った値をそのまま返す
+        return payload
 
 
 class AdminLoginRequest(BaseModel):

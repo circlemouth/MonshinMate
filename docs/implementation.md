@@ -282,3 +282,65 @@
 ## 23. LLM フォローアップ判定待機画面の追加（2025-10-31）
 - [x] 固定フォーム回答後、追質問の有無を判定する間に待機画面を表示するようにした。
 - [x] 判定結果に応じて追加質問画面または確認画面へ自動遷移する。
+
+## 24. 管理/チャット画面の左右余白を削減（2025-08-23）
+- [x] 管理画面のコンテナを全幅化し、左右パディングを縮小。
+  - 変更: `frontend/src/App.tsx`（`isAdminPage` 時の `Container` を `maxW="100%"`, `px={2}`）
+  - 変更: `frontend/src/components/AdminLayout.tsx`（`gap` を `6→4`、ナビ幅を `180/220px→160/200px`、全体に `px` 追加）
+- [x] チャット画面の内側パディングを縮小。
+  - 変更: `frontend/src/pages/LLMChat.tsx`（`p={4}` を `px={{ base: 2, md: 3 }}` に変更。入力バーも同様）
+- [x] 回帰確認としてバックエンド `pytest` 実行（23 passed, warnings のみ）。
+
+## 25. 管理テンプレ画面の初期ロード時の自動保存抑止（2025-08-23）
+- [x] 初回ロード/テンプレ切替直後に保存UIが動作せず、実保存もしないよう制御。
+  - 変更: `frontend/src/pages/AdminTemplates.tsx` に `isDirtyRef` を追加し、ユーザー操作時のみ自動保存を起動。
+  - ユーザー操作（項目追加・編集・削除、プロンプト/フラグ変更）時に `markDirty()` を呼ぶようイベントハンドラを調整。
+  - ロード完了時/保存完了時に dirty をリセット。
+
+## 26. LLM 設定が保存されない問題の修正（2025-08-23）
+- [x] 取得APIをDB優先に変更し、保存後の再取得でUIへ反映。
+  - 変更: `backend/app/main.py` の `GET /llm/settings` は DB を読み、あればメモリへ反映して返す。
+  - 変更: `frontend/src/pages/AdminLlm.tsx` は `PUT` 後に `GET /llm/settings` を再実行して設定を再描画。
+
+## 27. デフォルトテンプレートから氏名・生年月日を削除（2025-08-23）
+- [x] 初診・再診の「デフォルト問診項目」から `name`/`dob` を除外（それらはセッション作成時に別途入力）
+  - 変更: `backend/app/main.py` の `on_startup()` 内 `initial_items` から `name`/`dob` を削除。
+  - テスト更新: `backend/tests/test_api.py` の既定項目アサーションから `name`/`dob` を除外。
+
+## 28. 管理ログアウトフローの簡素化（2025-08-23）
+- [x] 管理画面の「ログアウト」ボタンを削除。
+- [x] 管理ルート以外へ遷移したタイミングで自動ログアウト（`sessionStorage.adminLoggedIn` を削除）。
+  - 変更: `frontend/src/components/AdminLayout.tsx`（ログアウトボタン削除）
+  - 変更: `frontend/src/App.tsx`（非管理ルート遷移で自動ログアウト＋「問診画面に戻る」クリック時にも明示削除）
+
+## 29. 管理ナビをスクロール固定（sticky）に変更（2025-08-23）
+- [x] 左側メニューを `position: sticky; top: 0` とし、常にウィンドウ内に表示。
+  - 変更: `frontend/src/components/AdminLayout.tsx`（`position="sticky"`, `top={0}`, `maxH="100vh"`, `overflowY="auto"` をナビに付与）
+  - 変更: `frontend/src/App.tsx`（管理ルートでは `overflowY` を親ボックスで作らず、ウィンドウスクロールに切替）
+
+## 30. 管理画面からフッター注意文を非表示（2025-08-23）
+- [x] 管理画面では「本システムはローカルLLMを使用しており…」の注意文を非表示。
+  - 変更: `frontend/src/App.tsx` のフッター表示条件を `!isChatPage && !isAdminPage` に変更。
+
+## 31. 管理ログインをモーダル化（2025-08-23）
+- [x] 患者画面から管理画面へ遷移する際、ポップアップ（モーダル）でパスワード入力。
+  - 変更: `frontend/src/App.tsx` にログイン用モーダルを実装。ヘッダーの「管理画面」クリックでモーダルを開き、成功後に `/admin/templates` へ遷移。
+  - 直接URLでのアクセス時は従来通り `/admin/login` へ誘導（ガード継続）。
+
+## 32. アプリのロゴ文言を変更（2025-08-23）
+- [x] ロゴ表示を「MonshinMate」→「問診メイト」に変更。
+  - 変更: `frontend/src/App.tsx` のヘッダーロゴ文言。
+  - 変更: `frontend/index.html` の `<title>`。
+
+## 33. システム表示名の設定機能（2025-08-23）
+- [x] 管理画面から「システム表示名」を編集可能にし、ヘッダーに反映。
+  - 変更（バックエンド）: `backend/app/db.py` に `app_settings` テーブルと `save_app_settings` / `load_app_settings` を追加。
+  - 変更（バックエンド）: `backend/app/main.py` に `GET/PUT /system/display-name` を追加（既定値は「Monshinクリニック」）。
+  - 変更（フロント）: `frontend/src/pages/AdminSystemName.tsx` を追加（入力+保存UI）。
+  - 変更（フロント）: `frontend/src/components/AdminLayout.tsx` のメニューに「システム表示名」を追加。
+  - 変更（フロント）: `frontend/src/App.tsx` で表示名を取得・購読し、ヘッダーに表示。設定保存時はカスタムイベントで即時反映。
+  - 変更（開発プロキシ）: `frontend/vite.config.ts` に `/system` を追加し、開発時のAPI疎通404を解消。
+
+## 34. フッターに小さく「問診メイト」を表示（2025-08-23）
+- [x] 管理画面含め、フッター左に小さくブランド名「問診メイト」を表示。患者画面のみ従来の注意文も併記。
+  - 変更: `frontend/src/App.tsx` フッター構造を調整（`Text fontSize="xs"` で表示）。

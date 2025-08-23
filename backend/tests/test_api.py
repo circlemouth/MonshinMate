@@ -27,7 +27,8 @@ def test_default_template_contains_items() -> None:
     res = client.get("/questionnaires/default/template?visit_type=initial")
     assert res.status_code == 200
     ids = {item["id"] for item in res.json()["items"]}
-    expected = {"name", "dob", "sex", "postal_code", "address", "phone", "chief_complaint", "symptom_location", "onset"}
+    # 氏名(name)・生年月日(dob)はセッション作成時に別途入力するためテンプレートから除外
+    expected = {"sex", "postal_code", "address", "phone", "chief_complaint", "symptom_location", "onset"}
     assert expected.issubset(ids)
 
 
@@ -392,4 +393,3 @@ def test_llm_followup_disabled_by_template() -> None:
     q_res = client.post(f"/sessions/{session_id}/llm-questions").json()
     assert q_res["questions"] == []
     client.delete("/questionnaires/nofup?visit_type=initial")
-

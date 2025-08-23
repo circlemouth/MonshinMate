@@ -158,7 +158,7 @@ export default function Review() {
               {item.allow_freetext && (
                 <Input
                   mt={2}
-                  placeholder="自由記述"
+                  placeholder="自由に記入してください"
                   value={freeTexts[item.id] || ''}
                   onChange={(e) => {
                     const prev = freeTexts[item.id] || '';

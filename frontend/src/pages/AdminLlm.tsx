@@ -193,13 +193,37 @@ export default function AdminLlm() {
       </FormControl>
       <HStack>
         <Button
-          onClick={() =>
-            fetch('/llm/settings', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(settings),
-            }).then(() => setTestResult('保存しました'))
-          }
+          onClick={async () => {
+            setTestResult('');
+            try {
+              const res = await fetch('/llm/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings),
+              });
+              if (!res.ok) throw new Error('save_failed');
+              // 保存後に再取得してUIへ確実に反映
+              const re = await fetch('/llm/settings');
+              if (re.ok) {
+                const data = await re.json();
+                setSettings({
+                  provider: data.provider ?? 'ollama',
+                  model: data.model ?? '',
+                  temperature: normalizeTemp(data.temperature ?? 0.2),
+                  system_prompt: data.system_prompt ?? '',
+                  enabled: data.enabled ?? true,
+                  base_url: data.base_url ?? '',
+                  api_key: data.api_key ?? '',
+                });
+                if (data.model) {
+                  setModels((prev) => (prev.includes(data.model) ? prev : [data.model, ...prev]));
+                }
+              }
+              setTestResult('保存しました');
+            } catch (e) {
+              setTestResult('保存に失敗しました');
+            }
+          }}
           colorScheme="primary"
         >
           LLM設定を保存

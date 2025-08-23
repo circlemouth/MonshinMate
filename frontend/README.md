@@ -1,4 +1,4 @@
-# MonshinMate フロントエンド
+# 問診メイト フロントエンド
 
 Chakra UI と Vite を利用した最小の React アプリケーション。
 

@@ -118,6 +118,16 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             """,
         )
 
+        # アプリ全体の設定（単一行）
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+                id TEXT PRIMARY KEY,
+                json TEXT NOT NULL
+            )
+            """,
+        )
+
         conn.commit()
     finally:
         conn.close()
@@ -248,6 +258,38 @@ def load_llm_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     conn = get_conn(db_path)
     try:
         row = conn.execute("SELECT json FROM llm_settings WHERE id='global'").fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["json"]) or None
+        except Exception:
+            return None
+    finally:
+        conn.close()
+
+
+def save_app_settings(settings: dict[str, Any], db_path: str = DEFAULT_DB_PATH) -> None:
+    """アプリ共通設定（JSON）を保存（単一行: id='global'）。"""
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO app_settings (id, json)
+            VALUES ('global', ?)
+            ON CONFLICT(id) DO UPDATE SET json=excluded.json
+            """,
+            (json.dumps(settings, ensure_ascii=False),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_app_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
+    """アプリ共通設定を取得。無ければ None。"""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
         if not row:
             return None
         try:

@@ -57,7 +57,7 @@ export default function LLMChat() {
 
   return (
     <Flex h="100%" direction="column" >
-      <Box flex="1" overflowY="auto" p={4} bg="neutral.50">
+      <Box flex="1" overflowY="auto" px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} bg="neutral.50">
         <VStack spacing={4} align="stretch">
           {messages.map((m, i) => (
             <Flex key={i} justify={m.from === 'user' ? 'flex-end' : 'flex-start'}>
@@ -78,7 +78,7 @@ export default function LLMChat() {
           <div ref={messagesEndRef} />
         </VStack>
       </Box>
-      <Box p={4} borderTopWidth="1px" borderColor="border.default" bg="white">
+      <Box px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} borderTopWidth="1px" borderColor="border.default" bg="white">
         <HStack>
           <Input
             value={input}

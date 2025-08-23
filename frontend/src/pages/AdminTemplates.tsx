@@ -91,6 +91,11 @@ export default function AdminTemplates() {
   // LLM の疎通状態（サマリー生成や追質問の可否に利用）
   const [llmAvailable, setLlmAvailable] = useState<boolean>(false);
   const [llmFollowupEnabled, setLlmFollowupEnabled] = useState<boolean>(true);
+  // ユーザー操作による編集が行われたか（初期ロード/テンプレ切替直後は false）
+  const isDirtyRef = useRef<boolean>(false);
+  const markDirty = () => {
+    isDirtyRef.current = true;
+  };
 
   useEffect(() => {
     fetch('/questionnaires')
@@ -143,13 +148,15 @@ export default function AdminTemplates() {
     setIsAddingNewItem(false);
   }, [templateId, templates]);
 
-  // --- 自動保存ロジック ---
+  // --- 自動保存ロジック（初期ロードやテンプレート切替直後は抑止） ---
   useEffect(() => {
     if (isLoading || isInitialMount.current) {
       if (isInitialMount.current) isInitialMount.current = false;
       return;
     }
     if (!templateId) return;
+    // ユーザー編集が入っていない場合は保存を起動しない
+    if (!isDirtyRef.current) return;
 
     setSaveStatus('saving');
     const handler = setTimeout(() => {
@@ -188,6 +195,8 @@ export default function AdminTemplates() {
       setPreviewAnswers({});
       setSaveStatus('idle'); // ロード完了時はidleに
       setIsLoading(false);
+      // 初期ロード・テンプレ切替直後は dirty をリセット
+      isDirtyRef.current = false;
     });
   };
 
@@ -207,6 +216,7 @@ export default function AdminTemplates() {
         allow_freetext: newItem.allow_freetext,
       },
     ]);
+    markDirty();
     setNewItem({
       label: '',
       type: 'string',
@@ -223,11 +233,13 @@ export default function AdminTemplates() {
     const updated = [...items];
     updated[index] = { ...updated[index], [field]: value } as Item;
     setItems(updated);
+    markDirty();
   };
 
   const removeItem = (index: number) => {
     const updated = items.filter((_, i) => i !== index);
     setItems(updated);
+    markDirty();
   };
 
   const saveTemplate = async () => {
@@ -262,6 +274,8 @@ export default function AdminTemplates() {
         setTemplates([...templates, { id: templateId }]);
       }
       setSaveStatus('success');
+      // 保存完了時点で最新状態が反映済みのため dirty をリセット
+      isDirtyRef.current = false;
     } catch (error) {
       console.error('Failed to save template:', error);
       setSaveStatus('error');
@@ -476,12 +490,12 @@ export default function AdminTemplates() {
           </HStack>
           {/* LLM 追加質問の有無 */}
           <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
-            <Checkbox
+              <Checkbox
               isChecked={llmFollowupEnabled}
               isDisabled={!llmAvailable}
-              onChange={(e) => setLlmFollowupEnabled(e.target.checked)}
+              onChange={(e) => { setLlmFollowupEnabled(e.target.checked); markDirty(); }}
             >
-              固定フォーム終了後にLLMによる追加質問を行う
+              回答終了後にLLMによるフォローアップ質問を行う
             </Checkbox>
             {!llmAvailable && (
               <Text fontSize="sm" color="gray.500" mt={2}>
@@ -493,10 +507,10 @@ export default function AdminTemplates() {
           <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
             <Heading size="sm" mb={2}>サマリー自動作成</Heading>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={1}>
-              <Checkbox isChecked={initialEnabled} isDisabled={!llmAvailable} onChange={(e) => setInitialEnabled(e.target.checked)}>
+              <Checkbox isChecked={initialEnabled} isDisabled={!llmAvailable} onChange={(e) => { setInitialEnabled(e.target.checked); markDirty(); }}>
                 初診
               </Checkbox>
-              <Checkbox isChecked={followupEnabled} isDisabled={!llmAvailable} onChange={(e) => setFollowupEnabled(e.target.checked)}>
+              <Checkbox isChecked={followupEnabled} isDisabled={!llmAvailable} onChange={(e) => { setFollowupEnabled(e.target.checked); markDirty(); }}>
                 再診
               </Checkbox>
             </SimpleGrid>
@@ -512,7 +526,7 @@ export default function AdminTemplates() {
                   <Textarea
                     placeholder="初診サマリーの生成方針を記述（システムプロンプト）"
                     value={initialPrompt}
-                    onChange={(e) => setInitialPrompt(e.target.value)}
+                    onChange={(e) => { setInitialPrompt(e.target.value); markDirty(); }}
                     rows={6}
                   />
                 </FormControl>
@@ -523,7 +537,7 @@ export default function AdminTemplates() {
                   <Textarea
                     placeholder="再診サマリーの生成方針を記述（システムプロンプト）"
                     value={followupPrompt}
-                    onChange={(e) => setFollowupPrompt(e.target.value)}
+                    onChange={(e) => { setFollowupPrompt(e.target.value); markDirty(); }}
                     rows={6}
                   />
                 </FormControl>
@@ -791,7 +805,7 @@ export default function AdminTemplates() {
                           {item.allow_freetext && (
                             <Input
                               mt={2}
-                              placeholder="自由記述"
+                              placeholder="自由に記載してください"
                               value={previewFreeTexts[item.id] || ''}
                               onChange={(e) => {
                                 const prev = previewFreeTexts[item.id] || '';

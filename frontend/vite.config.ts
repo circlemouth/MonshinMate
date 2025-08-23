@@ -12,6 +12,7 @@ export default defineConfig({
       '/questionnaires': 'http://localhost:8001',
       '/sessions': 'http://localhost:8001',
       '/llm': 'http://localhost:8001',
+      '/system': 'http://localhost:8001',
       '/healthz': 'http://localhost:8001',
       '/readyz': 'http://localhost:8001',
       '/metrics': 'http://localhost:8001',
