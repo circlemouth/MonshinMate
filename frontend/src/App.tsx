@@ -16,6 +16,7 @@ import AdminSessions from './pages/AdminSessions';
 import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
 import AdminLayout from './components/AdminLayout';
+import LlmWait from './pages/LlmWait';
 
 export default function App() {
   const location = useLocation();
@@ -59,6 +60,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Entry />} />
           <Route path="/questionnaire" element={<QuestionnaireForm />} />
+          <Route path="/llm-wait" element={<LlmWait />} />
           <Route path="/questions" element={<Questions />} />
           <Route path="/review" element={<Review />} />
           <Route path="/done" element={<Done />} />
