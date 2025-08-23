@@ -1,36 +1,43 @@
-import { useEffect } from 'react';
-import { VStack, Box, Button, HStack } from '@chakra-ui/react';
-import { track } from '../metrics';
+import { VStack, Box, Button, Center } from '@chakra-ui/react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-/** 完了メッセージと要約を表示するページ。 */
+/** 完了メッセージのみを表示するページ（要約や印刷は非表示）。 */
 export default function Done() {
+  const [message, setMessage] = useState('ご回答ありがとうございました。');
   const navigate = useNavigate();
-  const summary = sessionStorage.getItem('summary') || '';
 
   useEffect(() => {
-    if (!summary) {
-      navigate('/');
-    }
-  }, [summary, navigate]);
+    const load = async () => {
+      try {
+        const r = await fetch('/system/completion-message');
+        if (r.ok) {
+          const d = await r.json();
+          if (d?.message) setMessage(d.message);
+        }
+      } catch {}
+    };
+    load();
+  }, []);
+
+  const backToTop = () => {
+    try {
+      // セッション関連の保存値を軽くクリア
+      sessionStorage.removeItem('session_id');
+      sessionStorage.removeItem('summary');
+      sessionStorage.removeItem('visit_type');
+    } catch {}
+    navigate('/');
+  };
 
   return (
-    <VStack spacing={4} align="stretch">
-      <Box>ご回答ありがとうございました。</Box>
-      <HStack className="print-hidden">
-        <Button
-          size="sm"
-          onClick={() => {
-            track('print', { page: 'Done' });
-            window.print();
-          }}
-          colorScheme="primary"
-          variant="outline"
-        >
-          印刷する
+    <VStack spacing={6} align="center">
+      <Box>{message}</Box>
+      <Center>
+        <Button colorScheme="primary" onClick={backToTop}>
+          最初の画面に戻る
         </Button>
-      </HStack>
-      <Box whiteSpace="pre-wrap">{summary}</Box>
+      </Center>
     </VStack>
   );
 }

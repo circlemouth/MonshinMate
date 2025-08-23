@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Box, Heading, Text, VStack, HStack, Button, Image, Input, FormControl, FormLabel, useToast, Divider, Badge } from '@chakra-ui/react';
+import { Box, Heading, Text, VStack, HStack, Button, Image, Input, FormControl, FormLabel, useToast, Divider, Badge, Checkbox } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
 interface AuthStatus {
   is_initial_password: boolean;
   is_totp_enabled: boolean;
+  totp_mode?: 'off' | 'reset_only' | 'login_and_reset';
 }
 
 export default function AdminSecurity() {
@@ -12,6 +13,8 @@ export default function AdminSecurity() {
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [modeSaving, setModeSaving] = useState(false);
+  const [currentMode, setCurrentMode] = useState<AuthStatus['totp_mode']>('off');
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -21,6 +24,7 @@ export default function AdminSecurity() {
       if (!r.ok) throw new Error();
       const d = await r.json();
       setStatus(d);
+      setCurrentMode(d?.totp_mode ?? 'off');
     } catch {
       toast({ title: '状態の取得に失敗しました', status: 'error' });
     }
@@ -102,6 +106,23 @@ export default function AdminSecurity() {
     }
   };
 
+  const setMode = async (mode: AuthStatus['totp_mode']) => {
+    setModeSaving(true);
+    try {
+      const r = await fetch('/admin/totp/mode', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
+      if (!r.ok) throw new Error();
+      await loadStatus();
+    } catch {
+      toast({ title: '保存に失敗しました', status: 'error' });
+    } finally {
+      setModeSaving(false);
+    }
+  };
+
   return (
     <VStack align="stretch" spacing={6}>
       <Box>
@@ -112,6 +133,32 @@ export default function AdminSecurity() {
             {status?.is_totp_enabled ? '有効' : '無効'}
           </Badge>
         </HStack>
+        <VStack mt={2} align="flex-start" spacing={1}>
+          {(() => {
+            const loginChecked = currentMode === 'login_and_reset';
+            const onToggleLogin = async (checked: boolean) => {
+              // ログインに使用: on → login_and_reset, off → reset_only（リセットは常に2FAを要求）
+              await setMode(checked ? 'login_and_reset' : 'reset_only');
+            };
+            return (
+              <>
+                <HStack>
+                  <Checkbox isChecked={loginChecked} isDisabled={modeSaving}
+                    onChange={(e)=> onToggleLogin(e.target.checked)}>
+                    ログインに使用
+                  </Checkbox>
+                </HStack>
+                <Text fontSize="xs" color="gray.600">
+                  ※パスワードリセットには二段階認証が必須です。。
+                </Text>
+              </>
+            );
+          })()}
+        </VStack>
+
+        <Text fontSize="xs" color="gray.600" mt={4}>
+          Microsoft Authenticator や Google Authenticator などの認証アプリをご利用いただけます。
+        </Text>
 
         {!status?.is_totp_enabled ? (
           <VStack align="stretch" spacing={3} mt={4}>
@@ -153,4 +200,3 @@ export default function AdminSecurity() {
     </VStack>
   );
 }
-

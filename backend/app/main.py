@@ -39,6 +39,9 @@ from .db import (
     verify_password,
     update_totp_secret,
     set_totp_status,
+    get_totp_mode,
+    set_totp_mode,
+    DEFAULT_DB_PATH,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -79,6 +82,10 @@ async def log_middleware(request: Request, call_next):
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
+    try:
+        logging.getLogger(__name__).info("database_path=%s", DEFAULT_DB_PATH)
+    except Exception:
+        pass
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     initial_items = [
         # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
@@ -553,6 +560,9 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
 class DisplayNameSettings(BaseModel):
     display_name: str
 
+class CompletionMessageSettings(BaseModel):
+    """完了画面に表示する文言の設定。"""
+    message: str
 
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
@@ -581,6 +591,33 @@ def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
         return payload
 
 
+@app.get("/system/completion-message", response_model=CompletionMessageSettings)
+def get_completion_message() -> CompletionMessageSettings:
+    """完了画面に表示する文言を返す。未設定時は既定値。"""
+    DEFAULT = "ご回答ありがとうございました。"
+    try:
+        stored = load_app_settings() or {}
+        msg = stored.get("completion_message") or DEFAULT
+        return CompletionMessageSettings(message=msg)
+    except Exception:
+        logger.exception("get_completion_message_failed")
+        return CompletionMessageSettings(message=DEFAULT)
+
+
+@app.put("/system/completion-message", response_model=CompletionMessageSettings)
+def set_completion_message(payload: CompletionMessageSettings) -> CompletionMessageSettings:
+    """完了画面に表示する文言を保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["completion_message"] = payload.message or "ご回答ありがとうございました。"
+        save_app_settings(current)
+        return CompletionMessageSettings(message=current["completion_message"])
+    except Exception:
+        logger.exception("set_completion_message_failed")
+        # 失敗時は受け取った値をそのまま返す
+        return payload
+
+
 # --- 管理者認証 API ---
 
 class AdminLoginRequest(BaseModel):
@@ -599,6 +636,7 @@ class AdminAuthStatus(BaseModel):
     """管理者認証の状態。"""
     is_initial_password: bool
     is_totp_enabled: bool
+    totp_mode: str | None = None
 
 class TotpVerifyRequest(BaseModel):
     """TOTP検証リクエスト。"""
@@ -635,6 +673,7 @@ def get_admin_auth_status() -> AdminAuthStatus:
     return AdminAuthStatus(
         is_initial_password=bool(admin_user.get("is_initial_password")) or is_default_now,
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
+        totp_mode=get_totp_mode("admin"),
     )
 
 @app.post("/admin/password")
@@ -664,7 +703,8 @@ def admin_login(payload: AdminLoginRequest) -> dict:
     if not admin_user or not verify_password(payload.password, admin_user["hashed_password"]):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if admin_user["is_totp_enabled"]:
+    # ログイン時にTOTPを要求するのは totp_mode が 'login_and_reset' の場合のみ
+    if get_totp_mode("admin") == "login_and_reset":
         return {"status": "totp_required"}
 
     # 認証成功（本来はセッションやJWTを発行）
@@ -749,8 +789,9 @@ def admin_totp_regenerate() -> dict:
 def request_password_reset(payload: PasswordResetRequest) -> dict:
     """TOTPを検証し、パスワードリセット用のトークンを発行する。"""
     admin_user = get_user_by_username("admin")
-    # TOTPが有効で、シークレットが存在することが前提
-    if not admin_user or not admin_user["is_totp_enabled"] or not admin_user["totp_secret"]:
+    # TOTPの利用モードが 'off' の場合はリセット要求不可
+    mode = get_totp_mode("admin")
+    if not admin_user or mode == "off" or not admin_user["totp_secret"]:
         raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
 
     totp = pyotp.TOTP(admin_user["totp_secret"])
@@ -781,6 +822,26 @@ def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
 
     update_password("admin", payload.new_password)
     return {"status": "ok", "message": "Password has been reset successfully"}
+
+
+class TotpModePayload(BaseModel):
+    mode: str  # 'off' | 'reset_only' | 'login_and_reset'
+
+
+@app.get("/admin/totp/mode")
+def get_admin_totp_mode() -> dict:
+    """現在の TOTP モードを返す。"""
+    return {"mode": get_totp_mode("admin")}
+
+
+@app.put("/admin/totp/mode")
+def set_admin_totp_mode(payload: TotpModePayload) -> dict:
+    """TOTP の利用モードを設定する。"""
+    try:
+        set_totp_mode("admin", payload.mode)
+        return {"status": "ok", "mode": get_totp_mode("admin")}
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid totp mode")
 
 
 class SessionCreateRequest(BaseModel):

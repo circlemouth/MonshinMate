@@ -1,4 +1,4 @@
-import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio } from '@chakra-ui/react';
+import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio, Select } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import ErrorSummary from '../components/ErrorSummary';
@@ -8,6 +8,27 @@ import { track } from '../metrics';
 export default function Entry() {
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 120 }, (_, i) => thisYear - i); // 過去120年分
+  const months = Array.from({ length: 12 }, (_, i) => i + 1);
+  const [dobYear, setDobYear] = useState<number | ''>('');
+  const [dobMonth, setDobMonth] = useState<number | ''>('');
+  const [dobDay, setDobDay] = useState<number | ''>('');
+
+  const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
+  const maxDay = typeof dobYear === 'number' && typeof dobMonth === 'number' ? daysInMonth(dobYear, dobMonth) : 31;
+  const days = Array.from({ length: maxDay }, (_, i) => i + 1);
+
+  // 年月日セレクトの変更に合わせて ISO 形式 (YYYY-MM-DD) を生成
+  useEffect(() => {
+    if (dobYear && dobMonth && dobDay) {
+      const mm = String(dobMonth).padStart(2, '0');
+      const dd = String(Math.min(dobDay, daysInMonth(dobYear, dobMonth))).padStart(2, '0');
+      setDob(`${dobYear}-${mm}-${dd}`);
+    } else {
+      setDob('');
+    }
+  }, [dobYear, dobMonth, dobDay]);
   const [visitType, setVisitType] = useState('');
   const [attempted, setAttempted] = useState(false);
   const navigate = useNavigate();
@@ -52,7 +73,16 @@ export default function Entry() {
       return;
     }
     if (!dob || (dob && dob > today)) {
-      document.getElementById('dob')?.focus();
+      // 年→月→日の順にフォーカス
+      if (!dobYear) {
+        document.getElementById('dob-year')?.focus();
+        return;
+      }
+      if (!dobMonth) {
+        document.getElementById('dob-month')?.focus();
+        return;
+      }
+      document.getElementById('dob-day')?.focus();
       return;
     }
   }, [attempted, name, dob]);
@@ -81,8 +111,29 @@ export default function Entry() {
           attempted && (!dob || (dob && dob > new Date().toISOString().slice(0, 10)))
         }
       >
-        <FormLabel htmlFor="dob">生年月日</FormLabel>
-        <Input id="dob" type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+        <FormLabel>生年月日</FormLabel>
+        <HStack>
+          <Select id="dob-year" placeholder="年" value={dobYear}
+                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </Select>
+          <Select id="dob-month" placeholder="月" value={dobMonth}
+                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
+            {months.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </Select>
+          <Select id="dob-day" placeholder="日" value={dobDay}
+                  onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
+                  isDisabled={!dobYear || !dobMonth}>
+            {days.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </Select>
+        </HStack>
+        <FormHelperText>年・月・日をそれぞれ選択してください。</FormHelperText>
         <FormErrorMessage>
           {dob && dob > new Date().toISOString().slice(0, 10)
             ? '生年月日に未来の日付は指定できません'

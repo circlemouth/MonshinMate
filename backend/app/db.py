@@ -152,6 +152,13 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         except Exception:
             pass
+        # totp_mode カラムを後付け（'off' | 'reset_only' | 'login_and_reset'）
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN totp_mode TEXT NOT NULL DEFAULT 'off'"
+            )
+        except Exception:
+            pass
 
         conn.commit()
 
@@ -512,7 +519,48 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
     """TOTPの有効/無効状態を設定する。"""
     conn = get_conn(db_path)
     try:
-        conn.execute("UPDATE users SET is_totp_enabled = ? WHERE username = ?", (1 if enabled else 0, username))
+        # 有効化時はモードが 'off' の場合 'login_and_reset' に昇格、無効化時は 'off'
+        if enabled:
+            conn.execute(
+                "UPDATE users SET is_totp_enabled = 1, totp_mode = CASE WHEN COALESCE(totp_mode,'off')='off' THEN 'login_and_reset' ELSE totp_mode END WHERE username = ?",
+                (username,),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off' WHERE username = ?",
+                (username,),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+def get_totp_mode(username: str, db_path: str = DEFAULT_DB_PATH) -> str:
+    """TOTP モードを返す。カラム未設定や NULL の場合は is_totp_enabled から推定。"""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute("SELECT is_totp_enabled, totp_mode FROM users WHERE username=?", (username,)).fetchone()
+        if not row:
+            return 'off'
+        mode = row.get('totp_mode')
+        if mode in ('off', 'reset_only', 'login_and_reset'):
+            return mode
+        # 後方互換: is_totp_enabled が 1 なら login_and_reset とみなす
+        return 'login_and_reset' if int(row.get('is_totp_enabled') or 0) else 'off'
+    finally:
+        conn.close()
+
+def set_totp_mode(username: str, mode: str, db_path: str = DEFAULT_DB_PATH) -> None:
+    """TOTP モードを設定する。"""
+    if mode not in ('off', 'reset_only', 'login_and_reset'):
+        raise ValueError('invalid totp mode')
+    conn = get_conn(db_path)
+    try:
+        # 'off' なら is_totp_enabled も 0、 それ以外は 1 に合わせる
+        enabled = 0 if mode == 'off' else 1
+        conn.execute(
+            "UPDATE users SET totp_mode = ?, is_totp_enabled = ? WHERE username = ?",
+            (mode, enabled, username),
+        )
         conn.commit()
     finally:
         conn.close()
