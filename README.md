@@ -63,12 +63,15 @@ export default defineConfig({
   - 「問診フォーム」「管理画面」「LLM チャット」から各機能を確認できます
 
 ## 一括起動（バックエンド+フロントエンド）
-- ルートの `dev.sh` または `make dev` で両方を同時起動できます
+- ルートの `dev.sh` (Unix系) または `dev.ps1` (Windows) で両方を同時起動できます
+- Unix系環境では `make dev` も利用できます
 
 ```bash
-# どちらか一方
+# Unix系
 chmod +x dev.sh && ./dev.sh
-# もしくは Make を使用
+# Windows
+powershell -File dev.ps1
+# もしくは Make を使用 (Unix系)
 make dev
 ```
 
