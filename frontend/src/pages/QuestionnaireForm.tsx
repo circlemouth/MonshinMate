@@ -50,6 +50,11 @@ export default function QuestionnaireForm() {
       .then((data) => {
         setItems(data.items);
         sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
+        // 追質問を行うかどうかのフラグを保持
+        sessionStorage.setItem(
+          'llm_followup_enabled',
+          data.llm_followup_enabled ? '1' : '0'
+        );
       });
   }, [visitType, sessionId, navigate]);
 
@@ -84,13 +89,13 @@ export default function QuestionnaireForm() {
       track('validation_failed', { page: 'Questionnaire', count: requiredErrors.length });
       return;
     }
+    const flag = sessionStorage.getItem('llm_followup_enabled');
+    const llmFollowupEnabled = flag === '1' || flag === null;
     try {
       await postWithRetry(`/sessions/${sessionId}/answers`, { answers });
       sessionStorage.setItem('answers', JSON.stringify(answers));
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      const data = await res.json();
-      if (data.questions && data.questions.length > 0) {
-        navigate('/questions');
+      if (llmFollowupEnabled) {
+        navigate('/llm-wait');
       } else {
         navigate('/review');
       }

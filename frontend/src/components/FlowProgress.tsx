@@ -18,6 +18,8 @@ export default function FlowProgress() {
         return 32;
       case '/questionnaire':
         return 56;
+      case '/llm-wait':
+        return 64;
       case '/questions':
         return 72;
       case '/review':
