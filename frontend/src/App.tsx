@@ -112,7 +112,7 @@ export default function App() {
     >
       {!isChatPage && (
         <Flex as="header" mb={4} align="center">
-          <Heading size="lg">{displayName}</Heading>
+          <Heading size="lg">{isAdminPage ? '管理画面' : displayName}</Heading>
           <Spacer />
           {isAdminPage ? (
             <Button
