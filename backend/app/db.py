@@ -39,10 +39,19 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 id TEXT NOT NULL,
                 visit_type TEXT NOT NULL,
                 items_json TEXT NOT NULL,
+                llm_followup_enabled INTEGER NOT NULL DEFAULT 1,
                 PRIMARY KEY (id, visit_type)
             )
             """,
         )
+
+        # 既存DB向けに llm_followup_enabled カラムを後付け（存在時は無視）
+        try:
+            conn.execute(
+                "ALTER TABLE questionnaire_templates ADD COLUMN llm_followup_enabled INTEGER NOT NULL DEFAULT 1"
+            )
+        except Exception:
+            pass
 
         # サマリープロンプト（テンプレート/種別ごとに管理）
         conn.execute(
@@ -115,18 +124,22 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
 
 
 def upsert_template(
-    template_id: str, visit_type: str, items: Iterable[dict[str, Any]], db_path: str = DEFAULT_DB_PATH
+    template_id: str,
+    visit_type: str,
+    items: Iterable[dict[str, Any]],
+    llm_followup_enabled: bool = True,
+    db_path: str = DEFAULT_DB_PATH,
 ) -> None:
     conn = get_conn(db_path)
     try:
         items_json = json.dumps(list(items), ensure_ascii=False)
         conn.execute(
             """
-            INSERT INTO questionnaire_templates (id, visit_type, items_json)
-            VALUES (?, ?, ?)
-            ON CONFLICT(id, visit_type) DO UPDATE SET items_json=excluded.items_json
+            INSERT INTO questionnaire_templates (id, visit_type, items_json, llm_followup_enabled)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id, visit_type) DO UPDATE SET items_json=excluded.items_json, llm_followup_enabled=excluded.llm_followup_enabled
             """,
-            (template_id, visit_type, items_json),
+            (template_id, visit_type, items_json, 1 if llm_followup_enabled else 0),
         )
         conn.commit()
     finally:
@@ -139,7 +152,7 @@ def get_template(
     conn = get_conn(db_path)
     try:
         row = conn.execute(
-            "SELECT id, visit_type, items_json FROM questionnaire_templates WHERE id=? AND visit_type=?",
+            "SELECT id, visit_type, items_json, llm_followup_enabled FROM questionnaire_templates WHERE id=? AND visit_type=?",
             (template_id, visit_type),
         ).fetchone()
         if not row:
@@ -148,6 +161,7 @@ def get_template(
             "id": row["id"],
             "visit_type": row["visit_type"],
             "items": json.loads(row["items_json"]) or [],
+            "llm_followup_enabled": bool(row.get("llm_followup_enabled", 1)),
         }
     finally:
         conn.close()

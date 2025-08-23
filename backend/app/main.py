@@ -135,8 +135,8 @@ def on_startup() -> None:
             "required": True,
         },
     ]
-    upsert_template("default", "initial", initial_items)
-    upsert_template("default", "followup", followup_items)
+    upsert_template("default", "initial", initial_items, llm_followup_enabled=True)
+    upsert_template("default", "followup", followup_items, llm_followup_enabled=True)
     # 保存済みの LLM 設定があれば読み込む
     try:
         stored = load_llm_settings()
@@ -234,6 +234,7 @@ class Questionnaire(BaseModel):
     id: str
     # 互換のため GET はクエリで受けるが、保存系は明示
     items: list[QuestionnaireItem]
+    llm_followup_enabled: bool = True
 
 
 class QuestionnaireUpsert(BaseModel):
@@ -242,6 +243,7 @@ class QuestionnaireUpsert(BaseModel):
     id: str
     visit_type: str
     items: list[QuestionnaireItem]
+    llm_followup_enabled: bool = True
 
 
 class SummaryPromptUpsert(BaseModel):
@@ -284,10 +286,19 @@ def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questi
                 {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
                 {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
             ],
+            "llm_followup_enabled": True,
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
-        return Questionnaire(id=questionnaire_id, items=[QuestionnaireItem(**it) for it in default_tpl["items"]])
-    return Questionnaire(id=tpl["id"], items=[QuestionnaireItem(**it) for it in tpl["items"]])
+        return Questionnaire(
+            id=questionnaire_id,
+            items=[QuestionnaireItem(**it) for it in default_tpl["items"]],
+            llm_followup_enabled=bool(default_tpl.get("llm_followup_enabled", True)),
+        )
+    return Questionnaire(
+        id=tpl["id"],
+        items=[QuestionnaireItem(**it) for it in tpl["items"]],
+        llm_followup_enabled=bool(tpl.get("llm_followup_enabled", True)),
+    )
 
 
 @app.get("/questionnaires")
@@ -303,6 +314,7 @@ def upsert_questionnaire(payload: QuestionnaireUpsert) -> dict:
         template_id=payload.id,
         visit_type=payload.visit_type,
         items=[it.model_dump() for it in payload.items],
+        llm_followup_enabled=payload.llm_followup_enabled,
     )
     return {"status": "ok"}
 
@@ -323,7 +335,12 @@ def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplica
     for vt in ("initial", "followup"):
         tpl = db_get_template(questionnaire_id, vt)
         if tpl:
-            upsert_template(payload.new_id, vt, tpl["items"])
+            upsert_template(
+                payload.new_id,
+                vt,
+                tpl["items"],
+                llm_followup_enabled=tpl.get("llm_followup_enabled", True),
+            )
         cfg = get_summary_config(questionnaire_id, vt)
         if cfg:
             upsert_summary_prompt(
@@ -615,6 +632,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         questionnaire_id=req.questionnaire_id,
         template_items=items,
         answers=req.answers,
+        max_additional_questions=5 if tpl.get("llm_followup_enabled", True) else 0,
     )
     fsm = SessionFSM(session, llm_gateway)
     fsm.update_completion()

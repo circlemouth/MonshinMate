@@ -88,7 +88,9 @@ export default function AdminTemplates() {
   // サマリー設定（初診/再診）
   const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
-  const [canUseSummary, setCanUseSummary] = useState<boolean>(false);
+  // LLM の疎通状態（サマリー生成や追質問の可否に利用）
+  const [llmAvailable, setLlmAvailable] = useState<boolean>(false);
+  const [llmFollowupEnabled, setLlmFollowupEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     fetch('/questionnaires')
@@ -100,20 +102,20 @@ export default function AdminTemplates() {
       });
   }, []);
 
-  // LLM の疎通状況を確認し、サマリー機能のオン可否を制御
+  // LLM の疎通状況を確認し、サマリー生成や追質問のオン可否を制御
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
       try {
         const s = await fetch('/llm/settings').then((r) => r.json());
         if (!s?.enabled || !s?.base_url) {
-          if (!cancelled) setCanUseSummary(false);
+          if (!cancelled) setLlmAvailable(false);
           return;
         }
         const t = await fetch('/llm/settings/test', { method: 'POST' }).then((r) => r.json());
-        if (!cancelled) setCanUseSummary(t?.status === 'ok');
+        if (!cancelled) setLlmAvailable(t?.status === 'ok');
       } catch (e) {
-        if (!cancelled) setCanUseSummary(false);
+        if (!cancelled) setLlmAvailable(false);
       }
     };
     check();
@@ -121,6 +123,11 @@ export default function AdminTemplates() {
       cancelled = true;
     };
   }, []);
+
+  // LLM が利用できない場合は追質問設定を強制オフ
+  useEffect(() => {
+    if (!llmAvailable) setLlmFollowupEnabled(false);
+  }, [llmAvailable]);
 
   useEffect(() => {
     if (templateId && templates.some((t) => t.id === templateId)) {
@@ -152,7 +159,7 @@ export default function AdminTemplates() {
     return () => {
       clearTimeout(handler);
     };
-  }, [items, initialPrompt, followupPrompt, initialEnabled, followupEnabled, isLoading]);
+  }, [items, initialPrompt, followupPrompt, initialEnabled, followupEnabled, llmFollowupEnabled, isLoading]);
 
   const loadTemplates = (id: string) => {
     setIsLoading(true);
@@ -177,6 +184,7 @@ export default function AdminTemplates() {
       setFollowupPrompt(pFollow?.prompt || "");
       setInitialEnabled(!!pInit?.enabled);
       setFollowupEnabled(!!pFollow?.enabled);
+      setLlmFollowupEnabled(init?.llm_followup_enabled !== false);
       setPreviewAnswers({});
       setSaveStatus('idle'); // ロード完了時はidleに
       setIsLoading(false);
@@ -231,12 +239,12 @@ export default function AdminTemplates() {
       await fetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems }),
+        body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems, llm_followup_enabled: llmFollowupEnabled }),
       });
       await fetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems }),
+        body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems, llm_followup_enabled: llmFollowupEnabled }),
       });
       // サマリー用プロンプトも保存（有効/無効を含む）
       await fetch(`/questionnaires/${templateId}/summary-prompt`, {
@@ -466,18 +474,33 @@ export default function AdminTemplates() {
               <SaveStatusIndicator />
             </HStack>
           </HStack>
+          {/* LLM 追加質問の有無 */}
+          <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
+            <Checkbox
+              isChecked={llmFollowupEnabled}
+              isDisabled={!llmAvailable}
+              onChange={(e) => setLlmFollowupEnabled(e.target.checked)}
+            >
+              固定フォーム終了後にLLMによる追加質問を行う
+            </Checkbox>
+            {!llmAvailable && (
+              <Text fontSize="sm" color="gray.500" mt={2}>
+                LLMによる追加質問は、LLM設定が有効かつ疎通テストが成功している場合のみオンにできます。
+              </Text>
+            )}
+          </Box>
           {/* サマリー生成設定＋プロンプト編集 */}
           <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
             <Heading size="sm" mb={2}>サマリー自動作成</Heading>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={1}>
-              <Checkbox isChecked={initialEnabled} isDisabled={!canUseSummary} onChange={(e) => setInitialEnabled(e.target.checked)}>
+              <Checkbox isChecked={initialEnabled} isDisabled={!llmAvailable} onChange={(e) => setInitialEnabled(e.target.checked)}>
                 初診
               </Checkbox>
-              <Checkbox isChecked={followupEnabled} isDisabled={!canUseSummary} onChange={(e) => setFollowupEnabled(e.target.checked)}>
+              <Checkbox isChecked={followupEnabled} isDisabled={!llmAvailable} onChange={(e) => setFollowupEnabled(e.target.checked)}>
                 再診
               </Checkbox>
             </SimpleGrid>
-            {!canUseSummary && (
+            {!llmAvailable && (
               <Text fontSize="sm" color="gray.500" mb={3}>
                 サマリー作成は、LLM設定が有効かつ疎通テストが成功している場合のみオンにできます。
               </Text>
