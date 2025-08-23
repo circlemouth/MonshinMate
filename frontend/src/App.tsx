@@ -27,6 +27,11 @@ export default function App() {
   const [adminPassword, setAdminPassword] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [pwSetupOpen, setPwSetupOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
+  const [pwSetupError, setPwSetupError] = useState('');
+  const [pwSetupLoading, setPwSetupLoading] = useState(false);
   useEffect(() => {
     flushQueue();
   }, []);
@@ -65,9 +70,19 @@ export default function App() {
     return () => window.removeEventListener('systemDisplayNameUpdated' as any, onUpdated);
   }, []);
 
-  const openAdminLogin = () => {
+  const openAdminLogin = async () => {
     setLoginError('');
     setAdminPassword('');
+    try {
+      const r = await fetch('/admin/password/status');
+      if (r.ok) {
+        const d = await r.json();
+        if (d?.is_default) {
+          setPwSetupOpen(true);
+          return;
+        }
+      }
+    } catch {}
     setLoginOpen(true);
   };
 
@@ -75,8 +90,9 @@ export default function App() {
     if (!loginLoading) setLoginOpen(false);
   };
 
-  const handleAdminLogin = async () => {
-    if (!adminPassword) {
+  const handleAdminLogin = async (overridePassword?: string) => {
+    const pw = overridePassword ?? adminPassword;
+    if (!pw) {
       setLoginError('パスワードを入力してください');
       return;
     }
@@ -86,7 +102,7 @@ export default function App() {
       const res = await fetch('/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: adminPassword }),
+        body: JSON.stringify({ password: pw }),
       });
       if (!res.ok) {
         setLoginError('ログインに失敗しました');
@@ -97,6 +113,35 @@ export default function App() {
       navigate('/admin/templates');
     } finally {
       setLoginLoading(false);
+    }
+  };
+
+  const handleSetAdminPassword = async () => {
+    if (!newPassword || !newPasswordConfirm) {
+      setPwSetupError('パスワードを入力してください');
+      return;
+    }
+    if (newPassword !== newPasswordConfirm) {
+      setPwSetupError('確認用パスワードが一致しません');
+      return;
+    }
+    setPwSetupLoading(true);
+    setPwSetupError('');
+    try {
+      const res = await fetch('/admin/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword }),
+      });
+      if (!res.ok) {
+        setPwSetupError('保存に失敗しました');
+        return;
+      }
+      setPwSetupOpen(false);
+      setAdminPassword(newPassword);
+      await handleAdminLogin(newPassword);
+    } finally {
+      setPwSetupLoading(false);
     }
   };
 
@@ -194,6 +239,47 @@ export default function App() {
           <ModalFooter>
             <Button mr={3} onClick={closeAdminLogin} variant="ghost" isDisabled={loginLoading}>キャンセル</Button>
             <Button colorScheme="primary" onClick={handleAdminLogin} isLoading={loginLoading}>ログイン</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* 初回パスワード設定用モーダル */}
+      <Modal isOpen={pwSetupOpen} onClose={() => !pwSetupLoading && setPwSetupOpen(false)} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>管理パスワードの設定</ModalHeader>
+          <ModalCloseButton disabled={pwSetupLoading} />
+          <ModalBody>
+            <FormControl>
+              <FormLabel>新しいパスワード</FormLabel>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                autoFocus
+              />
+            </FormControl>
+            <FormControl mt={4}>
+              <FormLabel>確認用パスワード</FormLabel>
+              <Input
+                type="password"
+                value={newPasswordConfirm}
+                onChange={(e) => setNewPasswordConfirm(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSetAdminPassword();
+                  }
+                }}
+              />
+            </FormControl>
+            {pwSetupError && (
+              <Text color="red.500" mt={2} fontSize="sm">{pwSetupError}</Text>
+            )}
+          </ModalBody>
+          <ModalFooter>
+            <Button mr={3} onClick={() => setPwSetupOpen(false)} variant="ghost" isDisabled={pwSetupLoading}>キャンセル</Button>
+            <Button colorScheme="primary" onClick={handleSetAdminPassword} isLoading={pwSetupLoading}>保存</Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
