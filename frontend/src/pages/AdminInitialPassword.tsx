@@ -51,15 +51,27 @@ export default function AdminInitialPassword() {
 
       toast({
         title: 'パスワードが設定されました。',
-        description: '続けて2要素認証の設定を行ってください。',
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
 
-      // 認証状態を更新して、次のステップ（TOTP設定）へ進ませる
+      // 状態を更新したうえでAuthenticatorの有効化を促す
       await checkAuthStatus();
-      setShowTotpSetup(true);
+      const enableTotp = window.confirm(
+        'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
+      );
+      if (enableTotp) {
+        setShowTotpSetup(true);
+      } else {
+        toast({
+          title: 'Authenticator を後から設定できますが、未設定のままではパスワードのリセットはできません。',
+          status: 'warning',
+          duration: 7000,
+          isClosable: true,
+        });
+        navigate('/admin/login');
+      }
 
     } catch (e) {
       setError('エラーが発生しました。ネットワーク接続を確認してください。');

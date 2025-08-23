@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast, PinInput, PinInputField, HStack } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminPasswordReset() {
   const [step, setStep] = useState('request'); // 'request' | 'confirm'
@@ -11,6 +12,7 @@ export default function AdminPasswordReset() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
+  const { checkAuthStatus, isTotpEnabled, setShowTotpSetup } = useAuth();
 
   const handleRequestReset = async () => {
     if (totpCode.length !== 6) {
@@ -57,12 +59,29 @@ export default function AdminPasswordReset() {
       }
       toast({
         title: 'パスワードがリセットされました。',
-        description: '新しいパスワードでログインしてください。',
         status: 'success',
         duration: 5000,
         isClosable: true,
       });
-      navigate('/admin/login');
+      await checkAuthStatus();
+      if (!isTotpEnabled) {
+        const enableTotp = window.confirm(
+          'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
+        );
+        if (enableTotp) {
+          setShowTotpSetup(true);
+        } else {
+          toast({
+            title: 'Authenticator を後から設定できますが、未設定のままではパスワードのリセットはできません。',
+            status: 'warning',
+            duration: 7000,
+            isClosable: true,
+          });
+          navigate('/admin/login');
+        }
+      } else {
+        navigate('/admin/login');
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
