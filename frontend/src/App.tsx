@@ -1,9 +1,12 @@
-import { Container, Heading, Box, Flex, Spacer, Button, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Input, FormControl, FormLabel, Text } from '@chakra-ui/react';
+import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { flushQueue } from './retryQueue';
 import FlowProgress from './components/FlowProgress';
 import { track } from './metrics';
+import { useAuth } from './contexts/AuthContext';
+
+// Pages
 import Entry from './pages/Entry';
 import QuestionnaireForm from './pages/QuestionnaireForm';
 import Questions from './pages/Questions';
@@ -15,39 +18,39 @@ import AdminLlm from './pages/AdminLlm';
 import AdminSessions from './pages/AdminSessions';
 import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
-import AdminLayout from './components/AdminLayout';
 import LlmWait from './pages/LlmWait';
 import AdminSystemName from './pages/AdminSystemName';
 import AdminManual from './pages/AdminManual';
+import AdminInitialPassword from './pages/AdminInitialPassword';
+import AdminTotpSetup from './pages/AdminTotpSetup';
+import AdminPasswordReset from './pages/AdminPasswordReset';
+import AdminSecurity from './pages/AdminSecurity';
+
+// Layouts
+import AdminLayout from './components/AdminLayout';
 
 export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const [loginOpen, setLoginOpen] = useState(false);
-  const [adminPassword, setAdminPassword] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [pwSetupOpen, setPwSetupOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [newPasswordConfirm, setNewPasswordConfirm] = useState('');
-  const [pwSetupError, setPwSetupError] = useState('');
-  const [pwSetupLoading, setPwSetupLoading] = useState(false);
+  const { isLoading, isInitialPassword, showTotpSetup, isAuthenticated, logout } = useAuth();
+
   useEffect(() => {
     flushQueue();
+    // ページ遷移時に認証状態をチェック（セッションが切れている場合などに対応）
+    // checkAuthStatus(); // AuthProvider内で初回実行済み。必要に応じて追加。
   }, []);
+
   useEffect(() => {
     track('page_view', { path: location.pathname });
   }, [location.pathname]);
 
-  // 管理画面以外へ遷移したら自動的にログアウト（管理ログイン状態の破棄）
+  // 管理画面以外へ遷移したら自動的にログアウト（セッションストレージのフラグのみクリア）
   useEffect(() => {
     if (!location.pathname.startsWith('/admin')) {
-      sessionStorage.removeItem('adminLoggedIn');
+      logout();
     }
   }, [location.pathname]);
 
-  const isChatPage = location.pathname === '/chat';
-  const isAdminPage = location.pathname.startsWith('/admin');
   const [displayName, setDisplayName] = useState('Monshinクリニック');
 
   // システム表示名の取得と更新イベント購読
@@ -70,84 +73,37 @@ export default function App() {
     return () => window.removeEventListener('systemDisplayNameUpdated' as any, onUpdated);
   }, []);
 
-  const openAdminLogin = async () => {
-    setLoginError('');
-    setAdminPassword('');
-    try {
-      const r = await fetch('/admin/password/status');
-      if (r.ok) {
-        const d = await r.json();
-        if (d?.is_default) {
-          setPwSetupOpen(true);
-          return;
-        }
-      }
-    } catch {}
-    setLoginOpen(true);
-  };
-
-  const closeAdminLogin = () => {
-    if (!loginLoading) setLoginOpen(false);
-  };
-
-  const handleAdminLogin = async (overridePassword?: string) => {
-    const pw = overridePassword ?? adminPassword;
-    if (!pw) {
-      setLoginError('パスワードを入力してください');
-      return;
-    }
-    setLoginLoading(true);
-    setLoginError('');
-    try {
-      const res = await fetch('/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: pw }),
-      });
-      if (!res.ok) {
-        setLoginError('ログインに失敗しました');
-        return;
-      }
-      sessionStorage.setItem('adminLoggedIn', '1');
-      setLoginOpen(false);
+  const handleAdminClick = () => {
+    if (isAuthenticated) {
       navigate('/admin/templates');
-    } finally {
-      setLoginLoading(false);
+    } else {
+      navigate('/admin/login');
     }
   };
 
-  const handleSetAdminPassword = async () => {
-    if (!newPassword || !newPasswordConfirm) {
-      setPwSetupError('パスワードを入力してください');
-      return;
-    }
-    if (newPassword !== newPasswordConfirm) {
-      setPwSetupError('確認用パスワードが一致しません');
-      return;
-    }
-    setPwSetupLoading(true);
-    setPwSetupError('');
-    try {
-      const res = await fetch('/admin/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: newPassword }),
-      });
-      if (!res.ok) {
-        setPwSetupError('保存に失敗しました');
-        return;
-      }
-      setPwSetupOpen(false);
-      setAdminPassword(newPassword);
-      await handleAdminLogin(newPassword);
-    } finally {
-      setPwSetupLoading(false);
-    }
-  };
+  const isChatPage = location.pathname === '/chat';
+  const isAdminPage = location.pathname.startsWith('/admin');
+
+  // --- 強制表示ロジック（患者対話画面に限定） ---
+  if (isLoading) {
+    return (
+      <Center h="100vh">
+        <Spinner size="xl" />
+      </Center>
+    );
+  }
+
+  if (isChatPage && isInitialPassword) {
+    return <AdminInitialPassword />;
+  }
+
+  if (showTotpSetup) {
+    return <AdminTotpSetup />;
+  }
+  // -----------------------------------------
 
   return (
     <Container
-      // 管理画面とチャット画面は左右の余白を抑えて全幅表示
       maxW={isChatPage || isAdminPage ? '100%' : 'container.md'}
       py={isChatPage ? 0 : 10}
       px={isChatPage || isAdminPage ? 2 : 4}
@@ -164,7 +120,7 @@ export default function App() {
             <Button
               as={RouterLink}
               to="/"
-              onClick={() => sessionStorage.removeItem('adminLoggedIn')}
+              onClick={logout}
               colorScheme="primary"
               variant="outline"
               size="sm"
@@ -172,7 +128,7 @@ export default function App() {
               問診画面に戻る
             </Button>
           ) : (
-            <Button onClick={openAdminLogin} colorScheme="primary" size="sm">管理画面</Button>
+            <Button onClick={handleAdminClick} colorScheme="primary" size="sm">管理画面</Button>
           )}
         </Flex>
       )}
@@ -190,99 +146,27 @@ export default function App() {
 
           {/* 管理者系 */}
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/initial-password" element={<AdminInitialPassword />} />
+          <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
           <Route path="/admin" element={<Navigate to="/admin/templates" replace />} />
           <Route path="/admin/system-name" element={<AdminLayout><AdminSystemName /></AdminLayout>} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
           <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
+          <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
         </Routes>
       </Box>
 
-      {/* フッター（中央揃え、常に最下部。チャット画面では非表示） */}
-      {!isChatPage && (
+      {!isChatPage && !isAdminPage && (
         <Box as="footer" mt={10} color="gray.600" textAlign="center" pb={2}>
           <Box fontSize="sm">
             本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。
           </Box>
-          <Text mt={1} fontSize="xs" color="gray.500">問診メイト</Text>
+          <Text mt={1} fontSize="xs" color="gray.500">MonshinMate</Text>
         </Box>
       )}
-
-      {/* 管理ログイン用モーダル（患者画面→管理画面導線のみで使用） */}
-      <Modal isOpen={loginOpen} onClose={closeAdminLogin} isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>管理者ログイン</ModalHeader>
-          <ModalCloseButton disabled={loginLoading} />
-          <ModalBody>
-            <FormControl>
-              <FormLabel>パスワード</FormLabel>
-              <Input
-                type="password"
-                value={adminPassword}
-                onChange={(e) => setAdminPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAdminLogin();
-                  }
-                }}
-                autoFocus
-              />
-            </FormControl>
-            {loginError && (
-              <Text color="red.500" mt={2} fontSize="sm">{loginError}</Text>
-            )}
-          </ModalBody>
-          <ModalFooter>
-            <Button mr={3} onClick={closeAdminLogin} variant="ghost" isDisabled={loginLoading}>キャンセル</Button>
-            <Button colorScheme="primary" onClick={handleAdminLogin} isLoading={loginLoading}>ログイン</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
-
-      {/* 初回パスワード設定用モーダル */}
-      <Modal isOpen={pwSetupOpen} onClose={() => !pwSetupLoading && setPwSetupOpen(false)} isCentered>
-        <ModalOverlay />
-        <ModalContent>
-          <ModalHeader>管理パスワードの設定</ModalHeader>
-          <ModalCloseButton disabled={pwSetupLoading} />
-          <ModalBody>
-            <FormControl>
-              <FormLabel>新しいパスワード</FormLabel>
-              <Input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                autoFocus
-              />
-            </FormControl>
-            <FormControl mt={4}>
-              <FormLabel>確認用パスワード</FormLabel>
-              <Input
-                type="password"
-                value={newPasswordConfirm}
-                onChange={(e) => setNewPasswordConfirm(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleSetAdminPassword();
-                  }
-                }}
-              />
-            </FormControl>
-            {pwSetupError && (
-              <Text color="red.500" mt={2} fontSize="sm">{pwSetupError}</Text>
-            )}
-          </ModalBody>
-          <ModalFooter>
-            <Button mr={3} onClick={() => setPwSetupOpen(false)} variant="ghost" isDisabled={pwSetupLoading}>キャンセル</Button>
-            <Button colorScheme="primary" onClick={handleSetAdminPassword} isLoading={pwSetupLoading}>保存</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
     </Container>
   );
 }

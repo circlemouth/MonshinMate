@@ -79,6 +79,43 @@ make dev
 - フロントエンド: `http://localhost:5173`
 - 停止は Ctrl-C（両プロセスをまとめて終了）
 
+## 管理者パスワードの強制初期化（保守用スクリプト）
+バックエンドの DB に保存されている管理者（admin）パスワードを、TOTP を無効化したうえで強制的に初期化するメンテスクリプトを同梱しています。障害対応などで UI からのリセットが難しい場合にのみ使用してください。実行前に必ず DB のバックアップ（`backend/app/app.sqlite3`）を取得してください。
+
+- スクリプト: `backend/tools/reset_admin_password.py`
+- 効果:
+  - `users.username='admin'` の `hashed_password` を新しいパスワードで上書き（bcrypt）
+  - `is_initial_password=1` に設定（初期パスワード扱い）
+  - `is_totp_enabled=0`、`totp_secret=NULL` に設定（TOTP無効化）
+  - admin ユーザーが存在しない場合は作成
+
+実行方法（macOS/Linux 例）
+
+```bash
+# 対話的に実行（推奨）
+python3 backend/tools/reset_admin_password.py
+
+# 非対話（CI等）
+python3 backend/tools/reset_admin_password.py --password "NewSecurePass123!"
+
+# DB パスを明示する場合（省略時は MONSHINMATE_DB または backend/app/app.sqlite3）
+python3 backend/tools/reset_admin_password.py --db /path/to/app.sqlite3 --password "NewSecurePass123!"
+```
+
+実行後の手順
+- `/admin/initial-password` または `/chat` の初回設定導線から新しいパスワードを設定
+- `/admin/security` で Authenticator（TOTP）の QR を再登録し、6桁コードで有効化
+
+依存に関する注意
+- 実行時に `passlib`/`bcrypt` のバージョン不整合で警告が出る場合は、仮想環境を有効化し以下を実行してください。
+
+```bash
+source venv/bin/activate
+pip install -U "passlib[bcrypt]>=1.7.4" "bcrypt>=4.0.1"
+python backend/tools/reset_admin_password.py
+deactivate
+```
+
 ## 主要エンドポイント（抜粋）
 - `GET /healthz`: 死活監視
 - `GET /readyz`: 依存疎通の簡易チェック（DB/LLM）

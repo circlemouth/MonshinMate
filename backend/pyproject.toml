@@ -7,6 +7,10 @@ dependencies = [
     "fastapi",
     "uvicorn",
     "httpx",
+    "passlib[bcrypt]",
+    "pyotp",
+    "qrcode[pil]",
+    "python-jose[cryptography]",
 ]
 
 [tool.pytest.ini_options]

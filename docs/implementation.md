@@ -356,3 +356,10 @@
 - [x] 管理パスワードが初期値のままの場合、ログイン前に新規パスワード設定モーダルを表示するようにした。
 - [x] フロント: `frontend/src/App.tsx` に初回パスワード設定ロジックとUIを追加。
 - [x] バックエンド: `GET /admin/password/status` と `POST /admin/password` を追加し、DB にパスワードを保存するよう変更。
+
+## 38. チャット画面での初期パスワード強制と TOTP 対応（2025-11-02）
+- [x] 患者との対話画面（`/chat`）アクセス時、管理パスワードが初期設定のままなら全画面でパスワード設定モーダルを強制表示（`frontend/src/App.tsx`）。
+- [x] パスワード設定直後に Google Authenticator による TOTP 秘密鍵作成を推奨（QR 表示→6桁コード入力→有効化）。
+- [x] 管理ログイン：TOTP 必須時の二段階目認証UIを追加（`/admin/login`→`/admin/login/totp`）。
+- [x] 「パスワードをお忘れですか？」から TOTP を用いたリセット（トークン発行→新PW確定）を実装。
+- [x] 参照エンドポイントを `/admin/auth/status` に統一（旧 `/admin/password/status` は廃止）。

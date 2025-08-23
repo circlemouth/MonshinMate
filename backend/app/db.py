@@ -10,10 +10,15 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Iterable
 
+from passlib.context import CryptContext
+
 
 DEFAULT_DB_PATH = os.environ.get(
     "MONSHINMATE_DB", str(Path(__file__).resolve().parent / "app.sqlite3")
 )
+
+# パスワードハッシュ化のコンテキスト
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def _dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -29,7 +34,7 @@ def get_conn(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
-    """最小限のテーブル群を作成する。"""
+    """最小限のテーブル群を作成し、初期データを投入する。"""
     conn = get_conn(db_path)
     try:
         # テンプレート
@@ -42,7 +47,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 llm_followup_enabled INTEGER NOT NULL DEFAULT 1,
                 PRIMARY KEY (id, visit_type)
             )
-            """,
+            """
         )
 
         # 既存DB向けに llm_followup_enabled カラムを後付け（存在時は無視）
@@ -63,7 +68,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 enabled INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (id, visit_type)
             )
-            """,
+            """
         )
         # 既存DB向けに enabled カラムを後付け（存在時は無視）
         try:
@@ -91,7 +96,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 max_additional_questions INTEGER NOT NULL,
                 finalized_at TEXT
             )
-            """,
+            """
         )
 
         # 回答履歴
@@ -105,7 +110,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 PRIMARY KEY (session_id, item_id),
                 FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
-            """,
+            """
         )
 
         # LLM 設定（単一行）
@@ -115,7 +120,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 id TEXT PRIMARY KEY,
                 json TEXT NOT NULL
             )
-            """,
+            """
         )
 
         # アプリ全体の設定（単一行）
@@ -125,10 +130,72 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 id TEXT PRIMARY KEY,
                 json TEXT NOT NULL
             )
-            """,
+            """
         )
 
+        # ユーザー管理テーブル
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                hashed_password TEXT NOT NULL,
+                totp_secret TEXT,
+                is_totp_enabled INTEGER NOT NULL DEFAULT 0
+            )
+            """
+        )
+        # is_initial_password カラムを後付け
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN is_initial_password INTEGER NOT NULL DEFAULT 1"
+            )
+        except Exception:
+            pass
+
         conn.commit()
+
+        # --- データ移行と初期ユーザー作成 ---
+        # 'admin' ユーザーが存在しない場合のみ実行
+        admin_user = conn.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
+        if not admin_user:
+            # 古い app_settings からパスワードを取得
+            old_settings_row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
+            password_to_set = "admin"  # デフォルト
+            is_initial = 1
+            if old_settings_row:
+                try:
+                    settings = json.loads(old_settings_row["json"])
+                    if "admin_password" in settings:
+                        password_to_set = settings["admin_password"]
+                        # 既に設定されていた場合は初期パスワードではない
+                        is_initial = 0 if password_to_set != "admin" else 1
+                        # 移行したので古い設定から削除
+                        del settings["admin_password"]
+                        conn.execute(
+                            "UPDATE app_settings SET json = ? WHERE id = 'global'",
+                            (json.dumps(settings, ensure_ascii=False),),
+                        )
+                except (json.JSONDecodeError, KeyError):
+                    pass  # JSONが不正な場合はデフォルト値を使う
+
+            # 環境変数も確認
+            password_from_env = os.getenv("ADMIN_PASSWORD")
+            if password_from_env and password_from_env != "admin":
+                password_to_set = password_from_env
+                is_initial = 0
+
+            # パスワードをハッシュ化して 'admin' ユーザーを作成
+            hashed_password = pwd_context.hash(password_to_set)
+            conn.execute(
+                """
+                INSERT INTO users (username, hashed_password, is_initial_password)
+                VALUES ('admin', ?, ?)
+                """,
+                (hashed_password, is_initial),
+            )
+            conn.commit()
+
     finally:
         conn.close()
 
@@ -225,9 +292,10 @@ def get_summary_config(
         ).fetchone()
         if not row:
             return None
-        return {"prompt": row["prompt_text"], "enabled": bool(row["enabled"]) }
+        return {"prompt": row["prompt_text"], "enabled": bool(row["enabled"])}
     finally:
         conn.close()
+
 
 def get_summary_prompt(
     template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
@@ -400,5 +468,51 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         srow["remaining_items"] = json.loads(srow.get("remaining_items_json") or "[]")
         srow["attempt_counts"] = json.loads(srow.get("attempt_counts_json") or "{}")
         return srow
+    finally:
+        conn.close()
+
+# --- ユーザー/認証関連の関数 ---
+
+def get_user_by_username(username: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
+    """ユーザー名でユーザー情報を取得する。"""
+    conn = get_conn(db_path)
+    try:
+        return conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    finally:
+        conn.close()
+
+def update_password(username: str, new_password: str, db_path: str = DEFAULT_DB_PATH) -> None:
+    """ユーザーのパスワードを更新し、初期パスワードフラグを解除する。"""
+    hashed_password = pwd_context.hash(new_password)
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            "UPDATE users SET hashed_password = ?, is_initial_password = 0 WHERE username = ?",
+            (hashed_password, username),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """平文パスワードとハッシュ化済みパスワードを比較する。"""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def update_totp_secret(username: str, secret: str, db_path: str = DEFAULT_DB_PATH) -> None:
+    """TOTPシークレットを保存する。"""
+    # 注意: 本番環境ではシークレットを暗号化して保存することが望ましい
+    conn = get_conn(db_path)
+    try:
+        conn.execute("UPDATE users SET totp_secret = ? WHERE username = ?", (secret, username))
+        conn.commit()
+    finally:
+        conn.close()
+
+def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH) -> None:
+    """TOTPの有効/無効状態を設定する。"""
+    conn = get_conn(db_path)
+    try:
+        conn.execute("UPDATE users SET is_totp_enabled = ? WHERE username = ?", (1 if enabled else 0, username))
+        conn.commit()
     finally:
         conn.close()

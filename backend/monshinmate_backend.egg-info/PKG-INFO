@@ -6,3 +6,7 @@ Requires-Python: >=3.11
 Requires-Dist: fastapi
 Requires-Dist: uvicorn
 Requires-Dist: httpx
+Requires-Dist: passlib[bcrypt]
+Requires-Dist: pyotp
+Requires-Dist: qrcode[pil]
+Requires-Dist: python-jose[cryptography]

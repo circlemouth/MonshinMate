@@ -1,39 +1,89 @@
 from pathlib import Path
 import sys
+import time
 
 from fastapi.testclient import TestClient
+import pyotp
 
-# DB を初期化してクリーンな状態からテストする
+# DBを初期化してクリーンな状態からテストする
 DB_PATH = Path(__file__).resolve().parents[1] / "app" / "app.sqlite3"
 if DB_PATH.exists():
     DB_PATH.unlink()
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from app.main import app  # type: ignore[import]
+from app.main import app
+from app.db import get_user_by_username
 
 client = TestClient(app)
 
-
-def test_admin_password_setup_and_login():
-    # 初期状態では既定パスワードのまま
-    res = client.get("/admin/password/status")
+def test_admin_auth_flow():
+    """管理者認証の全フロー（初期設定→PW変更→TOTP設定→2FAログイン→PWリセット）をテストする。"""
+    
+    # === Step 1: 初期状態の確認 ===
+    res = client.get("/admin/auth/status")
     assert res.status_code == 200
-    assert res.json()["is_default"] is True
+    data = res.json()
+    assert data["is_initial_password"] is True
+    assert data["is_totp_enabled"] is False
 
-    # 新しいパスワードを設定
-    res = client.post("/admin/password", json={"password": "newpass"})
+    # === Step 2: パスワード変更 ===
+    new_password = "MyNewSecurePassword123"
+    res = client.post("/admin/password", json={"password": new_password})
     assert res.status_code == 200
 
-    # 既定状態ではなくなる
-    res = client.get("/admin/password/status")
+    # === Step 3: 通常ログイン ===
+    res = client.post("/admin/login", json={"password": new_password})
     assert res.status_code == 200
-    assert res.json()["is_default"] is False
 
-    # 新パスワードでログイン成功
-    res = client.post("/admin/login", json={"password": "newpass"})
+    # === Step 4: TOTP設定 ===
+    res = client.get("/admin/totp/setup")
     assert res.status_code == 200
-    assert res.json() == {"status": "ok"}
+    admin_user = get_user_by_username("admin")
+    assert admin_user is not None
+    secret = admin_user["totp_secret"]
+    assert secret is not None
+    totp = pyotp.TOTP(secret)
+    res = client.post("/admin/totp/verify", json={"totp_code": totp.now()})
+    assert res.status_code == 200
 
-    # 旧パスワードでは失敗
-    res = client.post("/admin/login", json={"password": "admin"})
+    # === Step 5: 2段階認証ログイン ===
+    res = client.post("/admin/login", json={"password": new_password})
+    assert res.status_code == 200
+    assert res.json() == {"status": "totp_required"}
+    res = client.post("/admin/login/totp", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+    assert res.json() == {"status": "ok", "message": "Login successful"}
+
+    # === Step 6: パスワードリセット ===
+    # 不正なTOTPコードでリセット要求 → 失敗
+    res = client.post("/admin/password/reset/request", json={"totp_code": "000000"})
     assert res.status_code == 401
+
+    # 正しいTOTPコードでリセット要求 → 成功、トークン取得
+    res = client.post("/admin/password/reset/request", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+    reset_token = res.json()["reset_token"]
+    assert reset_token
+
+    # トークンを使ってパスワードをリセット
+    password_after_reset = "ResetPassword456"
+    res = client.post(
+        "/admin/password/reset/confirm",
+        json={"token": reset_token, "new_password": password_after_reset},
+    )
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+
+    # === Step 7: リセット後の最終確認 ===
+    # 古いパスワードでログイン → 失敗
+    res = client.post("/admin/login", json={"password": new_password})
+    assert res.status_code == 401
+
+    # 新しいパスワードでログイン → 成功（2段階認証）
+    res = client.post("/admin/login", json={"password": password_after_reset})
+    assert res.status_code == 200
+    assert res.json() == {"status": "totp_required"}
+
+    res = client.post("/admin/login/totp", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"

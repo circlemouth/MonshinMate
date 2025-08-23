@@ -5,12 +5,17 @@
 from typing import Any
 from uuid import uuid4
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, UTC
 import os
+import io
 
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks
+from fastapi.responses import StreamingResponse
 import sqlite3
 from pydantic import BaseModel
+import pyotp
+import qrcode
+from jose import JWTError, jwt
 
 from .llm_gateway import LLMGateway, LLMSettings
 from .db import (
@@ -29,10 +34,20 @@ from .db import (
     load_llm_settings,
     save_app_settings,
     load_app_settings,
+    get_user_by_username,
+    update_password,
+    verify_password,
+    update_totp_secret,
+    set_totp_status,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
 import logging
+
+# JWT settings for password reset
+SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 init_db()
 app = FastAPI(title="MonshinMate API")
@@ -64,11 +79,6 @@ async def log_middleware(request: Request, call_next):
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
-    # 既存環境から管理者パスワードを移行（未設定かつ環境変数が既定値でない場合）
-    settings = load_app_settings() or {}
-    if "admin_password" not in settings and ADMIN_PASSWORD_ENV != ADMIN_PASSWORD_DEFAULT:
-        settings["admin_password"] = ADMIN_PASSWORD_ENV
-        save_app_settings(settings)
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     initial_items = [
         # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
@@ -158,17 +168,6 @@ default_llm_settings = LLMSettings(
     provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=True
 )
 llm_gateway = LLMGateway(default_llm_settings)
-
-# 管理者ログイン用パスワードの既定値と環境変数
-ADMIN_PASSWORD_DEFAULT = "admin"
-ADMIN_PASSWORD_ENV = os.getenv("ADMIN_PASSWORD", ADMIN_PASSWORD_DEFAULT)
-
-
-def get_admin_password() -> str:
-    """現在有効な管理者パスワードを取得する。"""
-
-    settings = load_app_settings() or {}
-    return settings.get("admin_password") or ADMIN_PASSWORD_ENV
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
@@ -582,50 +581,206 @@ def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
         return payload
 
 
+# --- 管理者認証 API ---
+
 class AdminLoginRequest(BaseModel):
     """管理者ログインリクエスト。"""
-
     password: str
 
+class AdminLoginTotpRequest(BaseModel):
+    """管理者ログイン時のTOTPコード。"""
+    totp_code: str
 
 class AdminPasswordSetRequest(BaseModel):
     """管理者パスワード設定リクエスト。"""
-
     password: str
 
+class AdminAuthStatus(BaseModel):
+    """管理者認証の状態。"""
+    is_initial_password: bool
+    is_totp_enabled: bool
 
-class AdminPasswordStatus(BaseModel):
-    """管理者パスワードの状態。"""
+class TotpVerifyRequest(BaseModel):
+    """TOTP検証リクエスト。"""
+    totp_code: str
 
-    is_default: bool
+class PasswordResetRequest(BaseModel):
+    """パスワードリセットリクエスト（TOTPコードを含む）。"""
+    totp_code: str
 
+class PasswordResetConfirm(BaseModel):
+    """パスワードリセットの確認。"""
+    token: str
+    new_password: str
 
-@app.get("/admin/password/status", response_model=AdminPasswordStatus)
-def admin_password_status() -> AdminPasswordStatus:
-    """パスワードが初期状態かどうかを返す。"""
+@app.get("/admin/auth/status", response_model=AdminAuthStatus)
+def get_admin_auth_status() -> AdminAuthStatus:
+    """管理者の認証状態（初期パスワードか、TOTPが有効か）を返す。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+    # フラグの信頼性に加えて、実際に現在のパスワードが 'admin' と一致するかも検査する。
+    # これによりフラグの取り違え・移行漏れがあっても初期パスワード状態を確実に検出できる。
+    try:
+        hashed = admin_user.get("hashed_password")
+        is_default_now = False
+        if hashed:
+            # 既定初期パスワードは 'admin'。必要に応じて環境変数で上書きする設計に拡張可能。
+            # 環境変数が設定されていない場合は 'admin' を既定とする。
+            default_pw = os.getenv("ADMIN_PASSWORD", "admin")
+            is_default_now = verify_password(default_pw, hashed)
+    except Exception:
+        is_default_now = False
 
-    settings = load_app_settings() or {}
-    is_default = "admin_password" not in settings and ADMIN_PASSWORD_ENV == ADMIN_PASSWORD_DEFAULT
-    return AdminPasswordStatus(is_default=is_default)
-
+    return AdminAuthStatus(
+        is_initial_password=bool(admin_user.get("is_initial_password")) or is_default_now,
+        is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
+    )
 
 @app.post("/admin/password")
 def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
     """管理者パスワードを更新する。"""
-
-    settings = load_app_settings() or {}
-    settings["admin_password"] = payload.password
-    save_app_settings(settings)
+    if len(payload.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+    # 初期セットアップ時のみ直接のパスワード更新を許可（それ以外はTOTPリセットフローを使用）
+    default_pw = os.getenv("ADMIN_PASSWORD", "admin")
+    is_default_now = False
+    try:
+        is_default_now = verify_password(default_pw, admin_user.get("hashed_password"))
+    except Exception:
+        is_default_now = False
+    if not (bool(admin_user.get("is_initial_password")) or is_default_now):
+        raise HTTPException(status_code=403, detail="Direct password change is not allowed. Use reset flow.")
+    update_password("admin", payload.password)
     return {"status": "ok"}
-
 
 @app.post("/admin/login")
 def admin_login(payload: AdminLoginRequest) -> dict:
-    """管理画面へのログインを行う。"""
+    """管理画面へのログイン（パスワード検証）。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user or not verify_password(payload.password, admin_user["hashed_password"]):
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
-    if payload.password != get_admin_password():
-        raise HTTPException(status_code=401, detail="unauthorized")
+    if admin_user["is_totp_enabled"]:
+        return {"status": "totp_required"}
+
+    # 認証成功（本来はセッションやJWTを発行）
+    return {"status": "ok", "message": "Login successful"}
+
+@app.post("/admin/login/totp")
+def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
+    """管理画面へのログイン（TOTP検証）。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user or not admin_user["totp_secret"]:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    totp = pyotp.TOTP(admin_user["totp_secret"])
+    if not totp.verify(payload.totp_code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code")
+
+    return {"status": "ok", "message": "Login successful"}
+
+@app.get("/admin/totp/setup")
+def admin_totp_setup() -> StreamingResponse:
+    """TOTP設定用のQRコードを生成して返す。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+
+    # 既存のシークレットがある場合は再利用し、なければ新規生成する
+    secret = admin_user.get("totp_secret")
+    if not secret:
+        secret = pyotp.random_base32()
+        update_totp_secret("admin", secret)
+
+    # プロビジョニングURIを生成
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(
+        name="admin@MonshinMate", issuer_name="MonshinMate"
+    )
+
+    # QRコードを画像として生成
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, "PNG")
+    buf.seek(0)
+
+    return StreamingResponse(buf, media_type="image/png")
+
+@app.post("/admin/totp/verify")
+def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
+    """提供されたTOTPコードを検証し、有効化する。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user or not admin_user["totp_secret"]:
+        raise HTTPException(status_code=400, detail="TOTP secret not found")
+
+    totp = pyotp.TOTP(admin_user["totp_secret"])
+    # 多少の時計ずれを許容（前後1ステップ）
+    if not totp.verify(payload.totp_code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid TOTP code")
+
+    # 検証成功、TOTPを有効化
+    set_totp_status("admin", enabled=True)
     return {"status": "ok"}
+
+@app.post("/admin/totp/disable")
+def admin_totp_disable() -> dict:
+    """TOTP を無効化する（管理操作）。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+    set_totp_status("admin", enabled=False)
+    return {"status": "ok"}
+
+@app.post("/admin/totp/regenerate")
+def admin_totp_regenerate() -> dict:
+    """TOTP の秘密鍵を再生成し、いったん無効化する。新しいQRで再設定が必要。"""
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+    secret = pyotp.random_base32()
+    update_totp_secret("admin", secret)
+    set_totp_status("admin", enabled=False)
+    return {"status": "ok"}
+
+@app.post("/admin/password/reset/request")
+def request_password_reset(payload: PasswordResetRequest) -> dict:
+    """TOTPを検証し、パスワードリセット用のトークンを発行する。"""
+    admin_user = get_user_by_username("admin")
+    # TOTPが有効で、シークレットが存在することが前提
+    if not admin_user or not admin_user["is_totp_enabled"] or not admin_user["totp_secret"]:
+        raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
+
+    totp = pyotp.TOTP(admin_user["totp_secret"])
+    if not totp.verify(payload.totp_code):
+        raise HTTPException(status_code=401, detail="Invalid TOTP code")
+
+    # トークンを生成
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {"sub": "admin", "exp": expire}
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return {"reset_token": encoded_jwt}
+
+
+@app.post("/admin/password/reset/confirm")
+def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
+    """リセットトークンを検証し、パスワードを更新する。"""
+    try:
+        decoded_token = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str | None = decoded_token.get("sub")
+        if username != "admin":
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # 新しいパスワードのバリデーション
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+
+    update_password("admin", payload.new_password)
+    return {"status": "ok", "message": "Password has been reset successfully"}
 
 
 class SessionCreateRequest(BaseModel):
@@ -811,7 +966,7 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
     SessionFSM(session, llm_gateway).update_completion()
     # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
     session.summary = llm_gateway.summarize(session.answers)
-    session.finalized_at = datetime.utcnow()
+    session.finalized_at = datetime.now(UTC)
     session.completion_status = "finalized"
     global METRIC_SUMMARIES
     METRIC_SUMMARIES += 1
@@ -919,7 +1074,7 @@ class UiMetricEvents(BaseModel):
 def metrics_ui(payload: UiMetricEvents) -> dict:
     """UI 側の匿名イベントを受け取り、ログに記録する。
 
-    - 個人特定情報は送らない前提。
+    -個人特定情報は送らない前提。
     - 必要に応じてファイルやDBへ積む設計に拡張可能。
     """
     try:
