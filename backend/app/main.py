@@ -64,6 +64,11 @@ async def log_middleware(request: Request, call_next):
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
+    # 既存環境から管理者パスワードを移行（未設定かつ環境変数が既定値でない場合）
+    settings = load_app_settings() or {}
+    if "admin_password" not in settings and ADMIN_PASSWORD_ENV != ADMIN_PASSWORD_DEFAULT:
+        settings["admin_password"] = ADMIN_PASSWORD_ENV
+        save_app_settings(settings)
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     initial_items = [
         # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
@@ -154,8 +159,16 @@ default_llm_settings = LLMSettings(
 )
 llm_gateway = LLMGateway(default_llm_settings)
 
-# 管理者ログイン用のパスワード（簡易実装）
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin")
+# 管理者ログイン用パスワードの既定値と環境変数
+ADMIN_PASSWORD_DEFAULT = "admin"
+ADMIN_PASSWORD_ENV = os.getenv("ADMIN_PASSWORD", ADMIN_PASSWORD_DEFAULT)
+
+
+def get_admin_password() -> str:
+    """現在有効な管理者パスワードを取得する。"""
+
+    settings = load_app_settings() or {}
+    return settings.get("admin_password") or ADMIN_PASSWORD_ENV
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
@@ -575,11 +588,42 @@ class AdminLoginRequest(BaseModel):
     password: str
 
 
+class AdminPasswordSetRequest(BaseModel):
+    """管理者パスワード設定リクエスト。"""
+
+    password: str
+
+
+class AdminPasswordStatus(BaseModel):
+    """管理者パスワードの状態。"""
+
+    is_default: bool
+
+
+@app.get("/admin/password/status", response_model=AdminPasswordStatus)
+def admin_password_status() -> AdminPasswordStatus:
+    """パスワードが初期状態かどうかを返す。"""
+
+    settings = load_app_settings() or {}
+    is_default = "admin_password" not in settings and ADMIN_PASSWORD_ENV == ADMIN_PASSWORD_DEFAULT
+    return AdminPasswordStatus(is_default=is_default)
+
+
+@app.post("/admin/password")
+def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
+    """管理者パスワードを更新する。"""
+
+    settings = load_app_settings() or {}
+    settings["admin_password"] = payload.password
+    save_app_settings(settings)
+    return {"status": "ok"}
+
+
 @app.post("/admin/login")
 def admin_login(payload: AdminLoginRequest) -> dict:
     """管理画面へのログインを行う。"""
 
-    if payload.password != ADMIN_PASSWORD:
+    if payload.password != get_admin_password():
         raise HTTPException(status_code=401, detail="unauthorized")
     return {"status": "ok"}
 
