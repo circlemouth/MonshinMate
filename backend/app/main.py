@@ -1056,8 +1056,18 @@ def admin_login(payload: AdminLoginRequest) -> dict:
             pass
         raise HTTPException(status_code=401, detail="Unauthorized")
 
+    mode = get_totp_mode("admin")
+    if admin_user.get("is_totp_enabled") and not admin_user.get("totp_secret"):
+        # シークレットが存在しないのにフラグだけ有効な場合は自動的に無効化
+        set_totp_status("admin", enabled=False)
+        mode = "off"
+        try:
+            logging.getLogger("security").warning("totp_disabled_missing_secret username=admin")
+        except Exception:
+            pass
+
     # ログイン時にTOTPを要求するのは totp_mode が 'login_and_reset' の場合のみ
-    if get_totp_mode("admin") == "login_and_reset":
+    if mode == "login_and_reset":
         try:
             logging.getLogger("security").info("admin_login_password_ok_totp_required")
         except Exception:

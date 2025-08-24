@@ -409,3 +409,10 @@
 - [x] 「問診項目を追加」ボタンを項目一覧表の直下に配置し、最終行の下から新規項目を追加しやすくした。
   - 変更: `frontend/src/pages/AdminTemplates.tsx` のボタン位置と文言を調整。
   - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 46. TOTPシークレット欠如時の自動無効化（2025-11-04）
+- [x] シークレットが存在しないのに `is_totp_enabled=1` の場合、ログイン時に自動的に二段階認証を無効化するようにした。
+  - 変更: `backend/app/db.py` の `get_totp_mode` はシークレット未設定時に常に `'off'` を返すよう修正。
+  - 変更: `backend/app/main.py` の `admin_login` で不整合状態を検知し `set_totp_status` により無効化。
+  - テスト: `backend/tests/test_admin.py` に再現テストを追加。
+  - ドキュメント更新: `docs/admin_system_setup.md` に自動無効化の注意書きを追加。
