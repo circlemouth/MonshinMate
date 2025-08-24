@@ -81,6 +81,7 @@ python backend/tools/reset_admin_password.py --password "NewStrongPass123"
 
 - 管理画面アクセス時、パスワードは新規設定済みですが「初期パスワード扱い（is_initial_password=1）」のため、初回ログインフローでの挙動が簡略化されます。
 - 二段階認証は完全に無効化されています（`totp_mode='off'`）。必要であれば管理画面の「セキュリティ」から再度QRコードを発行し、有効化してください。
+- TOTP が有効扱いなのに秘密鍵が失われている場合、次回ログイン時に自動的に無効化されます。
 
 ### 注意事項
 

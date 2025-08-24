@@ -696,6 +696,12 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
         # 有効化時はモードが 'off' の場合 'login_and_reset' に昇格、無効化時は 'off'
         now = datetime.now(UTC).isoformat()
         if enabled:
+            # 秘密鍵が未設定のまま有効化することはできない
+            secret_row = conn.execute(
+                "SELECT totp_secret FROM users WHERE username=?", (username,)
+            ).fetchone()
+            if not secret_row or not secret_row.get("totp_secret"):
+                raise ValueError("TOTP secret not set")
             conn.execute(
                 "UPDATE users SET is_totp_enabled = 1, totp_mode = CASE WHEN COALESCE(totp_mode,'off')='off' THEN 'login_and_reset' ELSE totp_mode END, totp_changed_at = ? WHERE username = ?",
                 (now, username),
@@ -716,17 +722,38 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
         conn.close()
 
 def get_totp_mode(username: str, db_path: str = DEFAULT_DB_PATH) -> str:
-    """TOTP モードを返す。カラム未設定や NULL の場合は is_totp_enabled から推定。"""
+    """TOTP モードを返す。カラム未設定や NULL の場合は is_totp_enabled から推定。
+
+    秘密鍵が欠落している場合は TOTP を自動的に無効化する。
+    """
     conn = get_conn(db_path)
     try:
-        row = conn.execute("SELECT is_totp_enabled, totp_mode FROM users WHERE username=?", (username,)).fetchone()
+        row = conn.execute(
+            "SELECT is_totp_enabled, totp_mode, totp_secret FROM users WHERE username=?",
+            (username,),
+        ).fetchone()
         if not row:
-            return 'off'
-        mode = row.get('totp_mode')
-        if mode in ('off', 'reset_only', 'login_and_reset'):
+            return "off"
+        secret = row.get("totp_secret")
+        if not secret:
+            if int(row.get("is_totp_enabled") or 0) or row.get("totp_mode") not in (None, "off"):
+                conn.execute(
+                    "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off' WHERE username=?",
+                    (username,),
+                )
+                conn.commit()
+                try:
+                    logging.getLogger("security").warning(
+                        "totp_disabled_missing_secret username=%s db=%s", username, db_path
+                    )
+                except Exception:
+                    pass
+            return "off"
+        mode = row.get("totp_mode")
+        if mode in ("off", "reset_only", "login_and_reset"):
             return mode
         # 後方互換: is_totp_enabled が 1 なら login_and_reset とみなす
-        return 'login_and_reset' if int(row.get('is_totp_enabled') or 0) else 'off'
+        return "login_and_reset" if int(row.get("is_totp_enabled") or 0) else "off"
     finally:
         conn.close()
 
