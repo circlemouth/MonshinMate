@@ -1,4 +1,4 @@
-import { ReactNode, useMemo, useEffect } from 'react';
+import { ReactNode, useMemo, useEffect, useState } from 'react';
 import { Box, Flex, VStack, Button, Text, Spacer } from '@chakra-ui/react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -11,12 +11,29 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const current = location.pathname;
+  const [llmStatus, setLlmStatus] = useState<'ok' | 'ng' | 'disabled'>('disabled');
 
   useEffect(() => {
     if (!sessionStorage.getItem('adminLoggedIn')) {
       navigate('/admin/login');
     }
   }, [navigate]);
+
+  useEffect(() => {
+    fetch('/llm/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (!s.enabled) {
+          setLlmStatus('disabled');
+          return;
+        }
+        fetch('/llm/settings/test', { method: 'POST' })
+          .then((res) => res.json())
+          .then((res) => setLlmStatus(res.status === 'ok' ? 'ok' : 'ng'))
+          .catch(() => setLlmStatus('ng'));
+      })
+      .catch(() => setLlmStatus('ng'));
+  }, []);
 
   const navItems = useMemo(
     () => [
@@ -36,41 +53,56 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Flex align="stretch" gap={4} height="100vh" px={{ base: 2, md: 3 }}>
+    <Flex direction="column" height="100vh">
       <Box
-        as="nav"
-        minW={{ base: '160px', md: '200px' }}
-        position="sticky"
-        top={0}
-        alignSelf="flex-start"
-        maxH="100vh"
-        overflowY="auto"
+        textAlign="center"
+        color="white"
+        bg={llmStatus === 'ok' ? 'green.500' : llmStatus === 'ng' ? 'red.500' : 'gray.500'}
+        py={1}
+        fontSize="sm"
       >
-        <VStack align="stretch" spacing={2} height="100%">
-          <Text fontSize="sm" color="gray.500" mb={1}>
-            管理メニュー
-          </Text>
-          {navItems.map((item) => {
-            const active = current === item.to;
-            return (
-              <Button
-                key={item.to}
-                as={RouterLink}
-                to={item.to}
-                justifyContent="flex-start"
-                variant={active ? 'solid' : 'ghost'}
-                colorScheme="primary"
-              >
-                {item.label}
-              </Button>
-            );
-          })}
-          <Spacer />
-        </VStack>
+        {llmStatus === 'ok'
+          ? 'LLM接続中'
+          : llmStatus === 'ng'
+            ? 'LLM接続エラー'
+            : 'LLM無効'}
       </Box>
-      <Box flex="1" minW={0}>
-        {children}
-      </Box>
+      <Flex align="stretch" gap={4} flex="1" px={{ base: 2, md: 3 }}>
+        <Box
+          as="nav"
+          minW={{ base: '160px', md: '200px' }}
+          position="sticky"
+          top={0}
+          alignSelf="flex-start"
+          maxH="100vh"
+          overflowY="auto"
+        >
+          <VStack align="stretch" spacing={2} height="100%">
+            <Text fontSize="sm" color="gray.500" mb={1}>
+              管理メニュー
+            </Text>
+            {navItems.map((item) => {
+              const active = current === item.to;
+              return (
+                <Button
+                  key={item.to}
+                  as={RouterLink}
+                  to={item.to}
+                  justifyContent="flex-start"
+                  variant={active ? 'solid' : 'ghost'}
+                  colorScheme="primary"
+                >
+                  {item.label}
+                </Button>
+              );
+            })}
+            <Spacer />
+          </VStack>
+        </Box>
+        <Box flex="1" minW={0}>
+          {children}
+        </Box>
+      </Flex>
     </Flex>
   );
 }

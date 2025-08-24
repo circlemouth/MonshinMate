@@ -107,7 +107,11 @@ class LLMGateway:
         missing_item_label: str,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """不足項目に対する追質問文を生成する（スタブ）。
+        """不足項目に対する追質問文を生成する。
+
+        リモート LLM が有効かつ接続設定がある場合は HTTP 経由で生成を試み、
+        失敗した場合は例外を送出する。例外は呼び出し側で捕捉し、
+        LLM を用いないフォールバック処理へ委ねる。
 
         Args:
             missing_item_id: 不足している項目ID。
@@ -118,9 +122,89 @@ class LLMGateway:
             str: 追質問の本文。
         """
         start = time.perf_counter()
+        s = self.settings
+        if s.enabled and s.base_url:
+            try:
+                timeout = httpx.Timeout(15.0)
+                if s.provider == "ollama":
+                    url = s.base_url.rstrip("/") + "/api/chat"
+                    messages = []
+                    if s.system_prompt:
+                        messages.append({"role": "system", "content": s.system_prompt})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"{missing_item_label}について詳しく教えてください。",
+                        }
+                    )
+                    payload: dict[str, Any] = {
+                        "model": s.model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": s.temperature},
+                    }
+                    r = httpx.post(url, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    content = (
+                        (data.get("message") or {}).get("content")
+                        or data.get("response")
+                        or ""
+                    )
+                    if content:
+                        duration = (time.perf_counter() - start) * 1000
+                        logging.getLogger("llm").info(
+                            "generate_question(remote) item=%s took_ms=%.1f",
+                            missing_item_id,
+                            duration,
+                        )
+                        return content
+                    raise RuntimeError("empty response from ollama")
+                else:
+                    url = s.base_url.rstrip("/") + "/v1/chat/completions"
+                    headers = {"Content-Type": "application/json"}
+                    if s.api_key:
+                        headers["Authorization"] = f"Bearer {s.api_key}"
+                    messages = []
+                    if s.system_prompt:
+                        messages.append({"role": "system", "content": s.system_prompt})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": f"{missing_item_label}について詳しく教えてください。",
+                        }
+                    )
+                    payload = {
+                        "model": s.model,
+                        "messages": messages,
+                        "temperature": s.temperature,
+                        "stream": False,
+                    }
+                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    choices = data.get("choices") or []
+                    if choices:
+                        msg = choices[0].get("message") or {}
+                        content = msg.get("content") or ""
+                        if content:
+                            duration = (time.perf_counter() - start) * 1000
+                            logging.getLogger("llm").info(
+                                "generate_question(remote) item=%s took_ms=%.1f",
+                                missing_item_id,
+                                duration,
+                            )
+                            return content
+                    raise RuntimeError("empty response from lm studio")
+            except Exception as e:  # noqa: BLE001 - 呼び出し側でフォールバック
+                logging.getLogger("llm").exception(
+                    "remote_generate_question_failed: %s", e
+                )
+                raise
+
+        # ---- フォールバック（ローカルスタブ） ----
         suffix = ""
         if context:
-            # 簡易に既知情報の要約を1行付与（トークンスピル抑制のため最小限）。
             keys = ", ".join(list(context.keys())[:3])
             if keys:
                 suffix = f"（参考: 入力済み項目={keys}）"
