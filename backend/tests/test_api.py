@@ -5,6 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.main import app, on_startup  # type: ignore[import]
 from app.db import get_session as db_get_session
+from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
 
 
@@ -165,13 +166,13 @@ def test_llm_question_loop() -> None:
     session_id = res.json()["id"]
 
     q1 = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"][0]
-    assert q1["id"] == "onset"
+    assert q1["id"] == "llm_1"
     client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": "onset", "answer": "昨日から"},
+        json={"item_id": q1["id"], "answer": "昨日から"},
     )
     q2 = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"][0]
-    assert q2["id"] == "followup"
+    assert q2["id"] == "llm_2"
 
 
 def test_followup_session_flow() -> None:
@@ -189,10 +190,10 @@ def test_followup_session_flow() -> None:
     q_res = client.post(f"/sessions/{session_id}/llm-questions")
     assert q_res.status_code == 200
     q = q_res.json()["questions"][0]
-    assert q["id"] == "onset"
+    assert q["id"] == "llm_1"
     client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": "onset", "answer": "昨日から"},
+        json={"item_id": q["id"], "answer": "昨日から"},
     )
     fin = client.post(f"/sessions/{session_id}/finalize")
     assert fin.status_code == 200
@@ -451,3 +452,102 @@ def test_llm_followup_disabled_by_template() -> None:
     q_res = client.post(f"/sessions/{session_id}/llm-questions").json()
     assert q_res["questions"] == []
     client.delete("/questionnaires/nofup?visit_type=initial")
+
+
+def test_llm_followup_max_questions() -> None:
+    """テンプレートで設定した追加質問数の上限が反映されることを確認する。"""
+    on_startup()
+    client.post(
+        "/questionnaires",
+        json={
+            "id": "maxq",
+            "visit_type": "initial",
+            "items": [
+                {"id": "symptom", "label": "症状は？", "type": "string", "required": True}
+            ],
+            "llm_followup_enabled": True,
+            "llm_followup_max_questions": 2,
+        },
+    )
+    res = client.post(
+        "/sessions",
+        json={
+            "patient_name": "上限太郎",
+            "dob": "2000-01-01",
+            "visit_type": "initial",
+            "answers": {"symptom": "痛み"},
+            "questionnaire_id": "maxq",
+        },
+    )
+    session_id = res.json()["id"]
+    q1 = client.post(f"/sessions/{session_id}/llm-questions").json()
+    assert len(q1["questions"]) == 1
+    q2 = client.post(f"/sessions/{session_id}/llm-questions").json()
+    assert len(q2["questions"]) == 1
+    q3 = client.post(f"/sessions/{session_id}/llm-questions").json()
+    assert q3["questions"] == []
+    client.delete("/questionnaires/maxq?visit_type=initial")
+
+
+def test_followup_prompt_api() -> None:
+    """追加質問プロンプトの取得・保存とセッション反映を確認する。"""
+    on_startup()
+    client.post(
+        "/questionnaires",
+        json={
+            "id": "adv",
+            "visit_type": "initial",
+            "items": [],
+            "llm_followup_enabled": True,
+            "llm_followup_max_questions": 1,
+        },
+    )
+    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial")
+    assert res.json()["prompt"] == DEFAULT_FOLLOWUP_PROMPT
+    assert res.json()["enabled"] is False
+    client.post(
+        "/questionnaires/adv/followup-prompt",
+        json={
+            "visit_type": "initial",
+            "prompt": "{max_questions}個以内で返答",
+            "enabled": True,
+        },
+    )
+    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial")
+    assert res.json()["prompt"] == "{max_questions}個以内で返答"
+    assert res.json()["enabled"] is True
+    res = client.post(
+        "/sessions",
+        json={
+            "patient_name": "太郎",
+            "dob": "2000-01-01",
+            "visit_type": "initial",
+            "answers": {},
+            "questionnaire_id": "adv",
+        },
+    )
+    sid = res.json()["id"]
+    rec = db_get_session(sid)
+    assert rec["followup_prompt"] == "{max_questions}個以内で返答"
+    client.post(
+        "/questionnaires/adv/followup-prompt",
+        json={
+            "visit_type": "initial",
+            "prompt": "ignored",
+            "enabled": False,
+        },
+    )
+    res = client.post(
+        "/sessions",
+        json={
+            "patient_name": "次郎",
+            "dob": "2000-01-01",
+            "visit_type": "initial",
+            "answers": {},
+            "questionnaire_id": "adv",
+        },
+    )
+    sid = res.json()["id"]
+    rec = db_get_session(sid)
+    assert rec["followup_prompt"] == DEFAULT_FOLLOWUP_PROMPT
+    client.delete("/questionnaires/adv?visit_type=initial")

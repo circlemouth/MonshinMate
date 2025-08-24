@@ -28,6 +28,8 @@ import {
   CardHeader,
   CardBody,
   SimpleGrid,
+  NumberInput,
+  NumberInputField,
   useDisclosure,
   Modal,
   ModalOverlay,
@@ -52,11 +54,16 @@ interface Item {
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
+const DEFAULT_FOLLOWUP_PROMPT = '上記の回答を踏まえ、追加で確認すべき質問を最大{max_questions}個、日本語でJSON配列のみで返してください。';
+
 /** テンプレート管理画面。 */
 export default function AdminTemplates() {
   const [items, setItems] = useState<Item[]>([]);
   const [initialPrompt, setInitialPrompt] = useState<string>("");
   const [followupPrompt, setFollowupPrompt] = useState<string>("");
+  const [initialFollowupPrompt, setInitialFollowupPrompt] = useState<string>("");
+  const [followupFollowupPrompt, setFollowupFollowupPrompt] = useState<string>("");
+  const [followupAdvanced, setFollowupAdvanced] = useState<boolean>(false);
   const [newItem, setNewItem] = useState<{
     label: string;
     type: string;
@@ -90,6 +97,8 @@ export default function AdminTemplates() {
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
   const [llmAvailable, setLlmAvailable] = useState<boolean>(false);
   const [llmFollowupEnabled, setLlmFollowupEnabled] = useState<boolean>(true);
+  const [initialLlmMax, setInitialLlmMax] = useState<number>(5);
+  const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
   const isDirtyRef = useRef<boolean>(false);
   const markDirty = () => {
     isDirtyRef.current = true;
@@ -199,7 +208,20 @@ export default function AdminTemplates() {
     return () => {
       clearTimeout(handler);
     };
-  }, [items, initialPrompt, followupPrompt, initialEnabled, followupEnabled, llmFollowupEnabled, isLoading]);
+  }, [
+    items,
+    initialPrompt,
+    followupPrompt,
+    initialFollowupPrompt,
+    followupFollowupPrompt,
+    followupAdvanced,
+    initialEnabled,
+    followupEnabled,
+    llmFollowupEnabled,
+    initialLlmMax,
+    followupLlmMax,
+    isLoading,
+  ]);
 
   const loadTemplates = (id: string) => {
     setIsLoading(true);
@@ -208,7 +230,9 @@ export default function AdminTemplates() {
       fetch(`/questionnaires/${id}/template?visit_type=followup`).then((r) => r.json()),
       fetch(`/questionnaires/${id}/summary-prompt?visit_type=initial`).then((r) => r.json()),
       fetch(`/questionnaires/${id}/summary-prompt?visit_type=followup`).then((r) => r.json()),
-    ]).then(([init, follow, pInit, pFollow]) => {
+      fetch(`/questionnaires/${id}/followup-prompt?visit_type=initial`).then((r) => r.json()),
+      fetch(`/questionnaires/${id}/followup-prompt?visit_type=followup`).then((r) => r.json()),
+    ]).then(([init, follow, pInit, pFollow, fInit, fFollow]) => {
       const map = new Map<string, Item>();
       (init.items || []).forEach((it: any) => map.set(it.id, { ...it, use_initial: true, use_followup: false }));
       (follow.items || []).forEach((it: any) => {
@@ -225,7 +249,12 @@ export default function AdminTemplates() {
       setFollowupPrompt(pFollow?.prompt || "");
       setInitialEnabled(!!pInit?.enabled);
       setFollowupEnabled(!!pFollow?.enabled);
+      setInitialFollowupPrompt(fInit?.prompt || DEFAULT_FOLLOWUP_PROMPT);
+      setFollowupFollowupPrompt(fFollow?.prompt || DEFAULT_FOLLOWUP_PROMPT);
+      setFollowupAdvanced(!!fInit?.enabled || !!fFollow?.enabled);
       setLlmFollowupEnabled(init?.llm_followup_enabled !== false);
+      setInitialLlmMax(init?.llm_followup_max_questions ?? 5);
+      setFollowupLlmMax(follow?.llm_followup_max_questions ?? 5);
       setPreviewAnswers({});
       setSaveStatus('idle'); // ロード完了時はidleに
       setIsLoading(false);
@@ -312,12 +341,12 @@ export default function AdminTemplates() {
       await fetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems, llm_followup_enabled: llmFollowupEnabled }),
+        body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems, llm_followup_enabled: llmFollowupEnabled, llm_followup_max_questions: initialLlmMax }),
       });
       await fetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems, llm_followup_enabled: llmFollowupEnabled }),
+        body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems, llm_followup_enabled: llmFollowupEnabled, llm_followup_max_questions: followupLlmMax }),
       });
       // サマリー用プロンプトも保存（有効/無効を含む）
       await fetch(`/questionnaires/${templateId}/summary-prompt`, {
@@ -329,6 +358,16 @@ export default function AdminTemplates() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: 'followup', prompt: followupPrompt || '', enabled: followupEnabled }),
+      });
+      await fetch(`/questionnaires/${templateId}/followup-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_type: 'initial', prompt: initialFollowupPrompt || DEFAULT_FOLLOWUP_PROMPT, enabled: followupAdvanced }),
+      });
+      await fetch(`/questionnaires/${templateId}/followup-prompt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_type: 'followup', prompt: followupFollowupPrompt || DEFAULT_FOLLOWUP_PROMPT, enabled: followupAdvanced }),
       });
 
       if (!templates.some((t) => t.id === templateId)) {
@@ -625,10 +664,51 @@ export default function AdminTemplates() {
             >
               回答終了後にLLMによるフォローアップ質問を行う
             </Checkbox>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mt={3}>
+              <FormControl isDisabled={!llmFollowupEnabled || !llmAvailable}>
+                <FormLabel>初診 最大質問数</FormLabel>
+                <NumberInput min={0} value={initialLlmMax} onChange={(v) => { setInitialLlmMax(Number(v)); markDirty(); }}>
+                  <NumberInputField />
+                </NumberInput>
+              </FormControl>
+              <FormControl isDisabled={!llmFollowupEnabled || !llmAvailable}>
+                <FormLabel>再診 最大質問数</FormLabel>
+                <NumberInput min={0} value={followupLlmMax} onChange={(v) => { setFollowupLlmMax(Number(v)); markDirty(); }}>
+                  <NumberInputField />
+                </NumberInput>
+              </FormControl>
+            </SimpleGrid>
             {!llmAvailable && (
               <Text fontSize="sm" color="gray.500" mt={2}>
                 LLMによる追加質問は、LLM設定が有効かつ疎通テストが成功している場合のみオンにできます。
               </Text>
+            )}
+            <Checkbox mt={3} isChecked={followupAdvanced} isDisabled={!llmFollowupEnabled || !llmAvailable} onChange={(e) => { setFollowupAdvanced(e.target.checked); markDirty(); }}>
+              アドバンストモード（プロンプトを編集）
+            </Checkbox>
+            {followupAdvanced && (
+              <Box mt={3}>
+                <Text fontSize="sm" color="gray.600" mb={2}>
+                  LLMは追加質問をJSON配列のみで返す必要があります。<br />
+                  <code>{'{max_questions}'}</code> は最大質問数に置換されます。
+                </Text>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                  <FormControl>
+                    <FormLabel>初診用プロンプト</FormLabel>
+                    <Textarea rows={4} value={initialFollowupPrompt} onChange={(e) => { setInitialFollowupPrompt(e.target.value); markDirty(); }} />
+                    <Button size="sm" mt={1} onClick={() => { setInitialFollowupPrompt(DEFAULT_FOLLOWUP_PROMPT); markDirty(); }}>
+                      初期値に戻す
+                    </Button>
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel>再診用プロンプト</FormLabel>
+                    <Textarea rows={4} value={followupFollowupPrompt} onChange={(e) => { setFollowupFollowupPrompt(e.target.value); markDirty(); }} />
+                    <Button size="sm" mt={1} onClick={() => { setFollowupFollowupPrompt(DEFAULT_FOLLOWUP_PROMPT); markDirty(); }}>
+                      初期値に戻す
+                    </Button>
+                  </FormControl>
+                </SimpleGrid>
+              </Box>
             )}
           </Box>
           {/* サマリー生成設定＋プロンプト編集 */}
