@@ -426,3 +426,10 @@
 ## 48. オフラインリセットスクリプトでのユーザーテーブル列保証（2025-11-06）
 - [x] `backend/tools/reset_admin_password.py` の `ensure_users_table` が `password_updated_at` と `totp_changed_at` カラムを既存DBに追加するよう修正。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`
+
+## 49. TOTPシークレット暗号化（2025-08-24）
+- [x] 共通キーによる暗号化を導入し、`update_totp_secret` で暗号化保存。
+- [x] `get_user_by_username` で復号処理を追加。
+- [x] 既存レコード暗号化スクリプト `backend/tools/encrypt_totp_secrets.py` を追加。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`.
+- [x] テスト: `backend/tests/test_admin.py` で暗号化後の動作を確認。

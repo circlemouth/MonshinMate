@@ -120,3 +120,21 @@ python backend/tools/reset_admin_password.py --password "NewStrongPass123"
 注意:
 - APIとしては公開していません（開発時のローカル確認のみを想定）。
 - 運用環境での取り扱いは院内ポリシーに従い、アクセス権限・保管期間・持ち出し制限などに留意してください。
+
+
+## 9. 付録：TOTPシークレット暗号化への移行手順
+
+既存DBでTOTPを利用している場合、バージョン更新後はシークレットを暗号化する必要があります。
+以下の手順で移行してください。
+
+1. 暗号化キーを生成し環境変数 `TOTP_ENC_KEY` に設定します。例:
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   export TOTP_ENC_KEY="<生成したキー>"
+   ```
+2. バックエンドディレクトリで次のスクリプトを実行します。
+   ```bash
+   python backend/tools/encrypt_totp_secrets.py
+   ```
+   既に暗号化済みのレコードは自動的にスキップされます。
+3. サービスを再起動し、通常どおりログインできることを確認します。

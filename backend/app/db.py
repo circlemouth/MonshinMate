@@ -10,14 +10,23 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, UTC
 from typing import Any, Iterable
+import base64
 
 from passlib.context import CryptContext
+from cryptography.fernet import Fernet, InvalidToken
 import logging
 
 
 DEFAULT_DB_PATH = os.environ.get(
     "MONSHINMATE_DB", str(Path(__file__).resolve().parent / "app.sqlite3")
 )
+
+# TOTPシークレット暗号化用のキー
+FERNET_KEY = os.getenv(
+    "TOTP_ENC_KEY",
+    base64.urlsafe_b64encode(b"0" * 32).decode(),
+)
+fernet = Fernet(FERNET_KEY)
 
 # パスワードハッシュ化のコンテキスト
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -628,7 +637,13 @@ def get_user_by_username(username: str, db_path: str = DEFAULT_DB_PATH) -> dict[
     """ユーザー名でユーザー情報を取得する。"""
     conn = get_conn(db_path)
     try:
-        return conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+        if row and row.get("totp_secret"):
+            try:
+                row["totp_secret"] = fernet.decrypt(row["totp_secret"].encode()).decode()
+            except InvalidToken:
+                pass
+        return row
     finally:
         conn.close()
 
@@ -675,11 +690,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def update_totp_secret(username: str, secret: str, db_path: str = DEFAULT_DB_PATH) -> None:
     """TOTPシークレットを保存する。"""
-    # 注意: 本番環境ではシークレットを暗号化して保存することが望ましい
     conn = get_conn(db_path)
     try:
         now = datetime.now(UTC).isoformat()
-        conn.execute("UPDATE users SET totp_secret = ?, totp_changed_at = ? WHERE username = ?", (secret, now, username))
+        encrypted = fernet.encrypt(secret.encode()).decode()
+        conn.execute("UPDATE users SET totp_secret = ?, totp_changed_at = ? WHERE username = ?", (encrypted, now, username))
         conn.commit()
         logging.getLogger("security").warning(
             "totp_secret_updated username=%s db=%s",

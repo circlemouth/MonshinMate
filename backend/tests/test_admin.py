@@ -13,7 +13,7 @@ if DB_PATH.exists():
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.main import app
-from app.db import get_user_by_username, init_db
+from app.db import get_user_by_username, init_db, fernet
 
 client = TestClient(app)
 
@@ -43,6 +43,11 @@ def test_admin_auth_flow():
     assert admin_user is not None
     secret = admin_user["totp_secret"]
     assert secret is not None
+    conn = sqlite3.connect(DB_PATH)
+    raw_secret = conn.execute("SELECT totp_secret FROM users WHERE username='admin'").fetchone()[0]
+    conn.close()
+    assert raw_secret != secret
+    assert fernet.decrypt(raw_secret.encode()).decode() == secret
     totp = pyotp.TOTP(secret)
     res = client.post("/admin/totp/verify", json={"totp_code": totp.now()})
     assert res.status_code == 200
