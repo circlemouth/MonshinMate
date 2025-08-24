@@ -404,3 +404,8 @@
   - 変更: `food_metal_allergies` を複数選択（なし/卵/乳/小麦/そば/落花生/えび/かに/金属（ニッケル等）/その他/不明＋自由入力）。
   - 備考: 郵便番号/住所/電話番号は引き続き自由記述のまま。
   - 実装: `backend/app/main.py` の `on_startup()` で投入する既定テンプレの項目定義を更新。
+
+## 45. 問診テンプレ編集画面の「問診項目を追加」ボタンを一覧下部へ移動（2025-11-03）
+- [x] 「問診項目を追加」ボタンを項目一覧表の直下に配置し、最終行の下から新規項目を追加しやすくした。
+  - 変更: `frontend/src/pages/AdminTemplates.tsx` のボタン位置と文言を調整。
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
