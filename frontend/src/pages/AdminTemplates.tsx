@@ -202,8 +202,8 @@ export default function AdminTemplates() {
       setIsLoading(false);
       // 初期ロード・テンプレ切替直後は dirty をリセット
       isDirtyRef.current = false;
-      // 先頭の項目を選択状態に設定
-      setSelectedItemId(arr.length > 0 ? arr[0].id : null);
+      // 項目が選択された状態にはしない
+      setSelectedItemId(null);
     });
   };
 
@@ -609,7 +609,7 @@ export default function AdminTemplates() {
 
           {/* 問診内容（ラベルのみ）の簡易一覧 */}
           <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
-            <Heading size="sm" mb={2}>問診内容（ラベルのみ一覧）</Heading>
+            <Heading size="sm" mb={2}>問診内容一覧(クリックして編集)</Heading>
             {items.length === 0 ? (
               <Text color="gray.500" fontSize="sm">項目がありません。</Text>
             ) : (
@@ -761,6 +761,13 @@ export default function AdminTemplates() {
                                               />
                                             </HStack>
                                           ))}
+                                          <Checkbox
+                                            isChecked={item.allow_freetext}
+                                            onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
+                                            alignSelf="flex-end"
+                                          >
+                                            フリーテキスト入力を許可
+                                          </Checkbox>
                                           <Button
                                             size="sm"
                                             py={2}
@@ -768,31 +775,15 @@ export default function AdminTemplates() {
                                               const newOptions = [...(item.options || []), ''];
                                               updateItem(idx, 'options', newOptions);
                                             }}
+                                            isDisabled={item.options?.some(opt => !opt.trim())}
+                                            alignSelf="flex-end"
                                           >
                                             選択肢を追加
                                           </Button>
                                         </VStack>
                                       </Box>
                                     )}
-                                    {(item.type === 'multi' || item.type === 'single') && (
-                                      <Checkbox
-                                        isChecked={item.allow_freetext}
-                                        onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
-                                      >
-                                        自由記述を許可
-                                      </Checkbox>
-                                    )}
-                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
-                                      <Checkbox isChecked={item.required} onChange={(e) => updateItem(idx, 'required', e.target.checked)}>
-                                        必須
-                                      </Checkbox>
-                                      <Checkbox isChecked={item.use_initial} onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}>
-                                        初診
-                                      </Checkbox>
-                                      <Checkbox isChecked={item.use_followup} onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}>
-                                        再診
-                                      </Checkbox>
-                                    </SimpleGrid>
+                                    
                                   </VStack>
                                 </Box>
                               </Td>
@@ -897,7 +888,7 @@ export default function AdminTemplates() {
                     isChecked={newItem.allow_freetext}
                     onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
                   >
-                    自由記述を許可
+                    フリーテキスト入力を
                   </Checkbox>
                 )}
                 <HStack>

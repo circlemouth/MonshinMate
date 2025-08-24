@@ -164,7 +164,7 @@ export default function AdminSecurity() {
           <VStack align="stretch" spacing={3} mt={4}>
             <Text fontSize="sm">Authenticator アプリでQRをスキャンし、6桁コードを入力して有効化します。</Text>
             <HStack>
-              <Button onClick={startSetup} isLoading={loading} colorScheme="primary">QRを表示</Button>
+              <Button onClick={startSetup} isLoading={loading} colorScheme="primary">QRコードを表示</Button>
             </HStack>
             {qrUrl && (
               <VStack>
