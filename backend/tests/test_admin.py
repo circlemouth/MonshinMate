@@ -1,6 +1,7 @@
 from pathlib import Path
 import sys
 import time
+import sqlite3
 
 from fastapi.testclient import TestClient
 import pyotp
@@ -12,7 +13,7 @@ if DB_PATH.exists():
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.main import app
-from app.db import get_user_by_username
+from app.db import get_user_by_username, init_db
 
 client = TestClient(app)
 
@@ -87,3 +88,30 @@ def test_admin_auth_flow():
     res = client.post("/admin/login/totp", json={"totp_code": totp.now()})
     assert res.status_code == 200
     assert res.json()["status"] == "ok"
+
+
+def test_totp_flag_without_secret_disables_totp_on_login():
+    """TOTPフラグが有効なのにシークレットが無い場合、自動で無効化されることを確認。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+    local_client = TestClient(app)
+    # DB初期化のためにステータス確認
+    res = local_client.get("/admin/auth/status")
+    assert res.status_code == 200
+
+    # シークレット無しでTOTPフラグだけ有効化
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE users SET is_totp_enabled=1, totp_mode='login_and_reset', totp_secret=NULL WHERE username='admin'"
+    )
+    conn.commit()
+    conn.close()
+
+    # 正しいパスワードでログインすると自動的にTOTPが無効化される
+    res = local_client.post("/admin/login", json={"password": "admin"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"
+    admin_user = get_user_by_username("admin")
+    assert admin_user["is_totp_enabled"] == 0
+    assert admin_user["totp_mode"] == "off"

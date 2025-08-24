@@ -716,17 +716,20 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
         conn.close()
 
 def get_totp_mode(username: str, db_path: str = DEFAULT_DB_PATH) -> str:
-    """TOTP モードを返す。カラム未設定や NULL の場合は is_totp_enabled から推定。"""
+    """TOTP モードを返す。シークレット未設定の場合は 'off' を返す。"""
     conn = get_conn(db_path)
     try:
-        row = conn.execute("SELECT is_totp_enabled, totp_mode FROM users WHERE username=?", (username,)).fetchone()
-        if not row:
-            return 'off'
-        mode = row.get('totp_mode')
-        if mode in ('off', 'reset_only', 'login_and_reset'):
+        row = conn.execute(
+            "SELECT is_totp_enabled, totp_mode, totp_secret FROM users WHERE username=?",
+            (username,),
+        ).fetchone()
+        if not row or not row.get("totp_secret"):
+            return "off"
+        mode = row.get("totp_mode")
+        if mode in ("off", "reset_only", "login_and_reset"):
             return mode
         # 後方互換: is_totp_enabled が 1 なら login_and_reset とみなす
-        return 'login_and_reset' if int(row.get('is_totp_enabled') or 0) else 'off'
+        return "login_and_reset" if int(row.get("is_totp_enabled") or 0) else "off"
     finally:
         conn.close()
 
