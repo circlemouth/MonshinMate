@@ -36,7 +36,7 @@ import {
   ModalCloseButton,
   ModalBody,
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
 
 interface Item {
@@ -85,6 +85,8 @@ export default function AdminTemplates() {
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
   const [previewFreeTexts, setPreviewFreeTexts] = useState<Record<string, string>>({});
+  // 一覧テーブルで選択中の項目ID（選択された項目のみ編集UIを表示する）
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   // サマリー設定（初診/再診）
   const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
@@ -96,6 +98,8 @@ export default function AdminTemplates() {
   const markDirty = () => {
     isDirtyRef.current = true;
   };
+  // ドラッグ&ドロップ用状態
+  const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/questionnaires')
@@ -186,7 +190,8 @@ export default function AdminTemplates() {
           map.set(it.id, { ...it, use_initial: false, use_followup: true });
         }
       });
-      setItems(Array.from(map.values()));
+      const arr = Array.from(map.values());
+      setItems(arr);
       setInitialPrompt(pInit?.prompt || "");
       setFollowupPrompt(pFollow?.prompt || "");
       setInitialEnabled(!!pInit?.enabled);
@@ -197,16 +202,19 @@ export default function AdminTemplates() {
       setIsLoading(false);
       // 初期ロード・テンプレ切替直後は dirty をリセット
       isDirtyRef.current = false;
+      // 先頭の項目を選択状態に設定
+      setSelectedItemId(arr.length > 0 ? arr[0].id : null);
     });
   };
 
   const addItem = () => {
     if (!newItem.label) return;
     const options = ['multi'].includes(newItem.type) ? newItem.options.filter((v) => v) : undefined;
+    const newId = crypto.randomUUID();
     setItems([
       ...items,
       {
-        id: crypto.randomUUID(),
+        id: newId,
         label: newItem.label,
         type: newItem.type,
         required: newItem.required,
@@ -217,6 +225,7 @@ export default function AdminTemplates() {
       },
     ]);
     markDirty();
+    setSelectedItemId(newId);
     setNewItem({
       label: '',
       type: 'string',
@@ -240,8 +249,8 @@ export default function AdminTemplates() {
   const changeItemType = (index: number, newType: string) => {
     const target = items[index];
     const next: Item = { ...target, type: newType } as Item;
-    if (newType === 'multi') {
-      // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
+    if (newType === 'multi' || newType === 'single') {
+      // 複数/単一選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
       next.allow_freetext = true;
       next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
     } else {
@@ -256,8 +265,12 @@ export default function AdminTemplates() {
   };
 
   const removeItem = (index: number) => {
+    const removedId = items[index]?.id;
     const updated = items.filter((_, i) => i !== index);
     setItems(updated);
+    if (removedId && removedId === selectedItemId) {
+      setSelectedItemId(updated.length > 0 ? updated[0].id : null);
+    }
     markDirty();
   };
 
@@ -342,6 +355,23 @@ export default function AdminTemplates() {
     } catch (error) {
       console.error('Failed to duplicate template:', error);
       alert('テンプレートの複製に失敗しました。');
+    }
+  };
+
+  const resetDefaultTemplate = async () => {
+    if (window.confirm('デフォルトテンプレートを初期状態に戻します。よろしいですか？')) {
+      try {
+        await fetch('/questionnaires/default/reset', { method: 'POST' });
+        alert('デフォルトテンプレートをリセットしました。');
+        if (templateId === 'default') {
+          loadTemplates('default');
+        } else {
+          setTemplateId('default');
+        }
+      } catch (error) {
+        console.error('Failed to reset default template:', error);
+        alert('リセットに失敗しました。');
+      }
     }
   };
 
@@ -474,15 +504,25 @@ export default function AdminTemplates() {
                           >
                             複製
                           </Button>
-                          <Button
-                            size="xs"
-                            colorScheme="red"
-                            variant="outline"
-                            onClick={() => deleteTemplateApi(t.id)}
-                            isDisabled={t.id === 'default'}
-                          >
-                            削除
-                          </Button>
+                          {t.id === 'default' ? (
+                            <Button
+                              size="xs"
+                              colorScheme="orange"
+                              variant="outline"
+                              onClick={() => resetDefaultTemplate()}
+                            >
+                              リセット
+                            </Button>
+                          ) : (
+                            <Button
+                              size="xs"
+                              colorScheme="red"
+                              variant="outline"
+                              onClick={() => deleteTemplateApi(t.id)}
+                            >
+                              削除
+                            </Button>
+                          )}
                         </HStack>
                       </Td>
                     </Tr>
@@ -567,103 +607,207 @@ export default function AdminTemplates() {
             </SimpleGrid>
           </Box>
 
-          {/* カード表示（常時） */}
-          <VStack align="stretch" spacing={4}>
-            {items.map((item, idx) => (
-              <Card key={item.id} variant="outline">
-                <CardHeader pb={2}>
-                  <VStack align="stretch" spacing={2}>
-                    <FormControl>
-                      <FormLabel m={0}>問診内容</FormLabel>
-                      <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
-                    </FormControl>
-                    <HStack justifyContent="space-between">
-                      <FormControl maxW="360px">
-                        <FormLabel m={0}>入力方法</FormLabel>
-                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                          <option value="string">テキスト</option>
-                          <option value="multi">複数選択</option>
-                          <option value="yesno">はい/いいえ</option>
-                          <option value="date">日付</option>
-                        </Select>
-                      </FormControl>
-                      <IconButton
-                        aria-label="項目を削除"
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        variant="outline"
-                        onClick={() => removeItem(idx)}
-                      />
-                    </HStack>
-                  </VStack>
-                </CardHeader>
-                <CardBody pt={2}>
-                  {['multi'].includes(item.type) && (
-                    <Box mb={3}>
-                      <FormLabel m={0} mb={2}>
-                        選択肢
-                      </FormLabel>
-                      <VStack align="stretch">
-                        {item.options?.map((opt, optIdx) => (
-                          <HStack key={optIdx}>
-                            <Input
-                              value={opt}
-                              onChange={(e) => {
-                                const newOptions = [...(item.options || [])];
-                                newOptions[optIdx] = e.target.value;
-                                updateItem(idx, 'options', newOptions);
-                              }}
-                            />
-                            <IconButton
-                              aria-label="選択肢を削除"
-                              icon={<DeleteIcon />}
-                              size="sm"
-                              onClick={() => {
-                                const newOptions = [...(item.options || [])];
-                                newOptions.splice(optIdx, 1);
-                                updateItem(idx, 'options', newOptions);
-                              }}
-                            />
-                          </HStack>
-                        ))}
-                        <Button
-                          size="sm"
-                          py={2}
-                          onClick={() => {
-                            const newOptions = [...(item.options || []), ''];
-                            updateItem(idx, 'options', newOptions);
-                          }}
-                        >
-                          選択肢を追加
-                        </Button>
-                      </VStack>
-                    </Box>
-                  )}
-                  {item.type === 'multi' && (
-                    <Checkbox
-                      isChecked={item.allow_freetext}
-                      onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
-                      mb={3}
-                    >
-                      自由記述を許可
-                    </Checkbox>
-                  )}
-                  <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
-                    <Checkbox isChecked={item.required} onChange={(e) => updateItem(idx, 'required', e.target.checked)}>
-                      必須
-                    </Checkbox>
-                    <Checkbox isChecked={item.use_initial} onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}>
-                      初診
-                    </Checkbox>
-                    <Checkbox isChecked={item.use_followup} onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}>
-                      再診
-                    </Checkbox>
-                  </SimpleGrid>
-                </CardBody>
-              </Card>
-            ))}
-          </VStack>
+          {/* 問診内容（ラベルのみ）の簡易一覧 */}
+          <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
+            <Heading size="sm" mb={2}>問診内容（ラベルのみ一覧）</Heading>
+            {items.length === 0 ? (
+              <Text color="gray.500" fontSize="sm">項目がありません。</Text>
+            ) : (
+              <TableContainer overflowX="auto">
+                <Table size="sm" minWidth="100%" variant="striped" colorScheme="gray">
+                  <Thead>
+                    <Tr>
+                      <Th width="2.5rem">並び替え</Th>
+                      <Th>問診内容</Th>
+                      <Th textAlign="center" width="4.5rem">必須</Th>
+                      <Th textAlign="center" width="4.5rem">初診</Th>
+                      <Th textAlign="center" width="4.5rem">再診</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {items.map((item, idx) => {
+                      const selected = item.id === selectedItemId;
+                      return (
+                        <>
+                          <Tr
+                            key={`label-only-${item.id}`}
+                            draggable
+                            onDragStart={(e) => {
+                              setDraggingItemId(item.id);
+                              // 軽量のドラッグ画像に
+                              try { e.dataTransfer?.setData('text/plain', item.id); } catch {}
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              const el = e.currentTarget as HTMLElement;
+                              const rect = el.getBoundingClientRect();
+                              const halfway = rect.top + rect.height / 2;
+                              const isTop = e.clientY < halfway;
+                              el.style.borderTop = isTop ? '3px solid #3182ce' : '';
+                              el.style.borderBottom = !isTop ? '3px solid #3182ce' : '';
+                            }}
+                            onDragLeave={(e) => {
+                              const el = e.currentTarget as HTMLElement;
+                              el.style.borderTop = '';
+                              el.style.borderBottom = '';
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const el = e.currentTarget as HTMLElement;
+                              const rect = el.getBoundingClientRect();
+                              const halfway = rect.top + rect.height / 2;
+                              const isTop = e.clientY < halfway;
+                              el.style.borderTop = '';
+                              el.style.borderBottom = '';
+                              const fromId = draggingItemId || e.dataTransfer?.getData('text/plain');
+                              if (!fromId || fromId === item.id) return;
+                              const fromIndex = items.findIndex((it) => it.id === fromId);
+                              let toIndex = idx + (isTop ? 0 : 1);
+                              // 調整: 元の位置を取り除く前提で、後方へ挿入時のインデックスずれを補正
+                              if (fromIndex < toIndex) toIndex -= 1;
+                              if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+                              const newArr = [...items];
+                              const [moved] = newArr.splice(fromIndex, 1);
+                              newArr.splice(toIndex, 0, moved);
+                              setItems(newArr);
+                              markDirty();
+                            }}
+                            onDragEnd={() => setDraggingItemId(null)}
+                            bg={selected ? 'blue.100' : undefined}
+                            _hover={{ bg: selected ? 'blue.200' : 'gray.100' }}
+                            sx={{ cursor: 'pointer' }}
+                            onClick={() => setSelectedItemId(selected ? null : item.id)}
+                          >
+                            <Td width="1%" pr={1}>
+                              <HStack spacing={1} color="gray.500">
+                                <DragHandleIcon aria-label="ドラッグして並び替え" cursor="grab" />
+                              </HStack>
+                            </Td>
+                            <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">{item.label}</Td>
+                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                isChecked={item.required}
+                                size="sm"
+                                onChange={(e) => updateItem(idx, 'required', e.target.checked)}
+                              />
+                            </Td>
+                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                isChecked={item.use_initial}
+                                size="sm"
+                                onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                              />
+                            </Td>
+                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox
+                                isChecked={item.use_followup}
+                                size="sm"
+                                onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                              />
+                            </Td>
+                          </Tr>
+                          {selected && (
+                            <Tr key={`editor-${item.id}`}>
+                              <Td colSpan={5} p={0}>
+                                <Box p={4} bg="gray.50" borderTopWidth="1px">
+                                  <VStack align="stretch" spacing={3}>
+                                    <FormControl>
+                                      <FormLabel m={0}>問診内容</FormLabel>
+                                      <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
+                                    </FormControl>
+                                    <HStack justifyContent="space-between">
+                                      <FormControl maxW="360px">
+                                        <FormLabel m={0}>入力方法</FormLabel>
+                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
+                                          <option value="string">テキスト</option>
+                                          <option value="single">単一選択</option>
+                                          <option value="multi">複数選択</option>
+                                          <option value="yesno">はい/いいえ</option>
+                                          <option value="date">日付</option>
+                                        </Select>
+                                      </FormControl>
+                                      <IconButton
+                                        aria-label="項目を削除"
+                                        icon={<DeleteIcon />}
+                                        size="sm"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        onClick={() => removeItem(idx)}
+                                      />
+                                    </HStack>
+                                    {['multi', 'single'].includes(item.type) && (
+                                      <Box>
+                                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
+                                        <VStack align="stretch">
+                                          {item.options?.map((opt, optIdx) => (
+                                            <HStack key={optIdx}>
+                                              <Input
+                                                value={opt}
+                                                onChange={(e) => {
+                                                  const newOptions = [...(item.options || [])];
+                                                  newOptions[optIdx] = e.target.value;
+                                                  updateItem(idx, 'options', newOptions);
+                                                }}
+                                              />
+                                              <IconButton
+                                                aria-label="選択肢を削除"
+                                                icon={<DeleteIcon />}
+                                                size="sm"
+                                                onClick={() => {
+                                                  const newOptions = [...(item.options || [])];
+                                                  newOptions.splice(optIdx, 1);
+                                                  updateItem(idx, 'options', newOptions);
+                                                }}
+                                              />
+                                            </HStack>
+                                          ))}
+                                          <Button
+                                            size="sm"
+                                            py={2}
+                                            onClick={() => {
+                                              const newOptions = [...(item.options || []), ''];
+                                              updateItem(idx, 'options', newOptions);
+                                            }}
+                                          >
+                                            選択肢を追加
+                                          </Button>
+                                        </VStack>
+                                      </Box>
+                                    )}
+                                    {(item.type === 'multi' || item.type === 'single') && (
+                                      <Checkbox
+                                        isChecked={item.allow_freetext}
+                                        onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
+                                      >
+                                        自由記述を許可
+                                      </Checkbox>
+                                    )}
+                                    <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={3}>
+                                      <Checkbox isChecked={item.required} onChange={(e) => updateItem(idx, 'required', e.target.checked)}>
+                                        必須
+                                      </Checkbox>
+                                      <Checkbox isChecked={item.use_initial} onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}>
+                                        初診
+                                      </Checkbox>
+                                      <Checkbox isChecked={item.use_followup} onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}>
+                                        再診
+                                      </Checkbox>
+                                    </SimpleGrid>
+                                  </VStack>
+                                </Box>
+                              </Td>
+                            </Tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
+
+          {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
           {!isAddingNewItem && (
             <Button onClick={() => setIsAddingNewItem(true)} mt={6} colorScheme="teal">
@@ -691,7 +835,7 @@ export default function AdminTemplates() {
                     value={newItem.type}
                     onChange={(e) => {
                       const t = e.target.value;
-                      if (t === 'multi') {
+                      if (t === 'multi' || t === 'single') {
                         setNewItem({
                           ...newItem,
                           type: t,
@@ -704,6 +848,7 @@ export default function AdminTemplates() {
                     }}
                   >
                     <option value="string">テキスト</option>
+                    <option value="single">単一選択</option>
                     <option value="multi">複数選択</option>
                     <option value="yesno">はい/いいえ</option>
                     <option value="date">日付</option>

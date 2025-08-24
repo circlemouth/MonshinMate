@@ -143,7 +143,7 @@ def on_startup() -> None:
         },
         {
             "id": "past_diseases",
-            "label": "今までにかかったことのある病気を選んでください。（複数選択可）",
+            "label": "今までにかかったことのある病気を選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -161,7 +161,7 @@ def on_startup() -> None:
         },
         {
             "id": "surgeries",
-            "label": "手術歴があれば選んでください。（複数選択可）",
+            "label": "手術歴があれば選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -176,7 +176,7 @@ def on_startup() -> None:
         },
         {
             "id": "current_medications",
-            "label": "現在服用している処方薬があれば選んでください。（複数選択可）",
+            "label": "現在服用している処方薬があれば選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -192,7 +192,7 @@ def on_startup() -> None:
         },
         {
             "id": "supplements_otc",
-            "label": "現在使用しているサプリメント/市販薬があれば選んでください。（複数選択可）",
+            "label": "現在使用しているサプリメント/市販薬があれば選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -208,7 +208,7 @@ def on_startup() -> None:
         },
         {
             "id": "drug_allergies",
-            "label": "薬剤アレルギーがあれば選んでください。（複数選択可）",
+            "label": "薬剤アレルギーがあれば選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -226,7 +226,7 @@ def on_startup() -> None:
         },
         {
             "id": "food_metal_allergies",
-            "label": "食物・金属などのアレルギーがあれば選んでください。（複数選択可）",
+            "label": "食物・金属などのアレルギーがあれば選んでください。",
             "type": "multi",
             "options": [
                 "なし",
@@ -512,6 +512,196 @@ def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplica
                 cfg.get("prompt", ""),
                 cfg.get("enabled", False),
             )
+    return {"status": "ok"}
+
+
+@app.post("/questionnaires/default/reset")
+def reset_default_template() -> dict:
+    """デフォルトテンプレートを初期状態に戻す。"""
+    # on_startup と同じロジックで初期テンプレートを上書き
+    initial_items = [
+        # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
+        {"id": "sex", "label": "性別を選んでください。", "type": "single", "options": ["男性", "女性", "その他"], "required": True},
+        {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
+        {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
+        {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
+        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "symptom_location",
+            "label": "症状があるのはどこですか？",
+            "type": "multi",
+            "options": ["顔", "首", "体", "手足"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "onset",
+            "label": "いつから症状がありますか？",
+            "type": "single",
+            "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "prior_treatments",
+            "label": "その症状について、これまで治療を受けたことがあれば、受けた治療を選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "外用薬",
+                "内服薬",
+                "注射",
+                "手術",
+                "リハビリ",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "past_diseases",
+            "label": "今までにかかったことのある病気を選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "高血圧",
+                "糖尿病",
+                "脂質異常症",
+                "喘息",
+                "アトピー性皮膚炎",
+                "花粉症",
+                "蕁麻疹",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "surgeries",
+            "label": "手術歴があれば選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "皮膚科関連手術",
+                "整形外科手術",
+                "腹部手術",
+                "心臓手術",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "current_medications",
+            "label": "現在服用している処方薬があれば選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ステロイド外用",
+                "抗菌薬（内服/外用）",
+                "抗ヒスタミン薬",
+                "NSAIDs",
+                "免疫抑制薬",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "supplements_otc",
+            "label": "現在使用しているサプリメント/市販薬があれば選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ビタミン剤",
+                "漢方",
+                "鎮痛解熱薬",
+                "かゆみ止め",
+                "保湿剤",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "drug_allergies",
+            "label": "薬剤アレルギーがあれば選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ペニシリン系",
+                "セフェム系",
+                "マクロライド系",
+                "ニューキノロン系",
+                "NSAIDs",
+                "局所麻酔",
+                "その他",
+                "不明",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "food_metal_allergies",
+            "label": "食物・金属などのアレルギーがあれば選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "卵",
+                "乳",
+                "小麦",
+                "そば",
+                "落花生",
+                "えび",
+                "かに",
+                "金属（ニッケル等）",
+                "その他",
+                "不明",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "smoking",
+            "label": "タバコは吸いますか？",
+            "type": "single",
+            "options": ["吸わない", "時々吸う", "毎日吸う"],
+            "required": False,
+        },
+        {
+            "id": "alcohol",
+            "label": "お酒はのみますか？",
+            "type": "single",
+            "options": ["のまない", "ときどき", "よく飲む"],
+            "required": False,
+        },
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
+    ]
+    followup_items = [
+        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "symptom_location",
+            "label": "症状があるのはどこですか？",
+            "type": "multi",
+            "options": ["顔", "首", "体", "手足"],
+            "allow_freetext": True,
+            "required": True,
+        },
+        {
+            "id": "onset",
+            "label": "いつからの症状ですか？",
+            "type": "single",
+            "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+            "allow_freetext": True,
+            "required": True,
+        },
+    ]
+    upsert_template("default", "initial", initial_items, llm_followup_enabled=True)
+    upsert_template("default", "followup", followup_items, llm_followup_enabled=True)
+    # 関連するサマリープロンプトも初期化
+    upsert_summary_prompt("default", "initial", "", False)
+    upsert_summary_prompt("default", "followup", "", False)
     return {"status": "ok"}
 
 
