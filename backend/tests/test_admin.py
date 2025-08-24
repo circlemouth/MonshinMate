@@ -2,6 +2,8 @@ from pathlib import Path
 import sys
 import time
 import sqlite3
+import os
+import json
 
 from fastapi.testclient import TestClient
 import pyotp
@@ -13,7 +15,7 @@ if DB_PATH.exists():
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 from app.main import app
-from app.db import get_user_by_username, init_db, fernet
+from app.db import get_user_by_username, init_db, fernet, verify_password
 
 client = TestClient(app)
 
@@ -120,3 +122,54 @@ def test_totp_flag_without_secret_disables_totp_on_login():
     admin_user = get_user_by_username("admin")
     assert admin_user["is_totp_enabled"] == 0
     assert admin_user["totp_mode"] == "off"
+
+
+def test_legacy_admin_password_ignored():
+    """旧 app_settings の admin_password が無視されることを確認。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    # 旧設定に admin_password を残した状態で DB を準備
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("CREATE TABLE app_settings (id TEXT PRIMARY KEY, json TEXT NOT NULL)")
+    conn.execute(
+        "INSERT INTO app_settings(id, json) VALUES('global', ?)",
+        ('{"admin_password":"should_not_use"}',),
+    )
+    conn.commit()
+    conn.close()
+
+    os.environ.pop("ADMIN_PASSWORD", None)
+    init_db()
+    local_client = TestClient(app)
+    res = local_client.get("/admin/auth/status")
+    assert res.status_code == 200
+    # admin ユーザーはデフォルトパスワードで作成されるはず
+    user = get_user_by_username("admin")
+    assert verify_password("admin", user["hashed_password"])
+    # 旧設定は削除されている
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
+    conn.close()
+    settings = json.loads(row[0]) if row else {}
+    assert "admin_password" not in settings
+
+
+def test_admin_password_endpoint_rejects_when_flag_stale():
+    """is_initial_password フラグが誤って残っていても直接更新できないことを確認。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+    local_client = TestClient(app)
+    # 初回パスワード変更
+    res = local_client.post("/admin/password", json={"password": "ChangeOnce1"})
+    assert res.status_code == 200
+    # フラグだけを再び1に戻す
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "UPDATE users SET is_initial_password=1 WHERE username='admin'"
+    )
+    conn.commit()
+    conn.close()
+    # 直接更新は拒否される
+    res = local_client.post("/admin/password", json={"password": "ChangeTwice2"})
+    assert res.status_code == 403

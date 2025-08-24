@@ -433,3 +433,9 @@
 - [x] 既存レコード暗号化スクリプト `backend/tools/encrypt_totp_secrets.py` を追加。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`.
 - [x] テスト: `backend/tests/test_admin.py` で暗号化後の動作を確認。
+
+## 50. 管理者パスワード初期化処理の安全性向上（2025-11-07）
+- [x] 旧 `app_settings.admin_password` を起動時に無視し削除するよう変更。
+- [x] `POST /admin/password` は現パスワードが環境既定値と一致する場合のみ受け付けるよう修正。
+- [x] テスト: `backend/tests/test_admin.py` にレガシー設定無視とフラグ不整合時の拒否を追加。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
