@@ -20,7 +20,7 @@ export default function AdminLogin() {
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const navigate = useNavigate();
-  const { checkAuthStatus } = useAuth();
+  const { checkAuthStatus, isTotpEnabled } = useAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -99,9 +99,15 @@ export default function AdminLogin() {
               />
             </FormControl>
             <HStack justify="space-between" width="100%">
-              <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm">
-                パスワードをお忘れですか？
-              </Button>
+              {isTotpEnabled ? (
+                <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm">
+                  パスワードをお忘れですか？
+                </Button>
+              ) : (
+                <Text fontSize="xs" color="gray.600">
+                  パスワードを忘れた場合は <code>backend/tools/reset_admin_password.py</code> を実行してください
+                </Text>
+              )}
               <Button onClick={handleLogin} colorScheme="primary" isLoading={loading}>
                 ログイン
               </Button>
@@ -136,10 +142,16 @@ export default function AdminLogin() {
         {error && (
           <VStack spacing={1}>
             <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
-            <Text fontSize="xs" color="gray.600">
-              パスワードをお忘れの場合は二段階認証によるリセットへ進んでください：
-              <Button as={RouterLink} to="/admin/password/reset" variant="link" size="xs" colorScheme="primary">パスワードをリセット</Button>
-            </Text>
+            {isTotpEnabled ? (
+              <Text fontSize="xs" color="gray.600">
+                パスワードをお忘れの場合は二段階認証によるリセットへ進んでください：
+                <Button as={RouterLink} to="/admin/password/reset" variant="link" size="xs" colorScheme="primary">パスワードをリセット</Button>
+              </Text>
+            ) : (
+              <Text fontSize="xs" color="gray.600">
+                パスワードを忘れた場合はシステム初期化スクリプト <code>backend/tools/reset_admin_password.py</code> を実行してください。
+              </Text>
+            )}
           </VStack>
         )}
       </VStack>
