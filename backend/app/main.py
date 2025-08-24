@@ -17,7 +17,7 @@ import pyotp
 import qrcode
 from jose import JWTError, jwt
 
-from .llm_gateway import LLMGateway, LLMSettings
+from .llm_gateway import LLMGateway, LLMSettings, DEFAULT_FOLLOWUP_PROMPT
 from .db import (
     init_db,
     upsert_template,
@@ -30,6 +30,9 @@ from .db import (
     upsert_summary_prompt,
     get_summary_prompt,
     get_summary_config,
+    upsert_followup_prompt,
+    get_followup_prompt,
+    get_followup_config,
     save_llm_settings,
     load_llm_settings,
     save_app_settings,
@@ -281,8 +284,22 @@ def on_startup() -> None:
             "required": True,
         },
     ]
-    upsert_template("default", "initial", initial_items, llm_followup_enabled=True)
-    upsert_template("default", "followup", followup_items, llm_followup_enabled=True)
+    upsert_template(
+        "default",
+        "initial",
+        initial_items,
+        llm_followup_enabled=True,
+        llm_followup_max_questions=5,
+    )
+    upsert_template(
+        "default",
+        "followup",
+        followup_items,
+        llm_followup_enabled=True,
+        llm_followup_max_questions=5,
+    )
+    upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
+    upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
     # 保存済みの LLM 設定があれば読み込む
     try:
         stored = load_llm_settings()
@@ -399,6 +416,7 @@ class Questionnaire(BaseModel):
     # 互換のため GET はクエリで受けるが、保存系は明示
     items: list[QuestionnaireItem]
     llm_followup_enabled: bool = True
+    llm_followup_max_questions: int = 5
 
 
 class QuestionnaireUpsert(BaseModel):
@@ -408,10 +426,19 @@ class QuestionnaireUpsert(BaseModel):
     visit_type: str
     items: list[QuestionnaireItem]
     llm_followup_enabled: bool = True
+    llm_followup_max_questions: int = 5
 
 
 class SummaryPromptUpsert(BaseModel):
     """サマリー生成プロンプト保存用モデル。"""
+
+    visit_type: str
+    prompt: str
+    enabled: bool = False
+
+
+class FollowupPromptUpsert(BaseModel):
+    """追加質問生成プロンプト保存用モデル。"""
 
     visit_type: str
     prompt: str
@@ -451,17 +478,20 @@ def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questi
                 {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
             ],
             "llm_followup_enabled": True,
+            "llm_followup_max_questions": 5,
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
         return Questionnaire(
             id=questionnaire_id,
             items=[QuestionnaireItem(**it) for it in default_tpl["items"]],
             llm_followup_enabled=bool(default_tpl.get("llm_followup_enabled", True)),
+            llm_followup_max_questions=int(default_tpl.get("llm_followup_max_questions", 5)),
         )
     return Questionnaire(
         id=tpl["id"],
         items=[QuestionnaireItem(**it) for it in tpl["items"]],
         llm_followup_enabled=bool(tpl.get("llm_followup_enabled", True)),
+        llm_followup_max_questions=int(tpl.get("llm_followup_max_questions", 5)),
     )
 
 
@@ -479,6 +509,7 @@ def upsert_questionnaire(payload: QuestionnaireUpsert) -> dict:
         visit_type=payload.visit_type,
         items=[it.model_dump() for it in payload.items],
         llm_followup_enabled=payload.llm_followup_enabled,
+        llm_followup_max_questions=payload.llm_followup_max_questions,
     )
     return {"status": "ok"}
 
@@ -504,6 +535,7 @@ def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplica
                 vt,
                 tpl["items"],
                 llm_followup_enabled=tpl.get("llm_followup_enabled", True),
+                llm_followup_max_questions=tpl.get("llm_followup_max_questions", 5),
             )
         cfg = get_summary_config(questionnaire_id, vt)
         if cfg:
@@ -698,11 +730,25 @@ def reset_default_template() -> dict:
             "required": True,
         },
     ]
-    upsert_template("default", "initial", initial_items, llm_followup_enabled=True)
-    upsert_template("default", "followup", followup_items, llm_followup_enabled=True)
+    upsert_template(
+        "default",
+        "initial",
+        initial_items,
+        llm_followup_enabled=True,
+        llm_followup_max_questions=5,
+    )
+    upsert_template(
+        "default",
+        "followup",
+        followup_items,
+        llm_followup_enabled=True,
+        llm_followup_max_questions=5,
+    )
     # 関連するサマリープロンプトも初期化
     upsert_summary_prompt("default", "initial", "", False)
     upsert_summary_prompt("default", "followup", "", False)
+    upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
+    upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
     return {"status": "ok"}
 
 
@@ -730,6 +776,29 @@ def get_summary_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
 def upsert_summary_prompt_api(questionnaire_id: str, payload: SummaryPromptUpsert) -> dict:
     """テンプレート/受診種別ごとのサマリープロンプトを保存する。"""
     upsert_summary_prompt(questionnaire_id, payload.visit_type, payload.prompt, payload.enabled)
+    return {"status": "ok"}
+
+
+@app.get("/questionnaires/{questionnaire_id}/followup-prompt")
+def get_followup_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
+    """テンプレート/受診種別ごとの追加質問生成プロンプトを取得する。"""
+    cfg = get_followup_config(questionnaire_id, visit_type)
+    if cfg is None:
+        cfg = {"prompt": DEFAULT_FOLLOWUP_PROMPT, "enabled": False}
+    return {
+        "id": questionnaire_id,
+        "visit_type": visit_type,
+        "prompt": cfg.get("prompt", ""),
+        "enabled": bool(cfg.get("enabled", False)),
+    }
+
+
+@app.post("/questionnaires/{questionnaire_id}/followup-prompt")
+def upsert_followup_prompt_api(questionnaire_id: str, payload: FollowupPromptUpsert) -> dict:
+    """テンプレート/受診種別ごとの追加質問プロンプトを保存する。"""
+    upsert_followup_prompt(
+        questionnaire_id, payload.visit_type, payload.prompt, payload.enabled
+    )
     return {"status": "ok"}
 
 
@@ -1311,7 +1380,9 @@ class Session(BaseModel):
     attempt_counts: dict[str, int] = {}
     additional_questions_used: int = 0
     max_additional_questions: int = 5
+    pending_llm_questions: list[dict[str, Any]] = []
     finalized_at: datetime | None = None
+    followup_prompt: str = DEFAULT_FOLLOWUP_PROMPT
 
 
 class SessionCreateResponse(BaseModel):
@@ -1381,6 +1452,12 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     for k, v in list(req.answers.items()):
         # 空欄の回答は「該当なし」に統一
         req.answers[k] = StructuredContextManager.normalize_answer(v)
+    cfg = (
+        get_followup_config(questionnaire_id, req.visit_type)
+        or get_followup_config("default", req.visit_type)
+        or {}
+    )
+    prompt_text = cfg.get("prompt") if cfg.get("enabled") else DEFAULT_FOLLOWUP_PROMPT
     session = Session(
         id=session_id,
         patient_name=req.patient_name,
@@ -1389,7 +1466,12 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         questionnaire_id=questionnaire_id,
         template_items=items,
         answers=req.answers,
-        max_additional_questions=5 if tpl.get("llm_followup_enabled", True) else 0,
+        max_additional_questions=(
+            int(tpl.get("llm_followup_max_questions", 5))
+            if tpl.get("llm_followup_enabled", True)
+            else 0
+        ),
+        followup_prompt=prompt_text,
     )
     fsm = SessionFSM(session, llm_gateway)
     fsm.update_completion()

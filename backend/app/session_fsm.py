@@ -39,52 +39,32 @@ class SessionFSM:
         if self.session.additional_questions_used >= self.session.max_additional_questions:
             return None
 
-        next_item_id: str | None = None
-        next_item_label: str | None = None
-        if "onset" not in self.session.answers:
-            next_item_id = "onset"
-            next_item_label = "発症時期"
-        elif "chief_complaint" not in self.session.answers:
-            next_item_id = "chief_complaint"
-            next_item_label = "主訴"
+        if not self.session.pending_llm_questions:
+            try:
+                texts = self.llm_gateway.generate_followups(
+                    context=self.session.answers,
+                    max_questions=self.session.max_additional_questions,
+                    prompt=self.session.followup_prompt,
+                )
+                self.session.pending_llm_questions = [
+                    {
+                        "id": f"llm_{i + 1}",
+                        "text": t,
+                        "expected_input_type": "string",
+                        "priority": 1,
+                    }
+                    for i, t in enumerate(texts)
+                ]
+            except Exception:
+                logging.getLogger("llm").exception("generate_followups_failed")
+                self.session.pending_llm_questions = []
 
-        if next_item_id is not None:
-            count = self.session.attempt_counts.get(next_item_id, 0)
-            if count >= 3:
-                next_item_id = None
-
-        if next_item_id is None:
-            if "followup" in self.session.answers:
-                return None
-            self.session.additional_questions_used += 1
-            return {
-                "id": "followup",
-                "text": "追加質問: 他に伝えておきたいことはありますか？",
-                "expected_input_type": "string",
-                "priority": 1,
-            }
-
-        self.session.attempt_counts[next_item_id] = (
-            self.session.attempt_counts.get(next_item_id, 0) + 1
-        )
-        try:
-            text = self.llm_gateway.generate_question(
-                missing_item_id=next_item_id,
-                missing_item_label=next_item_label,
-                context=self.session.answers,
-            )
-        except Exception:
-            # 通信エラー等で生成に失敗した場合は追質問をスキップする
-            logging.getLogger("llm").exception("generate_question_failed")
+        if not self.session.pending_llm_questions:
             return None
 
+        question = self.session.pending_llm_questions.pop(0)
         self.session.additional_questions_used += 1
-        return {
-            "id": next_item_id,
-            "text": text,
-            "expected_input_type": "string",
-            "priority": 1,
-        }
+        return question
 
     def update_completion(self) -> None:
         """外部から明示的に完了状態を更新したい場合に使用。"""

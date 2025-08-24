@@ -56,15 +56,22 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 visit_type TEXT NOT NULL,
                 items_json TEXT NOT NULL,
                 llm_followup_enabled INTEGER NOT NULL DEFAULT 1,
+                llm_followup_max_questions INTEGER NOT NULL DEFAULT 5,
                 PRIMARY KEY (id, visit_type)
             )
             """
         )
 
-        # 既存DB向けに llm_followup_enabled カラムを後付け（存在時は無視）
+        # 既存DB向けにカラムを後付け（存在時は無視）
         try:
             conn.execute(
                 "ALTER TABLE questionnaire_templates ADD COLUMN llm_followup_enabled INTEGER NOT NULL DEFAULT 1"
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                "ALTER TABLE questionnaire_templates ADD COLUMN llm_followup_max_questions INTEGER NOT NULL DEFAULT 5"
             )
         except Exception:
             pass
@@ -73,6 +80,19 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS summary_prompts (
+                id TEXT NOT NULL,
+                visit_type TEXT NOT NULL,
+                prompt_text TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (id, visit_type)
+            )
+            """
+        )
+
+        # 追加質問プロンプト（テンプレート/種別ごとに管理）
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS followup_prompts (
                 id TEXT NOT NULL,
                 visit_type TEXT NOT NULL,
                 prompt_text TEXT NOT NULL,
@@ -105,10 +125,17 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 attempt_counts_json TEXT,
                 additional_questions_used INTEGER NOT NULL,
                 max_additional_questions INTEGER NOT NULL,
+                followup_prompt TEXT,
                 finalized_at TEXT
             )
             """
         )
+        try:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN followup_prompt TEXT"
+            )
+        except Exception:
+            pass
 
         # 回答履歴
         conn.execute(
@@ -350,6 +377,7 @@ def upsert_template(
     visit_type: str,
     items: Iterable[dict[str, Any]],
     llm_followup_enabled: bool = True,
+    llm_followup_max_questions: int = 5,
     db_path: str = DEFAULT_DB_PATH,
 ) -> None:
     conn = get_conn(db_path)
@@ -357,11 +385,17 @@ def upsert_template(
         items_json = json.dumps(list(items), ensure_ascii=False)
         conn.execute(
             """
-            INSERT INTO questionnaire_templates (id, visit_type, items_json, llm_followup_enabled)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(id, visit_type) DO UPDATE SET items_json=excluded.items_json, llm_followup_enabled=excluded.llm_followup_enabled
+            INSERT INTO questionnaire_templates (id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(id, visit_type) DO UPDATE SET items_json=excluded.items_json, llm_followup_enabled=excluded.llm_followup_enabled, llm_followup_max_questions=excluded.llm_followup_max_questions
             """,
-            (template_id, visit_type, items_json, 1 if llm_followup_enabled else 0),
+            (
+                template_id,
+                visit_type,
+                items_json,
+                1 if llm_followup_enabled else 0,
+                llm_followup_max_questions,
+            ),
         )
         conn.commit()
     finally:
@@ -374,7 +408,7 @@ def get_template(
     conn = get_conn(db_path)
     try:
         row = conn.execute(
-            "SELECT id, visit_type, items_json, llm_followup_enabled FROM questionnaire_templates WHERE id=? AND visit_type=?",
+            "SELECT id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions FROM questionnaire_templates WHERE id=? AND visit_type=?",
             (template_id, visit_type),
         ).fetchone()
         if not row:
@@ -384,6 +418,7 @@ def get_template(
             "visit_type": row["visit_type"],
             "items": json.loads(row["items_json"]) or [],
             "llm_followup_enabled": bool(row.get("llm_followup_enabled", 1)),
+            "llm_followup_max_questions": int(row.get("llm_followup_max_questions", 5)),
         }
     finally:
         conn.close()
@@ -425,6 +460,31 @@ def upsert_summary_prompt(
         conn.close()
 
 
+def upsert_followup_prompt(
+    template_id: str,
+    visit_type: str,
+    prompt_text: str,
+    enabled: bool = False,
+    db_path: str = DEFAULT_DB_PATH,
+) -> None:
+    """追加質問生成用プロンプトと有効設定を保存/更新する。"""
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO followup_prompts (id, visit_type, prompt_text, enabled)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(id, visit_type) DO UPDATE SET
+                prompt_text=excluded.prompt_text,
+                enabled=excluded.enabled
+            """,
+            (template_id, visit_type, prompt_text, 1 if enabled else 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def get_summary_config(
     template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
 ) -> dict[str, Any] | None:
@@ -440,6 +500,30 @@ def get_summary_config(
         return {"prompt": row["prompt_text"], "enabled": bool(row["enabled"])}
     finally:
         conn.close()
+
+
+def get_followup_config(
+    template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
+) -> dict[str, Any] | None:
+    """追加質問生成用プロンプトと有効設定を取得する。未設定なら None。"""
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute(
+            "SELECT prompt_text, enabled FROM followup_prompts WHERE id=? AND visit_type=?",
+            (template_id, visit_type),
+        ).fetchone()
+        if not row:
+            return None
+        return {"prompt": row["prompt_text"], "enabled": bool(row["enabled"])}
+    finally:
+        conn.close()
+
+
+def get_followup_prompt(
+    template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH
+) -> str | None:
+    cfg = get_followup_config(template_id, visit_type, db_path)
+    return cfg["prompt"] if cfg else None
 
 
 def get_summary_prompt(
@@ -534,8 +618,8 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             INSERT INTO sessions (
                 id, patient_name, dob, visit_type, questionnaire_id, answers_json,
                 summary, remaining_items_json, completion_status, attempt_counts_json,
-                additional_questions_used, max_additional_questions, finalized_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                additional_questions_used, max_additional_questions, followup_prompt, finalized_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 patient_name=excluded.patient_name,
                 dob=excluded.dob,
@@ -548,6 +632,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 attempt_counts_json=excluded.attempt_counts_json,
                 additional_questions_used=excluded.additional_questions_used,
                 max_additional_questions=excluded.max_additional_questions,
+                followup_prompt=excluded.followup_prompt,
                 finalized_at=excluded.finalized_at
             """,
             (
@@ -563,6 +648,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 json.dumps(session.attempt_counts, ensure_ascii=False),
                 session.additional_questions_used,
                 session.max_additional_questions,
+                session.followup_prompt,
                 session.finalized_at.isoformat() if session.finalized_at else None,
             ),
         )

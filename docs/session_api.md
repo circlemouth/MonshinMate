@@ -24,7 +24,7 @@
 - **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。空欄で送信された回答は「該当なし」として保存される。
 
 ## POST /sessions/{session_id}/llm-questions
-- **概要**: 不足項目に応じた追加質問を生成する。
+- **概要**: これまでの回答を踏まえて追加質問を生成する。
 - **レスポンス**:
   - `questions` (array): 追加質問リスト。各要素は `id`, `text`, `expected_input_type`, `priority` を含む。
 - **備考**: LLM が無効化されている場合は常に空配列を返す。
@@ -117,7 +117,7 @@
 ## GET /questionnaires/{id}/template?visit_type=initial|followup
 - **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
 - **レスポンス**:
-  - `Questionnaire`: `{ id: string, items: QuestionnaireItem[], llm_followup_enabled: bool }`
+  - `Questionnaire`: `{ id: string, items: QuestionnaireItem[], llm_followup_enabled: bool, llm_followup_max_questions: int }`
 
 ## GET /questionnaires
 - **概要**: 登録済みテンプレートの一覧（id と visit_type）を返す。
@@ -132,6 +132,21 @@
   - `items` (QuestionnaireItem[]): 項目配列
     - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when? }`
   - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
+  - `llm_followup_max_questions` (int): 生成する追加質問の最大個数
+- **レスポンス**:
+  - `{ status: "ok" }`
+
+## GET /questionnaires/{id}/followup-prompt?visit_type=initial|followup
+- **概要**: 追加質問生成に使用するプロンプトと有効フラグを取得する。
+- **レスポンス**:
+  - `{ id: string, visit_type: string, prompt: string, enabled: bool }`
+
+## POST /questionnaires/{id}/followup-prompt
+- **概要**: 追加質問生成用プロンプトを保存する。
+- **リクエストボディ**:
+  - `visit_type` (str): `initial` | `followup`
+  - `prompt` (str): プロンプト文字列。`{max_questions}` が上限値に置換される。
+  - `enabled` (bool): アドバンストモードでのプロンプト使用を有効にするか。
 - **レスポンス**:
   - `{ status: "ok" }`
 

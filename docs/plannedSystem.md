@@ -41,7 +41,8 @@
 - **設定**：`.env` に API 秘密鍵、DB 接続、LLM エンドポイント、管理 UI 認証情報に加え、**MASTER_ADMIN_USERNAME / MASTER_ADMIN_PASSWORD**（環境変数でハードコードされるマスターアカウント）および OIDC 設定（`OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `ALLOWED_EMAIL_DOMAIN`）を定義。マスターアカウントでログインした場合のみ、その他の管理アカウントの作成・編集・削除を許可する。
 
 #### 1.4 既定運用パラメータ
-- **追加質問上限**：セッション合計 N=5（項目ごとの再質問は既定 3 回）。
+- **追加質問上限**：テンプレートごとに設定可能（初診/再診別）。セッション合計は設定値を上限とし、項目ごとの再質問は既定 3 回。
+- **追加質問プロンプト**：デフォルトはシステム固定だが、管理画面のアドバンストモードで編集可能（JSON配列で返答、`{max_questions}` プレースホルダ対応）。
 - **LLM**：timeout=30s、max_tokens=128（いずれも設定で変更可）。
 - **セッション**：アイドル失効 30 分、全体 TTL 24 時間。失効後は自動廃棄（PII 含む一時データを削除）。
 - **バックアップ**：RPO=24 時間、RTO=30 分。保持は日次 14 世代、週次 8 世代、月次 6 ヶ月（≈180 日）。
@@ -51,7 +52,7 @@
 - **MS1 テンプレ整備**：問診テンプレート CRUD と `get_template_for_visit_type` の動作確認（項目型は text/multi/yesno/date）。
   - 補足：システム既定テンプレートのラベルは「質問文形式」（例：主訴は何ですか？、発症時期はいつからですか？）で初期化する。
 - **MS2 セッション基盤**：`SessionFSM` 初期化（`remaining_items`/`completion_status`/`attempt_counts`）、`StructuredContextManager` による永続更新。
-- **MS3 追加質問ループ**：`step("answer")` で回答受領→`LLMGateway.generate_question` による未質問項目の質問生成→`Validator.is_complete` 判定→不足時に `LLMGateway.decide_or_ask` で追質問（項目ごと最大3回・セッションあたりの上限N）。
+- **MS3 追加質問ループ**：`step("answer")` で回答受領→`LLMGateway.generate_followups` により回答全体を基に追加質問を生成→`Validator.is_complete` 判定→不足時に追質問（項目ごと最大3回・セッションあたりの上限N）。
 - **MS4 要約と保存**：必要情報が揃ったら `_finalize_item` を実行し、`collected_data` と `SessionResponse` に反映。全項目完了時にセッション終了。
 - **MS5 フロントエンド**：患者フロー（基本情報＋受診種別→ベース問診→一次送信→追加質問→最終確認→完了）、管理UI（テンプレ編集）。
 - **MS6 ログ/観測性（最小）**：セッション進行ログ、LLM I/O メタ（トークン/所要時間）保存。PII は最小化し、必要に応じマスキング。
@@ -75,7 +76,7 @@
    - `POST /llm/settings/test`：LLM接続テストを実施。
 4) **上限/制御**：
    - 項目ごとの追質問：最大3回（`attempt_counts`）。
-   - セッションの追加質問合計：最大N件（**初期値5**、システム設定で管理）。
+   - セッションの追加質問合計：最大N件（**初期値5**、テンプレート設定で管理）。
    - LLM 応答タイムアウト時は追加質問ステップをスキップし、ベース問診のみで進行可能。
 
 **フロントエンド**

@@ -3,9 +3,16 @@
 from typing import Any
 import time
 import logging
+import json
 
 from pydantic import BaseModel
 import httpx
+
+
+DEFAULT_FOLLOWUP_PROMPT = (
+    "上記の回答を踏まえ、追加で確認すべき質問を最大{max_questions}個、"
+    "日本語でJSON配列のみで返してください。"
+)
 
 
 class LLMSettings(BaseModel):
@@ -214,6 +221,51 @@ class LLMGateway:
             "generate_question item=%s took_ms=%.1f", missing_item_id, duration
         )
         return result
+
+    def generate_followups(
+        self, context: dict[str, Any], max_questions: int, prompt: str | None = None
+    ) -> list[str]:
+        """ユーザー回答全体を基に追加質問を生成する。"""
+        s = self.settings
+        if not s.enabled:
+            return []
+        user_prompt = (prompt or DEFAULT_FOLLOWUP_PROMPT).replace(
+            "{max_questions}", str(max_questions)
+        )
+        if s.base_url:
+            try:
+                timeout = httpx.Timeout(15.0)
+                url = s.base_url.rstrip("/") + "/v1/chat/completions"
+                headers = {"Content-Type": "application/json"}
+                if s.api_key:
+                    headers["Authorization"] = f"Bearer {s.api_key}"
+                messages = []
+                if s.system_prompt:
+                    messages.append({"role": "system", "content": s.system_prompt})
+                messages.append({"role": "user", "content": f"{context}\n{user_prompt}"})
+                payload = {
+                    "model": s.model,
+                    "messages": messages,
+                    "temperature": s.temperature,
+                    "stream": False,
+                }
+                r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                r.raise_for_status()
+                data = r.json()
+                choices = data.get("choices") or []
+                if choices:
+                    content = choices[0].get("message", {}).get("content", "")
+                    arr = json.loads(content)
+                    if isinstance(arr, list):
+                        return [str(x) for x in arr][:max_questions]
+                raise RuntimeError("invalid response")
+            except Exception as e:  # noqa: BLE001
+                logging.getLogger("llm").exception(
+                    "generate_followups_failed: %s", e
+                )
+                raise
+        # スタブ実装：固定的な質問を返す
+        return [f"追加質問{idx + 1}" for idx in range(max_questions)]
 
     def chat(self, message: str) -> str:
         """チャット形式での応答を模擬的に返す。"""
