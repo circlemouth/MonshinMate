@@ -266,33 +266,33 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
 
         conn.commit()
 
+        # --- レガシー設定の整理 ---
+        old_settings_row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
+        if old_settings_row:
+            try:
+                settings = json.loads(old_settings_row["json"])
+                if "admin_password" in settings:
+                    # 旧バージョンの admin_password を無視し、設定から削除する
+                    del settings["admin_password"]
+                    conn.execute(
+                        "UPDATE app_settings SET json = ? WHERE id = 'global'",
+                        (json.dumps(settings, ensure_ascii=False),),
+                    )
+                    conn.commit()
+                    logging.getLogger("security").warning(
+                        "legacy_admin_password_ignored db=%s", db_path
+                    )
+            except (json.JSONDecodeError, KeyError):
+                pass
+
         # --- データ移行と初期ユーザー作成 ---
-        # 'admin' ユーザーが存在しない場合のみ実行
         admin_user = conn.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
         if not admin_user:
-            # 古い app_settings からパスワードを取得
-            old_settings_row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
-            password_to_set = "admin"  # デフォルト
+            password_to_set = "admin"  # 既定値
             is_initial = 1
             seed_source = "default"
-            if old_settings_row:
-                try:
-                    settings = json.loads(old_settings_row["json"])
-                    if "admin_password" in settings:
-                        password_to_set = settings["admin_password"]
-                        # 既に設定されていた場合は初期パスワードではない
-                        is_initial = 0 if password_to_set != "admin" else 1
-                        seed_source = "app_settings"
-                        # 移行したので古い設定から削除
-                        del settings["admin_password"]
-                        conn.execute(
-                            "UPDATE app_settings SET json = ? WHERE id = 'global'",
-                            (json.dumps(settings, ensure_ascii=False),),
-                        )
-                except (json.JSONDecodeError, KeyError):
-                    pass  # JSONが不正な場合はデフォルト値を使う
 
-            # 環境変数も確認
+            # 環境変数からの上書き
             password_from_env = os.getenv("ADMIN_PASSWORD")
             if password_from_env and password_from_env != "admin":
                 password_to_set = password_from_env

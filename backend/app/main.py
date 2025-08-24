@@ -1005,7 +1005,7 @@ def get_admin_auth_status() -> AdminAuthStatus:
         is_default_now = False
 
     result = AdminAuthStatus(
-        is_initial_password=bool(admin_user.get("is_initial_password")) or is_default_now,
+        is_initial_password=is_default_now,
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
         totp_mode=get_totp_mode("admin"),
     )
@@ -1035,7 +1035,7 @@ def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
         is_default_now = verify_password(default_pw, admin_user.get("hashed_password"))
     except Exception:
         is_default_now = False
-    if not (bool(admin_user.get("is_initial_password")) or is_default_now):
+    if not is_default_now:
         raise HTTPException(status_code=403, detail="Direct password change is not allowed. Use reset flow.")
     # 初期セットアップ時の直接更新。監査ログは db.update_password 内で出力される。
     update_password("admin", payload.password)
