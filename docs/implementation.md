@@ -445,3 +445,10 @@
 - [x] 変更（バックエンド）: `/admin/sessions` に検索用クエリパラメータを追加し、DBアクセス関数を拡張。
 - [x] 変更（フロント）: `frontend/src/pages/AdminSessions.tsx` に検索フォームを追加。
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 52. 空欄回答の「該当なし」保存（2025-11-09）
+- [x] 空欄で送信された回答を「該当なし」として保存するように変更。
+  - 変更（バックエンド）: `backend/app/structured_context.py` に回答正規化ロジックを追加。
+  - 変更（バックエンド）: `backend/app/main.py` でセッション作成時にも正規化を適用。
+  - テスト: `backend/tests/test_api.py` に空欄回答保存の確認テストを追加。
+  - ドキュメント更新: `docs/session_api.md`。
