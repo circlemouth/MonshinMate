@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from typing import Any
+import logging
 
 from .validator import Validator
 from .structured_context import StructuredContextManager
@@ -52,9 +53,8 @@ class SessionFSM:
             if count >= 3:
                 next_item_id = None
 
-        self.session.additional_questions_used += 1
-
         if next_item_id is None:
+            self.session.additional_questions_used += 1
             return {
                 "id": "followup",
                 "text": "追加質問: 他に伝えておきたいことはありますか？",
@@ -65,11 +65,18 @@ class SessionFSM:
         self.session.attempt_counts[next_item_id] = (
             self.session.attempt_counts.get(next_item_id, 0) + 1
         )
-        text = self.llm_gateway.generate_question(
-            missing_item_id=next_item_id,
-            missing_item_label=next_item_label,
-            context=self.session.answers,
-        )
+        try:
+            text = self.llm_gateway.generate_question(
+                missing_item_id=next_item_id,
+                missing_item_label=next_item_label,
+                context=self.session.answers,
+            )
+        except Exception:
+            # 通信エラー等で生成に失敗した場合は追質問をスキップする
+            logging.getLogger("llm").exception("generate_question_failed")
+            return None
+
+        self.session.additional_questions_used += 1
         return {
             "id": next_item_id,
             "text": text,
