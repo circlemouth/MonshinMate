@@ -416,3 +416,9 @@
   - 変更: `backend/app/main.py` の `admin_login` で不整合状態を検知し `set_totp_status` により無効化。
   - テスト: `backend/tests/test_admin.py` に再現テストを追加。
   - ドキュメント更新: `docs/admin_system_setup.md` に自動無効化の注意書きを追加。
+
+## 47. 二段階認証無効時のパスワードリセット案内（2025-11-05）
+- [x] TOTP が無効の状態でパスワードリセットページにアクセスすると、二段階認証入力ではなくシステム初期化スクリプトの実行を案内するメッセージを表示。
+  - 変更: `frontend/src/pages/AdminPasswordReset.tsx`
+  - 変更: `frontend/src/pages/AdminLogin.tsx`
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`

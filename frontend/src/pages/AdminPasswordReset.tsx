@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast, PinInput, PinInputField, HStack } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -13,6 +13,30 @@ export default function AdminPasswordReset() {
   const navigate = useNavigate();
   const toast = useToast();
   const { checkAuthStatus, isTotpEnabled, setShowTotpSetup } = useAuth();
+
+  useEffect(() => {
+    checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  if (!isTotpEnabled) {
+    return (
+      <Container centerContent pt={10}>
+        <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
+          <Heading size="lg">パスワードリセット</Heading>
+          <Text>
+            Authenticator を有効にしていないためパスワードリセットは行えません。パスワードを忘れた場合はシステムの初期化が必要です。
+            <br />
+            <code>backend/tools/reset_admin_password.py</code> を実行してください。
+          </Text>
+          <Box mt={4}>
+            <Button as={RouterLink} to="/admin/login" variant="link" size="sm">
+              ログイン画面に戻る
+            </Button>
+          </Box>
+        </VStack>
+      </Container>
+    );
+  }
 
   const handleRequestReset = async () => {
     if (totpCode.length !== 6) {
