@@ -93,6 +93,11 @@
 
 ## GET /admin/sessions
 - **概要**: 保存済みセッションの一覧を取得する。
+- **クエリパラメータ**:
+  - `patient_name` (str, 任意): 患者名（部分一致）
+  - `dob` (str, 任意): 生年月日 (YYYY-MM-DD)
+  - `start_date` (str, 任意): 問診日の開始日 (YYYY-MM-DD)
+  - `end_date` (str, 任意): 問診日の終了日 (YYYY-MM-DD)
 - **レスポンス**:
   - `Array<{ id: string, patient_name: string, dob: string, visit_type: string, finalized_at: string | null }>`
 

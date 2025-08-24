@@ -226,6 +226,44 @@ def test_admin_session_list_and_detail() -> None:
     assert detail["answers"]["chief_complaint"] == "発熱"
 
 
+def test_admin_session_search_filters() -> None:
+    """セッション一覧APIの検索フィルタを確認する。"""
+    on_startup()
+    payload = {
+        "patient_name": "検索花子",
+        "dob": "1990-12-31",
+        "visit_type": "followup",
+        "answers": {"chief_complaint": "咳"},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    session_id = res.json()["id"]
+    fin = client.post(f"/sessions/{session_id}/finalize")
+    assert fin.status_code == 200
+
+    # 正常にヒットする検索
+    list_res = client.get(
+        "/admin/sessions",
+        params={
+            "patient_name": "検索",
+            "dob": "1990-12-31",
+            "start_date": fin.json()["finalized_at"][:10],
+            "end_date": fin.json()["finalized_at"][:10],
+        },
+    )
+    assert list_res.status_code == 200
+    sessions = list_res.json()
+    assert any(s["id"] == session_id for s in sessions)
+
+    # 不一致の検索ではヒットしない
+    nohit_res = client.get(
+        "/admin/sessions",
+        params={"patient_name": "不存在"},
+    )
+    assert nohit_res.status_code == 200
+    assert all(s["id"] != session_id for s in nohit_res.json())
+
+
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
     on_startup()

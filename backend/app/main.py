@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, UTC
 import os
 import io
 
-from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 import sqlite3
 from pydantic import BaseModel
@@ -1483,9 +1483,19 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
 
 
 @app.get("/admin/sessions", response_model=list[SessionSummary])
-def admin_list_sessions() -> list[SessionSummary]:
+def admin_list_sessions(
+    patient_name: str | None = None,
+    dob: str | None = None,
+    start_date: str | None = Query(None, alias="start_date"),
+    end_date: str | None = Query(None, alias="end_date"),
+) -> list[SessionSummary]:
     """保存済みセッションの一覧を返す。"""
-    sessions = db_list_sessions()
+    sessions = db_list_sessions(
+        patient_name=patient_name,
+        dob=dob,
+        start_date=start_date,
+        end_date=end_date,
+    )
     return [SessionSummary(**s) for s in sessions]
 
 
