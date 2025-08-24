@@ -357,7 +357,6 @@ export default function AdminTemplates() {
         if (id === templateId) {
           setTemplateId('default');
         }
-        alert('テンプレートを削除しました。');
       } catch (error) {
         console.error('Failed to delete template:', error);
         alert('テンプレートの削除に失敗しました。');
@@ -380,7 +379,6 @@ export default function AdminTemplates() {
       });
       setTemplates([...templates, { id: newId }]);
       setTemplateId(newId);
-      alert('テンプレートを複製しました。');
     } catch (error) {
       console.error('Failed to duplicate template:', error);
       alert('テンプレートの複製に失敗しました。');
@@ -529,85 +527,75 @@ export default function AdminTemplates() {
             </HStack>
           </Box>
           <Box>
-            <Heading size="md" mb={2}>
-              保存済みテンプレート一覧
-            </Heading>
-            <TableContainer overflowX="auto">
-              <Table size="sm" minWidth="480px">
-                <Thead>
-                  <Tr>
-                    <Th>テンプレート名</Th>
-                    <Th>操作</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {templates.map((t) => (
-                    <Tr
-                      key={t.id}
-                      bg={t.id === templateId ? 'blue.100' : 'transparent'}
-                      onClick={() => setTemplateId(t.id)}
-                      sx={{ cursor: 'pointer' }}
-                      _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
-                    >
-                      <Td fontWeight={t.id === templateId ? 'bold' : 'normal'}>
-                        {t.id === 'default' ? 'デフォルト' : t.id}
-                      </Td>
-                      <Td onClick={(e) => e.stopPropagation()}>
-                        <HStack spacing={1}>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => duplicateTemplateApi(t.id)}
-                          >
-                            複製
-                          </Button>
-                          {t.id === 'default' ? (
-                            <Button
-                              size="xs"
-                              colorScheme="orange"
-                              variant="outline"
-                              onClick={() => resetDefaultTemplate()}
-                            >
-                              リセット
-                            </Button>
-                          ) : (
-                            <Button
-                              size="xs"
-                              colorScheme="red"
-                              variant="outline"
-                              onClick={() => deleteTemplateApi(t.id)}
-                            >
-                              削除
-                            </Button>
-                          )}
-                        </HStack>
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
-          </Box>
-          <Box>
             <HStack justifyContent="space-between" alignItems="center" mb={2}>
               <Heading size="md">
-                デフォルト問診テンプレート設定
+                保存済みテンプレート一覧
               </Heading>
               <DefaultSaveStatusIndicator />
             </HStack>
-            <Select
-              value={defaultQuestionnaireId}
-              onChange={(e) => setDefaultQuestionnaireId(e.target.value)}
-            >
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.id === 'default' ? '標準テンプレート' : t.id}
-                </option>
-              ))}
-            </Select>
-            <Text fontSize="sm" color="gray.500" mt={2}>
-              患者が利用するデフォルトの問診票を選択します。ここで選択されたテンプレートが、問診開始時に自動的に使用されます。
-            </Text>
+            <RadioGroup value={defaultQuestionnaireId} onChange={setDefaultQuestionnaireId}>
+              <TableContainer overflowX="auto">
+                <Table size="sm" minWidth="480px">
+                  <Thead>
+                    <Tr>
+                      <Th>テンプレート名</Th>
+                      <Th>操作</Th>
+                      <Th>問診に使用</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {templates.map((t) => (
+                      <Tr
+                        key={t.id}
+                        bg={t.id === templateId ? 'blue.100' : 'transparent'}
+                        _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
+                      >
+                        <Td
+                          onClick={() => setTemplateId(t.id)}
+                          sx={{ cursor: 'pointer' }}
+                          fontWeight={t.id === templateId ? 'bold' : 'normal'}
+                        >
+                          {t.id === 'default' ? '標準テンプレート' : t.id}
+                        </Td>
+                        <Td onClick={(e) => e.stopPropagation()}>
+                          <HStack spacing={1}>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => duplicateTemplateApi(t.id)}
+                            >
+                              複製
+                            </Button>
+                            {t.id === 'default' ? (
+                              <Button
+                                size="xs"
+                                colorScheme="orange"
+                                variant="outline"
+                                onClick={() => resetDefaultTemplate()}
+                              >
+                                リセット
+                              </Button>
+                            ) : (
+                              <Button
+                                size="xs"
+                                colorScheme="red"
+                                variant="outline"
+                                onClick={() => deleteTemplateApi(t.id)}
+                              >
+                                削除
+                              </Button>
+                            )}
+                          </HStack>
+                        </Td>
+                        <Td onClick={(e) => e.stopPropagation()}>
+                          <Radio value={t.id} />
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            </RadioGroup>
           </Box>
         </VStack>
       </Box>
