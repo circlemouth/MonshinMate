@@ -582,13 +582,42 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
         conn.close()
 
 
-def list_sessions(db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
-    """保存済みセッションの概要一覧を取得する。"""
+
+def list_sessions(
+    patient_name: str | None = None,
+    dob: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    db_path: str = DEFAULT_DB_PATH,
+) -> list[dict[str, Any]]:
+    """保存済みセッションの概要一覧を取得する。
+
+    検索条件が指定された場合はそれに応じてフィルタする。
+    """
     conn = get_conn(db_path)
     try:
-        rows = conn.execute(
-            "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions ORDER BY COALESCE(finalized_at, '') DESC"
-        ).fetchall()
+        query = "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions"
+        conditions: list[str] = []
+        params: list[Any] = []
+        if patient_name:
+            conditions.append("patient_name LIKE ?")
+            params.append(f"%{patient_name}%")
+        if dob:
+            conditions.append("dob = ?")
+            params.append(dob)
+        if start_date and end_date:
+            conditions.append("DATE(finalized_at) BETWEEN ? AND ?")
+            params.extend([start_date, end_date])
+        elif start_date:
+            conditions.append("DATE(finalized_at) >= ?")
+            params.append(start_date)
+        elif end_date:
+            conditions.append("DATE(finalized_at) <= ?")
+            params.append(end_date)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY COALESCE(finalized_at, '') DESC"
+        rows = conn.execute(query, params).fetchall()
         return list(rows)
     finally:
         conn.close()

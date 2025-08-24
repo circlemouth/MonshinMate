@@ -439,3 +439,9 @@
 - [x] `POST /admin/password` は現パスワードが環境既定値と一致する場合のみ受け付けるよう修正。
 - [x] テスト: `backend/tests/test_admin.py` にレガシー設定無視とフラグ不整合時の拒否を追加。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 51. 問診結果一覧の検索機能追加（2025-11-08）
+- [x] 管理画面の問診結果一覧で患者名・生年月日・問診日範囲による検索を可能にした。
+- [x] 変更（バックエンド）: `/admin/sessions` に検索用クエリパラメータを追加し、DBアクセス関数を拡張。
+- [x] 変更（フロント）: `frontend/src/pages/AdminSessions.tsx` に検索フォームを追加。
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
