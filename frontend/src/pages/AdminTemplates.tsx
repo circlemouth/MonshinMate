@@ -805,20 +805,19 @@ export default function AdminTemplates() {
                 </Table>
               </TableContainer>
             )}
+            {!isAddingNewItem && (
+              <Button onClick={() => setIsAddingNewItem(true)} mt={4} colorScheme="teal">
+                問診項目を追加
+              </Button>
+            )}
           </Box>
 
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
-          {!isAddingNewItem && (
-            <Button onClick={() => setIsAddingNewItem(true)} mt={6} colorScheme="teal">
-              新規項目を追加
-            </Button>
-          )}
-
           {isAddingNewItem && (
             <Box borderWidth="1px" borderRadius="md" p={4} mt={6}>
               <Heading size="md" mb={4}>
-                新規項目を追加
+                問診項目を追加
               </Heading>
               <VStack spacing={4} align="stretch">
                 <FormControl>
