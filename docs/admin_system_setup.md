@@ -85,7 +85,7 @@ python backend/tools/reset_admin_password.py --password "NewStrongPass123"
 
 ### 注意事項
 
-- 既存DBに `totp_mode` カラムが存在しない場合でも、スクリプトが自動で追加します（既存環境に影響が出ないよう例外は握り潰します）。
+ - 既存DBに `totp_mode`, `password_updated_at`, `totp_changed_at` カラムが存在しない場合でも、スクリプトが自動で追加します（既存環境に影響が出ないよう例外は握り潰します）。
 - 本スクリプトはローカル実行を前提としています。運用環境での実行は手順、権限、監査ログの扱いに注意してください。
 
 ## 8. 付録：監査ログの確認方法（開発向け）

@@ -422,3 +422,7 @@
   - 変更: `frontend/src/pages/AdminPasswordReset.tsx`
   - 変更: `frontend/src/pages/AdminLogin.tsx`
   - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 48. オフラインリセットスクリプトでのユーザーテーブル列保証（2025-11-06）
+- [x] `backend/tools/reset_admin_password.py` の `ensure_users_table` が `password_updated_at` と `totp_changed_at` カラムを既存DBに追加するよう修正。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`

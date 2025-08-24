@@ -7,6 +7,7 @@
 - 新しいパスワードをハッシュ化して `users.username='admin'` に設定
 - is_initial_password=1, is_totp_enabled=0, totp_mode='off', totp_secret=NULL に更新（TOTP無効化）
 - admin ユーザーが存在しない場合は作成
+- 既存DBに不足するカラム（`is_initial_password`, `totp_mode`, `password_updated_at`, `totp_changed_at`）を自動追加（存在時は無視）
 
 注意:
 - 実行前に必ず DB バックアップを取得してください（backend/app/app.sqlite3 をコピー）。
@@ -73,6 +74,18 @@ def ensure_users_table(conn: sqlite3.Connection) -> None:
     try:
         conn.execute(
             "ALTER TABLE users ADD COLUMN totp_mode TEXT NOT NULL DEFAULT 'off'"
+        )
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN password_updated_at TEXT"
+        )
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN totp_changed_at TEXT"
         )
     except Exception:
         pass
