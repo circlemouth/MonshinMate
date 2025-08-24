@@ -105,7 +105,7 @@ export default function AdminLogin() {
                 </Button>
               ) : (
                 <Text fontSize="xs" color="gray.600">
-                  パスワードを忘れた場合は <code>backend/tools/reset_admin_password.py</code> を実行してください
+                  パスワードを忘れた場合は 所定のリセットコードをコマンドラインからを実行してください。
                 </Text>
               )}
               <Button onClick={handleLogin} colorScheme="primary" isLoading={loading}>
@@ -149,7 +149,7 @@ export default function AdminLogin() {
               </Text>
             ) : (
               <Text fontSize="xs" color="gray.600">
-                パスワードを忘れた場合はシステム初期化スクリプト <code>backend/tools/reset_admin_password.py</code> を実行してください。
+                パスワードを忘れた場合は 所定のリセットコードをコマンドラインからを実行してください。
               </Text>
             )}
           </VStack>

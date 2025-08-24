@@ -46,20 +46,37 @@ export default function AdminSessions() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const loadSessions = () => {
+  const loadSessions = (filters: {
+    patientName?: string;
+    dob?: string;
+    startDate?: string;
+    endDate?: string;
+  }) => {
     const params = new URLSearchParams();
-    if (patientName) params.append('patient_name', patientName);
-    if (dob) params.append('dob', dob);
-    if (startDate) params.append('start_date', startDate);
-    if (endDate) params.append('end_date', endDate);
+    if (filters.patientName) params.append('patient_name', filters.patientName);
+    if (filters.dob) params.append('dob', filters.dob);
+    if (filters.startDate) params.append('start_date', filters.startDate);
+    if (filters.endDate) params.append('end_date', filters.endDate);
     const qs = params.toString();
     fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
       .then((r) => r.json())
       .then(setSessions);
   };
 
+  const handleSearch = () => {
+    loadSessions({ patientName, dob, startDate, endDate });
+  };
+
+  const handleReset = () => {
+    setPatientName('');
+    setDob('');
+    setStartDate('');
+    setEndDate('');
+    loadSessions({});
+  };
+
   useEffect(() => {
-    loadSessions();
+    loadSessions({});
   }, []);
 
   const visitTypeLabel = (type: string) => (type === 'initial' ? '初診' : type === 'followup' ? '再診' : type);
@@ -98,25 +115,30 @@ export default function AdminSessions() {
 
   return (
     <>
-      <HStack spacing={4} align="flex-end" mb={4}>
-        <FormControl>
-          <FormLabel>患者名</FormLabel>
-          <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>生年月日</FormLabel>
-          <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>問診日(開始)</FormLabel>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </FormControl>
-        <FormControl>
-          <FormLabel>問診日(終了)</FormLabel>
-          <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </FormControl>
-        <Button onClick={loadSessions}>検索</Button>
-      </HStack>
+      <VStack align="stretch" spacing={4} mb={4}>
+        <HStack spacing={4} align="flex-end">
+          <FormControl>
+            <FormLabel>患者名</FormLabel>
+            <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+          </FormControl>
+          <FormControl>
+            <FormLabel>生年月日</FormLabel>
+            <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+          </FormControl>
+          <FormControl>
+            <FormLabel>問診日(開始)</FormLabel>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </FormControl>
+          <FormControl>
+            <FormLabel>問診日(終了)</FormLabel>
+            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </FormControl>
+        </HStack>
+        <HStack justify="flex-end">
+          <Button onClick={handleSearch}>検索</Button>
+          <Button onClick={handleReset}>リセット</Button>
+        </HStack>
+      </VStack>
       <Table>
         <Thead>
           <Tr>

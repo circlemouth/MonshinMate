@@ -5,3 +5,4 @@ passlib[bcrypt]
 pyotp
 qrcode[pil]
 python-jose[cryptography]
+cryptography

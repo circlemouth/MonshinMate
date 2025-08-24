@@ -889,13 +889,17 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
     return gateway.list_models()
 
 
-# --- システム表示名 API ---
+# --- システム表示名・設定 API ---
 class DisplayNameSettings(BaseModel):
     display_name: str
 
 class CompletionMessageSettings(BaseModel):
     """完了画面に表示する文言の設定。"""
     message: str
+
+class DefaultQuestionnaireSettings(BaseModel):
+    """デフォルト問診テンプレートの設定。"""
+    questionnaire_id: str
 
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
@@ -920,7 +924,6 @@ def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
         return DisplayNameSettings(display_name=current["display_name"])
     except Exception:
         logger.exception("set_display_name_failed")
-        # 失敗時は受け取った値をそのまま返す
         return payload
 
 
@@ -947,7 +950,30 @@ def set_completion_message(payload: CompletionMessageSettings) -> CompletionMess
         return CompletionMessageSettings(message=current["completion_message"])
     except Exception:
         logger.exception("set_completion_message_failed")
-        # 失敗時は受け取った値をそのまま返す
+        return payload
+
+@app.get("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
+def get_default_questionnaire() -> DefaultQuestionnaireSettings:
+    """デフォルトの問診テンプレートIDを返す。"""
+    DEFAULT = "default"
+    try:
+        stored = load_app_settings() or {}
+        qid = stored.get("default_questionnaire_id") or DEFAULT
+        return DefaultQuestionnaireSettings(questionnaire_id=qid)
+    except Exception:
+        logger.exception("get_default_questionnaire_failed")
+        return DefaultQuestionnaireSettings(questionnaire_id=DEFAULT)
+
+@app.put("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
+def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQuestionnaireSettings:
+    """デフォルトの問診テンプレートIDを保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["default_questionnaire_id"] = payload.questionnaire_id or "default"
+        save_app_settings(current)
+        return DefaultQuestionnaireSettings(questionnaire_id=current["default_questionnaire_id"])
+    except Exception:
+        logger.exception("set_default_questionnaire_failed")
         return payload
 
 
@@ -1261,7 +1287,7 @@ class SessionCreateRequest(BaseModel):
     dob: str
     visit_type: str
     answers: dict[str, Any]
-    questionnaire_id: str = "default"
+    questionnaire_id: str | None = None
 
 class Session(BaseModel):
     """セッションの内容を表すモデル。
@@ -1327,7 +1353,18 @@ class SessionDetail(BaseModel):
 def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     """新しいセッションを作成して返す。"""
     session_id = str(uuid4())
-    tpl = db_get_template(req.questionnaire_id, req.visit_type)
+
+    # questionnaire_id が指定されていない場合はDBからデフォルト設定を読み込む
+    questionnaire_id = req.questionnaire_id
+    if not questionnaire_id:
+        try:
+            stored = load_app_settings() or {}
+            questionnaire_id = stored.get("default_questionnaire_id") or "default"
+        except Exception:
+            logger.exception("get_default_questionnaire_failed_in_session_create")
+            questionnaire_id = "default"
+
+    tpl = db_get_template(questionnaire_id, req.visit_type)
     if tpl is None:
         tpl = db_get_template("default", req.visit_type)
     if tpl is None:
@@ -1345,7 +1382,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         patient_name=req.patient_name,
         dob=req.dob,
         visit_type=req.visit_type,
-        questionnaire_id=req.questionnaire_id,
+        questionnaire_id=questionnaire_id,
         template_items=items,
         answers=req.answers,
         max_additional_questions=5 if tpl.get("llm_followup_enabled", True) else 0,

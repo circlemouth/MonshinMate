@@ -85,31 +85,60 @@ export default function AdminTemplates() {
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
   const [previewFreeTexts, setPreviewFreeTexts] = useState<Record<string, string>>({});
-  // 一覧テーブルで選択中の項目ID（選択された項目のみ編集UIを表示する）
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  // サマリー設定（初診/再診）
   const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
-  // LLM の疎通状態（サマリー生成や追質問の可否に利用）
   const [llmAvailable, setLlmAvailable] = useState<boolean>(false);
   const [llmFollowupEnabled, setLlmFollowupEnabled] = useState<boolean>(true);
-  // ユーザー操作による編集が行われたか（初期ロード/テンプレ切替直後は false）
   const isDirtyRef = useRef<boolean>(false);
   const markDirty = () => {
     isDirtyRef.current = true;
   };
-  // ドラッグ&ドロップ用状態
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
 
+  const [defaultQuestionnaireId, setDefaultQuestionnaireId] = useState('default');
+  const [defaultSaveStatus, setDefaultSaveStatus] = useState<SaveStatus>('idle');
+  const isInitialDefaultMount = useRef(true);
+
   useEffect(() => {
-    fetch('/questionnaires')
-      .then((res) => res.json())
-      .then((data) => {
-        const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id) => ({ id }));
-        setTemplates(ids);
-        setTemplateId('default');
-      });
+    Promise.all([
+      fetch('/questionnaires').then((res) => res.json()),
+      fetch('/system/default-questionnaire').then((res) => res.json()),
+    ]).then(([data, defaultData]) => {
+      const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id) => ({ id }));
+      setTemplates(ids);
+      setTemplateId('default');
+      setDefaultQuestionnaireId(defaultData.questionnaire_id || 'default');
+    });
   }, []);
+
+  useEffect(() => {
+    if (isInitialDefaultMount.current) {
+      isInitialDefaultMount.current = false;
+      return;
+    }
+    setDefaultSaveStatus('saving');
+    const handler = setTimeout(() => {
+      fetch('/system/default-questionnaire', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionnaire_id: defaultQuestionnaireId }),
+      })
+        .then((res) => {
+          if (res.ok) {
+            setDefaultSaveStatus('success');
+          } else {
+            setDefaultSaveStatus('error');
+          }
+        })
+        .catch(() => {
+          setDefaultSaveStatus('error');
+        });
+    }, 1000);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [defaultQuestionnaireId]);
 
   // LLM の疎通状況を確認し、サマリー生成や追質問のオン可否を制御
   useEffect(() => {
@@ -443,6 +472,34 @@ export default function AdminTemplates() {
     }
   };
 
+  const DefaultSaveStatusIndicator = () => {
+    switch (defaultSaveStatus) {
+      case 'saving':
+        return (
+          <HStack>
+            <Spinner size="sm" />
+            <Text>保存中...</Text>
+          </HStack>
+        );
+      case 'success':
+        return (
+          <HStack>
+            <CheckCircleIcon color="green.500" />
+            <Text>保存済み</Text>
+          </HStack>
+        );
+      case 'error':
+        return (
+          <HStack>
+            <WarningIcon color="red.500" />
+            <Text>保存エラー</Text>
+          </HStack>
+        );
+      default:
+        return null;
+    }
+  };
+
   const previewItems = items.filter((item) => {
     if (previewVisitType === 'initial' && !item.use_initial) return false;
     if (previewVisitType === 'followup' && !item.use_followup) return false;
@@ -530,6 +587,27 @@ export default function AdminTemplates() {
                 </Tbody>
               </Table>
             </TableContainer>
+          </Box>
+          <Box>
+            <HStack justifyContent="space-between" alignItems="center" mb={2}>
+              <Heading size="md">
+                デフォルト問診テンプレート設定
+              </Heading>
+              <DefaultSaveStatusIndicator />
+            </HStack>
+            <Select
+              value={defaultQuestionnaireId}
+              onChange={(e) => setDefaultQuestionnaireId(e.target.value)}
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.id === 'default' ? '標準テンプレート' : t.id}
+                </option>
+              ))}
+            </Select>
+            <Text fontSize="sm" color="gray.500" mt={2}>
+              患者が利用するデフォルトの問診票を選択します。ここで選択されたテンプレートが、問診開始時に自動的に使用されます。
+            </Text>
           </Box>
         </VStack>
       </Box>
