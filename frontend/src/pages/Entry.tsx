@@ -1,4 +1,4 @@
-import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio, Select } from '@chakra-ui/react';
+import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio, Select, Flex, Box } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import ErrorSummary from '../components/ErrorSummary';
@@ -8,6 +8,7 @@ import { track } from '../metrics';
 export default function Entry() {
   const [name, setName] = useState('');
   const [dob, setDob] = useState('');
+  const [gender, setGender] = useState('');
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 120 }, (_, i) => thisYear - i); // 過去120年分
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
@@ -38,6 +39,7 @@ export default function Entry() {
     const errs: string[] = [];
     const today = new Date().toISOString().slice(0, 10);
     if (!name) errs.push('氏名を入力してください');
+    if (!gender) errs.push('性別を選択してください');
     if (!dob) errs.push('生年月日を入力してください');
     if (dob && dob > today) errs.push('生年月日に未来の日付は指定できません');
     if (!visitType) errs.push('当院の受診は初めてか、選択してください');
@@ -47,8 +49,9 @@ export default function Entry() {
     }
     sessionStorage.setItem('patient_name', name);
     sessionStorage.setItem('dob', dob);
+    sessionStorage.setItem('gender', gender);
     try {
-      const payload = { patient_name: name, dob, visit_type: visitType, answers: {} };
+      const payload = { patient_name: name, dob, gender, visit_type: visitType, answers: {} };
       const res = await fetch('/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -72,6 +75,10 @@ export default function Entry() {
       document.getElementById('patient_name')?.focus();
       return;
     }
+    if (!gender) {
+      document.getElementsByName('gender')?.[0]?.focus();
+      return;
+    }
     if (!dob || (dob && dob > today)) {
       // 年→月→日の順にフォーカス
       if (!dobYear) {
@@ -85,13 +92,14 @@ export default function Entry() {
       document.getElementById('dob-day')?.focus();
       return;
     }
-  }, [attempted, name, dob]);
+  }, [attempted, name, dob, gender]);
 
   return (
     <VStack spacing={4} align="stretch">
       <ErrorSummary
         errors={[
           ...(attempted && !name ? ['氏名を入力してください'] : []),
+          ...(attempted && !gender ? ['性別を選択してください'] : []),
           ...(attempted && !dob ? ['生年月日を入力してください'] : []),
           ...(attempted && dob && dob > new Date().toISOString().slice(0, 10)
             ? ['生年月日に未来の日付は指定できません']
@@ -100,10 +108,23 @@ export default function Entry() {
         ]}
       />
       <FormControl isRequired isInvalid={attempted && !name}>
-        <FormLabel htmlFor="patient_name">氏名</FormLabel>
-        <Input id="patient_name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
-        <FormHelperText>例: 山田 太郎</FormHelperText>
-        <FormErrorMessage>氏名を入力してください</FormErrorMessage>
+        <HStack alignItems="center">
+          <FormLabel htmlFor="patient_name" mb={0} w="100px">氏名</FormLabel>
+          <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+        </HStack>
+        <FormErrorMessage ml="116px">氏名を入力してください</FormErrorMessage>
+      </FormControl>
+      <FormControl isRequired isInvalid={attempted && !gender}>
+        <HStack alignItems="center">
+          <FormLabel mb={0} w="100px">性別</FormLabel>
+          <RadioGroup value={gender} onChange={setGender}>
+            <HStack spacing={4}>
+              <Radio value="male" name="gender">男</Radio>
+              <Radio value="female" name="gender">女</Radio>
+            </HStack>
+          </RadioGroup>
+        </HStack>
+        <FormErrorMessage ml="116px">性別を選択してください</FormErrorMessage>
       </FormControl>
       <FormControl
         isRequired
@@ -111,30 +132,31 @@ export default function Entry() {
           attempted && (!dob || (dob && dob > new Date().toISOString().slice(0, 10)))
         }
       >
-        <FormLabel>生年月日</FormLabel>
-        <HStack>
-          <Select id="dob-year" placeholder="年" value={dobYear}
-                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </Select>
-          <Select id="dob-month" placeholder="月" value={dobMonth}
-                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
-            {months.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </Select>
-          <Select id="dob-day" placeholder="日" value={dobDay}
-                  onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
-                  isDisabled={!dobYear || !dobMonth}>
-            {days.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </Select>
+        <HStack alignItems="center">
+          <FormLabel mb={0} w="100px">生年月日</FormLabel>
+          <HStack flex={1}>
+            <Select id="dob-year" placeholder="年" value={dobYear}
+                    onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
+              {years.map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </Select>
+            <Select id="dob-month" placeholder="月" value={dobMonth}
+                    onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
+              {months.map((m) => (
+                <option key={m} value={m}>{m}</option>
+              ))}
+            </Select>
+            <Select id="dob-day" placeholder="日" value={dobDay}
+                    onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
+                    isDisabled={!dobYear || !dobMonth}>
+              {days.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </Select>
+          </HStack>
         </HStack>
-        <FormHelperText>年・月・日をそれぞれ選択してください。</FormHelperText>
-        <FormErrorMessage>
+        <FormErrorMessage ml="116px">
           {dob && dob > new Date().toISOString().slice(0, 10)
             ? '生年月日に未来の日付は指定できません'
             : '生年月日を入力してください'}
@@ -148,12 +170,14 @@ export default function Entry() {
             <Radio value="followup">受診したことがある</Radio>
           </HStack>
         </RadioGroup>
-        <FormHelperText id="visit-type-help">受付スタッフの案内に従って選択してください。</FormHelperText>
+        <FormHelperText id="visit-type-help">不明点があれば受付にお知らせください</FormHelperText>
         <FormErrorMessage>選択してください</FormErrorMessage>
       </FormControl>
-      <Button onClick={handleNext} colorScheme="primary">
-        次へ
-      </Button>
+      <Flex justifyContent="center">
+        <Button onClick={handleNext} colorScheme="primary" w="200px">
+          問診を始める
+        </Button>
+      </Flex>
     </VStack>
   );
 }
