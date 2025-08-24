@@ -54,6 +54,8 @@ class SessionFSM:
                 next_item_id = None
 
         if next_item_id is None:
+            if "followup" in self.session.answers:
+                return None
             self.session.additional_questions_used += 1
             return {
                 "id": "followup",
