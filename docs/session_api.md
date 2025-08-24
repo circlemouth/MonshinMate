@@ -13,6 +13,7 @@
   - `status` (str): 作成結果。固定値 `created`
   - `id` (str): セッションID
   - `answers` (object): 現在までの回答
+- **備考**: 空欄で送信された回答は「該当なし」として保存される。
 
 ## POST /sessions/{session_id}/answers
 - **概要**: 複数の回答をまとめて保存する。
@@ -20,7 +21,7 @@
   - `answers` (object): `{ 質問ID: 回答 }`
 - **レスポンス**:
   - `{ status: "ok", remaining_items: string[] }`
-- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。
+- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。空欄で送信された回答は「該当なし」として保存される。
 
 ## POST /sessions/{session_id}/llm-questions
 - **概要**: 不足項目に応じた追加質問を生成する。
@@ -35,7 +36,7 @@
   - `answer` (any): 回答内容
 - **レスポンス**:
   - `{ status: "ok", remaining_items: string[] }`
-- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。
+- **備考**: 型や選択肢を検証し、不正な場合は 400 を返す。空欄で送信された回答は「該当なし」として保存される。
 
 ## POST /sessions/{session_id}/finalize
 - **概要**: セッションを確定し要約を生成する。

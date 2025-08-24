@@ -45,6 +45,7 @@ from .db import (
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
+from .structured_context import StructuredContextManager
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -1374,9 +1375,12 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
                 {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
                 {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
             ],
-        }
+    }
     items = [QuestionnaireItem(**it) for it in tpl["items"]]
     Validator.validate_partial(items, req.answers)
+    for k, v in list(req.answers.items()):
+        # 空欄の回答は「該当なし」に統一
+        req.answers[k] = StructuredContextManager.normalize_answer(v)
     session = Session(
         id=session_id,
         patient_name=req.patient_name,

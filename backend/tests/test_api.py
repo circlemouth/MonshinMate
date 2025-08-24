@@ -132,6 +132,26 @@ def test_add_answers() -> None:
     assert ans["onset"] == "1週間前から"
 
 
+def test_blank_answer_saved_as_not_applicable() -> None:
+    """空欄回答が「該当なし」として保存されることを確認する。"""
+    on_startup()
+    payload = {
+        "patient_name": "空欄太郎",
+        "dob": "1999-09-09",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": ""},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    session_id = data["id"]
+    assert data["answers"]["chief_complaint"] == "該当なし"
+
+    finalize_res = client.post(f"/sessions/{session_id}/finalize")
+    assert finalize_res.status_code == 200
+    final_data = finalize_res.json()
+    assert final_data["answers"]["chief_complaint"] == "該当なし"
+
 def test_llm_question_loop() -> None:
     """追加質問エンドポイントが順次質問を返すことを確認する。"""
     on_startup()
