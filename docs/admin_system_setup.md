@@ -39,3 +39,83 @@
 
 ## 6. 付録：使い方ページ
 管理メニューの「使い方」ページでは、本ドキュメントが表示されます。院内マニュアルとして活用してください。
+
+## 7. 付録：オフラインでの管理者パスワード初期化と二段階認証の無効化
+
+障害対応やログイン不能時に、バックエンド同梱のメンテナンススクリプトで管理者アカウントを復旧できます。操作は自己責任で行い、実施前に必ずDBのバックアップを取得してください。
+
+- スクリプトの場所: `backend/tools/reset_admin_password.py`
+- 事前バックアップ: `backend/app/app.sqlite3` をコピー保全
+- 対応内容:
+  - 管理者（`username='admin'`）のパスワードを新しい値で上書き
+  - `is_initial_password=1`（初期パスワード扱い）に設定
+  - 二段階認証を完全無効化: `is_totp_enabled=0`, `totp_mode='off'`, `totp_secret=NULL`
+  - 管理者が存在しない場合は新規作成
+
+### 使い方
+
+1) 対話的に実行（推奨）
+
+```bash
+python backend/tools/reset_admin_password.py
+```
+
+プロンプトに従い新しいパスワード（8文字以上）を2回入力し、最終確認で `yes` を入力します。
+
+2) 非対話で実行
+
+```bash
+python backend/tools/reset_admin_password.py --password "NewStrongPass123"
+```
+
+3) DBパスの指定（任意）
+
+```bash
+export MONSHINMATE_DB=/path/to/app.sqlite3
+python backend/tools/reset_admin_password.py --password "NewStrongPass123"
+```
+
+環境変数 `MONSHINMATE_DB` があればそれを使用し、指定がない場合は `backend/app/app.sqlite3` を参照します。`--db` オプションでも明示指定可能です。
+
+### 実行後の挙動
+
+- 管理画面アクセス時、パスワードは新規設定済みですが「初期パスワード扱い（is_initial_password=1）」のため、初回ログインフローでの挙動が簡略化されます。
+- 二段階認証は完全に無効化されています（`totp_mode='off'`）。必要であれば管理画面の「セキュリティ」から再度QRコードを発行し、有効化してください。
+
+### 注意事項
+
+- 既存DBに `totp_mode` カラムが存在しない場合でも、スクリプトが自動で追加します（既存環境に影響が出ないよう例外は握り潰します）。
+- 本スクリプトはローカル実行を前提としています。運用環境での実行は手順、権限、監査ログの扱いに注意してください。
+
+## 8. 付録：監査ログの確認方法（開発向け）
+
+パスワードや二段階認証（TOTP）の変更原因を追跡できるよう、開発環境では監査ログを出力しています。平文パスワードやハッシュ値は記録しません。
+
+- 出力先（ファイル）
+  - `backend/app/logs/security.log`
+  - 主要イベントを時系列で出力（ローテーションあり、最大約1MB×5世代）
+  - 例（抜粋）:
+    - `startup_admin_status ...`（起動時の管理者状態）
+    - `password_update username=admin ...`（パスワード更新）
+    - `totp_enabled/disabled ...`（TOTPの有効/無効化）
+    - `totp_mode_set ...`（TOTPモード変更）
+    - `password_reset_token_issued / password_reset_confirmed`（リセットフロー）
+    - `forced_password_reset ...`（オフライン初期化スクリプト実行）
+
+- 監査テーブル（DB）
+  - SQLite の `audit_logs` テーブルに重要イベントを保存しています（ファイルと二重に記録）。
+  - 確認用ユーティリティ: `backend/tools/audit_dump.py`
+    - 直近100件を表示（既定）: `python backend/tools/audit_dump.py`
+    - 件数指定: `python backend/tools/audit_dump.py --limit 200`
+    - 別DBを指定: `MONSHINMATE_DB=/path/to/app.sqlite3 python backend/tools/audit_dump.py`
+  - 代表的なイベント名:
+    - `password_update`, `users.password_updated`
+    - `admin_user_created`
+    - `totp_secret_updated`, `users.totp_secret_updated`
+    - `totp_status_changed`, `users.totp_status_updated`
+    - `totp_mode_changed`, `users.totp_mode_updated`
+    - `forced_password_reset`
+
+注意:
+- APIとしては公開していません（開発時のローカル確認のみを想定）。
+- 運用環境での取り扱いは院内ポリシーに従い、アクセス権限・保管期間・持ち出し制限などに留意してください。

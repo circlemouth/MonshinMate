@@ -236,6 +236,25 @@ export default function AdminTemplates() {
     markDirty();
   };
 
+  // 入力方法の変更時に、型に応じて付随プロパティを初期化する
+  const changeItemType = (index: number, newType: string) => {
+    const target = items[index];
+    const next: Item = { ...target, type: newType } as Item;
+    if (newType === 'multi') {
+      // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
+      next.allow_freetext = true;
+      next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
+    } else {
+      // それ以外に切り替えたら、選択肢系はリセット
+      delete (next as any).options;
+      next.allow_freetext = false;
+    }
+    const updated = [...items];
+    updated[index] = next;
+    setItems(updated);
+    markDirty();
+  };
+
   const removeItem = (index: number) => {
     const updated = items.filter((_, i) => i !== index);
     setItems(updated);
@@ -338,7 +357,8 @@ export default function AdminTemplates() {
     }
     setTemplates([...templates, { id: newId }]);
     setTemplateId(newId);
-    // 新規テンプレート作成時のデフォルト問診項目は「質問文形式」で初期化する
+    // 新規テンプレート作成時のデフォルト問診項目は「質問文形式」をベースに、
+    // 発症時期は単一選択＋自由記述をあらかじめ用意する
     setItems([
       {
         id: crypto.randomUUID(),
@@ -351,8 +371,10 @@ export default function AdminTemplates() {
       {
         id: crypto.randomUUID(),
         label: '発症時期はいつからですか？',
-        type: 'string',
+        type: 'single',
         required: false,
+        options: ['昨日から', '1週間前から', '1ヶ月前から'],
+        allow_freetext: true,
         use_initial: true,
         use_followup: true,
       },
@@ -558,7 +580,7 @@ export default function AdminTemplates() {
                     <HStack justifyContent="space-between">
                       <FormControl maxW="360px">
                         <FormLabel m={0}>入力方法</FormLabel>
-                        <Select value={item.type} onChange={(e) => updateItem(idx, 'type', e.target.value)}>
+                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
                           <option value="string">テキスト</option>
                           <option value="multi">複数選択</option>
                           <option value="yesno">はい/いいえ</option>
@@ -606,7 +628,8 @@ export default function AdminTemplates() {
                           </HStack>
                         ))}
                         <Button
-                          size="xs"
+                          size="sm"
+                          py={2}
                           onClick={() => {
                             const newOptions = [...(item.options || []), ''];
                             updateItem(idx, 'options', newOptions);
@@ -664,7 +687,22 @@ export default function AdminTemplates() {
                 </FormControl>
                 <FormControl>
                   <FormLabel>入力方法</FormLabel>
-                  <Select value={newItem.type} onChange={(e) => setNewItem({ ...newItem, type: e.target.value })}>
+                  <Select
+                    value={newItem.type}
+                    onChange={(e) => {
+                      const t = e.target.value;
+                      if (t === 'multi') {
+                        setNewItem({
+                          ...newItem,
+                          type: t,
+                          allow_freetext: true,
+                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
+                        });
+                      } else {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [] });
+                      }
+                    }}
+                  >
                     <option value="string">テキスト</option>
                     <option value="multi">複数選択</option>
                     <option value="yesno">はい/いいえ</option>
@@ -698,7 +736,8 @@ export default function AdminTemplates() {
                         </HStack>
                       ))}
                       <Button
-                        size="xs"
+                        size="sm"
+                        py={2}
                         onClick={() => {
                           const newOptions = [...newItem.options, ''];
                           setNewItem({ ...newItem, options: newOptions });

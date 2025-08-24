@@ -46,6 +46,8 @@ from .db import (
 from .validator import Validator
 from .session_fsm import SessionFSM
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
@@ -82,6 +84,19 @@ async def log_middleware(request: Request, call_next):
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
+    # 監査ログ（security）をファイルにも出力
+    try:
+        log_dir = Path(__file__).resolve().parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        sec_log = logging.getLogger("security")
+        if not any(isinstance(h, RotatingFileHandler) for h in sec_log.handlers):
+            handler = RotatingFileHandler(log_dir / "security.log", maxBytes=1_000_000, backupCount=5)
+            formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+            handler.setFormatter(formatter)
+            sec_log.addHandler(handler)
+            sec_log.setLevel(logging.INFO)
+    except Exception:
+        logging.getLogger(__name__).exception("failed to setup security logger")
     try:
         logging.getLogger(__name__).info("database_path=%s", DEFAULT_DB_PATH)
     except Exception:
@@ -112,16 +127,123 @@ def on_startup() -> None:
         },
         {
             "id": "prior_treatments",
-            "label": "その症状について、これまで治療を受けたことがあれば、その内容を記入してください。",
-            "type": "string",
+            "label": "その症状について、これまで治療を受けたことがあれば、受けた治療を選んでください。",
+            "type": "multi",
+            "options": [
+                "なし",
+                "外用薬",
+                "内服薬",
+                "注射",
+                "手術",
+                "リハビリ",
+                "その他",
+            ],
+            "allow_freetext": True,
             "required": False,
         },
-        {"id": "past_diseases", "label": "今までにかかったことのある病気があれば記入してください？", "type": "string", "required": False},
-        {"id": "surgeries", "label": "手術を受けたことがあれば記入してください", "type": "string", "required": False},
-        {"id": "current_medications", "label": "現在服用している処方薬があれば記入してください？", "type": "string", "required": False},
-        {"id": "supplements_otc", "label": "現在服用しているサプリメントや使っている市販薬があれば記入してください？", "type": "string", "required": False},
-        {"id": "drug_allergies", "label": "アレルギーがある薬があれば記入してください。", "type": "string", "required": False},
-        {"id": "food_metal_allergies", "label": "食物・金属などのアレルギーがあれば記入してください。", "type": "string", "required": False},
+        {
+            "id": "past_diseases",
+            "label": "今までにかかったことのある病気を選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "高血圧",
+                "糖尿病",
+                "脂質異常症",
+                "喘息",
+                "アトピー性皮膚炎",
+                "花粉症",
+                "蕁麻疹",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "surgeries",
+            "label": "手術歴があれば選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "皮膚科関連手術",
+                "整形外科手術",
+                "腹部手術",
+                "心臓手術",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "current_medications",
+            "label": "現在服用している処方薬があれば選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ステロイド外用",
+                "抗菌薬（内服/外用）",
+                "抗ヒスタミン薬",
+                "NSAIDs",
+                "免疫抑制薬",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "supplements_otc",
+            "label": "現在使用しているサプリメント/市販薬があれば選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ビタミン剤",
+                "漢方",
+                "鎮痛解熱薬",
+                "かゆみ止め",
+                "保湿剤",
+                "その他",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "drug_allergies",
+            "label": "薬剤アレルギーがあれば選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "ペニシリン系",
+                "セフェム系",
+                "マクロライド系",
+                "ニューキノロン系",
+                "NSAIDs",
+                "局所麻酔",
+                "その他",
+                "不明",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
+        {
+            "id": "food_metal_allergies",
+            "label": "食物・金属などのアレルギーがあれば選んでください。（複数選択可）",
+            "type": "multi",
+            "options": [
+                "なし",
+                "卵",
+                "乳",
+                "小麦",
+                "そば",
+                "落花生",
+                "えび",
+                "かに",
+                "金属（ニッケル等）",
+                "その他",
+                "不明",
+            ],
+            "allow_freetext": True,
+            "required": False,
+        },
         {
             "id": "smoking",
             "label": "タバコは吸いますか？",
@@ -170,6 +292,27 @@ def on_startup() -> None:
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger(__name__).info("startup completed")
+    # 参考情報: adminユーザーの存在と初期パスワード判定を監査出力（ハッシュや平文は出さない）
+    try:
+        admin_user = get_user_by_username("admin")
+        default_pw = os.getenv("ADMIN_PASSWORD", "admin")
+        is_default_now = False
+        try:
+            if admin_user and admin_user.get("hashed_password"):
+                is_default_now = verify_password(default_pw, admin_user.get("hashed_password"))
+        except Exception:
+            is_default_now = False
+        logging.getLogger("security").info(
+            "startup_admin_status exists=%s is_initial=%s default_pw_match=%s totp_enabled=%s totp_mode=%s db=%s",
+            bool(admin_user),
+            bool(admin_user.get("is_initial_password") if admin_user else None),
+            bool(is_default_now),
+            bool(admin_user.get("is_totp_enabled") if admin_user else None),
+            (admin_user.get("totp_mode") if admin_user else None),
+            DEFAULT_DB_PATH,
+        )
+    except Exception:
+        logging.getLogger(__name__).exception("failed to log startup admin status")
 
 default_llm_settings = LLMSettings(
     provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=True
@@ -638,6 +781,7 @@ class AdminAuthStatus(BaseModel):
     is_totp_enabled: bool
     totp_mode: str | None = None
 
+
 class TotpVerifyRequest(BaseModel):
     """TOTP検証リクエスト。"""
     totp_code: str
@@ -670,11 +814,21 @@ def get_admin_auth_status() -> AdminAuthStatus:
     except Exception:
         is_default_now = False
 
-    return AdminAuthStatus(
+    result = AdminAuthStatus(
         is_initial_password=bool(admin_user.get("is_initial_password")) or is_default_now,
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
         totp_mode=get_totp_mode("admin"),
     )
+    try:
+        logging.getLogger("security").info(
+            "auth_status is_initial=%s is_totp_enabled=%s totp_mode=%s",
+            result.is_initial_password,
+            result.is_totp_enabled,
+            result.totp_mode,
+        )
+    except Exception:
+        pass
+    return result
 
 @app.post("/admin/password")
 def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
@@ -693,7 +847,12 @@ def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
         is_default_now = False
     if not (bool(admin_user.get("is_initial_password")) or is_default_now):
         raise HTTPException(status_code=403, detail="Direct password change is not allowed. Use reset flow.")
+    # 初期セットアップ時の直接更新。監査ログは db.update_password 内で出力される。
     update_password("admin", payload.password)
+    try:
+        logging.getLogger("security").warning("admin_password_set_direct")
+    except Exception:
+        pass
     return {"status": "ok"}
 
 @app.post("/admin/login")
@@ -701,13 +860,25 @@ def admin_login(payload: AdminLoginRequest) -> dict:
     """管理画面へのログイン（パスワード検証）。"""
     admin_user = get_user_by_username("admin")
     if not admin_user or not verify_password(payload.password, admin_user["hashed_password"]):
+        try:
+            logging.getLogger("security").info("admin_login_failed")
+        except Exception:
+            pass
         raise HTTPException(status_code=401, detail="Unauthorized")
 
     # ログイン時にTOTPを要求するのは totp_mode が 'login_and_reset' の場合のみ
     if get_totp_mode("admin") == "login_and_reset":
+        try:
+            logging.getLogger("security").info("admin_login_password_ok_totp_required")
+        except Exception:
+            pass
         return {"status": "totp_required"}
 
     # 認証成功（本来はセッションやJWTを発行）
+    try:
+        logging.getLogger("security").info("admin_login_success")
+    except Exception:
+        pass
     return {"status": "ok", "message": "Login successful"}
 
 @app.post("/admin/login/totp")
@@ -719,8 +890,16 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
 
     totp = pyotp.TOTP(admin_user["totp_secret"])
     if not totp.verify(payload.totp_code):
+        try:
+            logging.getLogger("security").info("admin_login_totp_failed")
+        except Exception:
+            pass
         raise HTTPException(status_code=401, detail="Invalid TOTP code")
 
+    try:
+        logging.getLogger("security").info("admin_login_totp_success")
+    except Exception:
+        pass
     return {"status": "ok", "message": "Login successful"}
 
 @app.get("/admin/totp/setup")
@@ -763,6 +942,10 @@ def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
 
     # 検証成功、TOTPを有効化
     set_totp_status("admin", enabled=True)
+    try:
+        logging.getLogger("security").warning("totp_enabled username=admin")
+    except Exception:
+        pass
     return {"status": "ok"}
 
 @app.post("/admin/totp/disable")
@@ -772,6 +955,10 @@ def admin_totp_disable() -> dict:
     if not admin_user:
         raise HTTPException(status_code=500, detail="Admin user not found")
     set_totp_status("admin", enabled=False)
+    try:
+        logging.getLogger("security").warning("totp_disabled username=admin")
+    except Exception:
+        pass
     return {"status": "ok"}
 
 @app.post("/admin/totp/regenerate")
@@ -783,6 +970,10 @@ def admin_totp_regenerate() -> dict:
     secret = pyotp.random_base32()
     update_totp_secret("admin", secret)
     set_totp_status("admin", enabled=False)
+    try:
+        logging.getLogger("security").warning("totp_regenerated_and_disabled username=admin")
+    except Exception:
+        pass
     return {"status": "ok"}
 
 @app.post("/admin/password/reset/request")
@@ -796,12 +987,20 @@ def request_password_reset(payload: PasswordResetRequest) -> dict:
 
     totp = pyotp.TOTP(admin_user["totp_secret"])
     if not totp.verify(payload.totp_code):
+        try:
+            logging.getLogger("security").info("password_reset_request_totp_failed")
+        except Exception:
+            pass
         raise HTTPException(status_code=401, detail="Invalid TOTP code")
 
     # トークンを生成
     expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode = {"sub": "admin", "exp": expire}
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    try:
+        logging.getLogger("security").warning("password_reset_token_issued exp_minutes=%s", ACCESS_TOKEN_EXPIRE_MINUTES)
+    except Exception:
+        pass
     return {"reset_token": encoded_jwt}
 
 
@@ -820,7 +1019,12 @@ def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
     if len(payload.new_password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
 
+    # リセットトークンを介した更新。監査ログは db.update_password 内で出力される。
     update_password("admin", payload.new_password)
+    try:
+        logging.getLogger("security").warning("password_reset_confirmed username=admin")
+    except Exception:
+        pass
     return {"status": "ok", "message": "Password has been reset successfully"}
 
 
@@ -839,9 +1043,15 @@ def set_admin_totp_mode(payload: TotpModePayload) -> dict:
     """TOTP の利用モードを設定する。"""
     try:
         set_totp_mode("admin", payload.mode)
+        try:
+            logging.getLogger("security").warning("totp_mode_set username=admin mode=%s", payload.mode)
+        except Exception:
+            pass
         return {"status": "ok", "mode": get_totp_mode("admin")}
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid totp mode")
+
+
 
 
 class SessionCreateRequest(BaseModel):

@@ -5,7 +5,7 @@
 
 機能:
 - 新しいパスワードをハッシュ化して `users.username='admin'` に設定
-- is_initial_password=1, is_totp_enabled=0, totp_secret=NULL に更新（TOTP無効化）
+- is_initial_password=1, is_totp_enabled=0, totp_mode='off', totp_secret=NULL に更新（TOTP無効化）
 - admin ユーザーが存在しない場合は作成
 
 注意:
@@ -29,6 +29,8 @@ import sqlite3
 import sys
 from getpass import getpass
 from pathlib import Path
+from datetime import datetime, UTC
+import logging
 
 from passlib.context import CryptContext
 
@@ -56,10 +58,24 @@ def ensure_users_table(conn: sqlite3.Connection) -> None:
             hashed_password TEXT NOT NULL,
             totp_secret TEXT,
             is_totp_enabled INTEGER NOT NULL DEFAULT 0,
-            is_initial_password INTEGER NOT NULL DEFAULT 1
+            is_initial_password INTEGER NOT NULL DEFAULT 1,
+            totp_mode TEXT NOT NULL DEFAULT 'off'
         )
         """
     )
+    # 既存DB向けに不足カラムを後付け（存在すれば例外を無視）
+    try:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN is_initial_password INTEGER NOT NULL DEFAULT 1"
+        )
+    except Exception:
+        pass
+    try:
+        conn.execute(
+            "ALTER TABLE users ADD COLUMN totp_mode TEXT NOT NULL DEFAULT 'off'"
+        )
+    except Exception:
+        pass
     conn.commit()
 
 
@@ -73,6 +89,7 @@ def reset_admin_password(db_path: str, new_password: str) -> None:
         ensure_users_table(conn)
 
         row = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()
+        now = datetime.now(UTC).isoformat()
         if row:
             # 既存ユーザーを更新
             conn.execute(
@@ -81,21 +98,36 @@ def reset_admin_password(db_path: str, new_password: str) -> None:
                 SET hashed_password = ?,
                     is_initial_password = 1,
                     is_totp_enabled = 0,
-                    totp_secret = NULL
+                    totp_secret = NULL,
+                    totp_mode = 'off',
+                    password_updated_at = ?,
+                    totp_changed_at = ?
                 WHERE username = 'admin'
                 """,
-                (hashed,),
+                (hashed, now, now),
             )
         else:
             # ユーザーが存在しない場合は作成
             conn.execute(
                 """
-                INSERT INTO users (username, hashed_password, is_initial_password, is_totp_enabled, totp_secret)
-                VALUES ('admin', ?, 1, 0, NULL)
+                INSERT INTO users (username, hashed_password, is_initial_password, is_totp_enabled, totp_secret, totp_mode, password_updated_at, totp_changed_at)
+                VALUES ('admin', ?, 1, 0, NULL, 'off', ?, ?)
                 """,
-                (hashed,),
+                (hashed, now, now),
             )
         conn.commit()
+        try:
+            conn.execute(
+                "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, 'admin', ?)",
+                (datetime.now(UTC).isoformat(), 'forced_password_reset', f"totp_disabled=1 initial_password=1"),
+            )
+            conn.commit()
+        except Exception:
+            pass
+        logging.warning(
+            "forced_password_reset username=admin totp_disabled=1 initial_password=1 db=%s",
+            db_path,
+        )
     finally:
         conn.close()
 
@@ -127,10 +159,10 @@ def main() -> None:
         print("中止しました。")
         sys.exit(1)
 
+    logging.basicConfig(level=logging.INFO)
     reset_admin_password(db_path, pw)
     print("完了: パスワードを更新し、TOTP を無効化しました。初期パスワード状態として扱われます。")
 
 
 if __name__ == "__main__":
     main()
-

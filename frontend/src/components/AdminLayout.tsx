@@ -54,19 +54,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   return (
     <Flex direction="column" height="100vh">
-      <Box
-        textAlign="center"
-        color="white"
-        bg={llmStatus === 'ok' ? 'green.500' : llmStatus === 'ng' ? 'red.500' : 'gray.500'}
-        py={1}
-        fontSize="sm"
-      >
-        {llmStatus === 'ok'
-          ? 'LLM接続中'
-          : llmStatus === 'ng'
-            ? 'LLM接続エラー'
-            : 'LLM無効'}
-      </Box>
+      {/* LLM 接続状態の表示は App.tsx のヘッダーに小さく配置する運用に変更 */}
       <Flex align="stretch" gap={4} flex="1" px={{ base: 2, md: 3 }}>
         <Box
           as="nav"

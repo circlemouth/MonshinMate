@@ -28,6 +28,7 @@ import AdminSecurity from './pages/AdminSecurity';
 
 // Layouts
 import AdminLayout from './components/AdminLayout';
+import LlmStatusBadge from './components/LlmStatusBadge';
 
 export default function App() {
   const location = useLocation();
@@ -117,18 +118,24 @@ export default function App() {
           <Heading size="lg">{isAdminPage ? '管理画面' : displayName}</Heading>
           <Spacer />
           {isAdminPage ? (
-            <Button
+            <>
+              <LlmStatusBadge />
+              <Button
               as={RouterLink}
               to="/"
               onClick={logout}
               colorScheme="primary"
               variant="outline"
               size="sm"
-            >
-              問診画面に戻る
-            </Button>
+              >
+                問診画面に戻る
+              </Button>
+            </>
           ) : (
-            <Button onClick={handleAdminClick} colorScheme="primary" size="sm">管理画面</Button>
+            <>
+              <LlmStatusBadge />
+              <Button onClick={handleAdminClick} colorScheme="primary" size="sm">管理画面</Button>
+            </>
           )}
         </Flex>
       )}

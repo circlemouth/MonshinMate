@@ -116,6 +116,17 @@ python backend/tools/reset_admin_password.py
 deactivate
 ```
 
+## 監査ログと確認方法（開発向け）
+パスワードやTOTPの変更を追跡するため、開発環境では監査ログを出力しています（平文/ハッシュは記録しません）。
+
+- ファイル出力: `backend/app/logs/security.log`（ローテーションあり）
+- DBテーブル: `audit_logs`
+  - 直近100件をダンプ: `python backend/tools/audit_dump.py`
+  - 件数指定: `python backend/tools/audit_dump.py --limit 200`
+  - 別DB指定: `MONSHINMATE_DB=/path/to/app.sqlite3 python backend/tools/audit_dump.py`
+
+より詳しい手順は `docs/admin_system_setup.md` の「付録：監査ログの確認方法（開発向け）」を参照してください。
+
 ## 主要エンドポイント（抜粋）
 - `GET /healthz`: 死活監視
 - `GET /readyz`: 依存疎通の簡易チェック（DB/LLM）

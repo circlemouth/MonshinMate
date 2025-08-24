@@ -8,9 +8,11 @@ import json
 import os
 import sqlite3
 from pathlib import Path
+from datetime import datetime, UTC
 from typing import Any, Iterable
 
 from passlib.context import CryptContext
+import logging
 
 
 DEFAULT_DB_PATH = os.environ.get(
@@ -159,6 +161,99 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         except Exception:
             pass
+        # 監査用途のタイムスタンプ列を後付け
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN password_updated_at TEXT"
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN totp_changed_at TEXT"
+            )
+        except Exception:
+            pass
+
+        # 監査ログテーブル（存在しない場合のみ作成）
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                event TEXT NOT NULL,
+                username TEXT,
+                note TEXT
+            )
+            """
+        )
+
+        # users テーブル変更の監査トリガ（存在しない場合のみ作成）
+        try:
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS audit_users_password_update
+                AFTER UPDATE OF hashed_password ON users
+                BEGIN
+                    INSERT INTO audit_logs(ts, event, username, note)
+                    VALUES (datetime('now'), 'users.password_updated', NEW.username, NULL);
+                END;
+                """
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS audit_users_totp_secret_update
+                AFTER UPDATE OF totp_secret ON users
+                BEGIN
+                    INSERT INTO audit_logs(ts, event, username, note)
+                    VALUES (datetime('now'), 'users.totp_secret_updated', NEW.username, NULL);
+                END;
+                """
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS audit_users_totp_status_update
+                AFTER UPDATE OF is_totp_enabled ON users
+                BEGIN
+                    INSERT INTO audit_logs(ts, event, username, note)
+                    VALUES (datetime('now'), 'users.totp_status_updated', NEW.username, CAST(NEW.is_totp_enabled AS TEXT));
+                END;
+                """
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS audit_users_totp_mode_update
+                AFTER UPDATE OF totp_mode ON users
+                BEGIN
+                    INSERT INTO audit_logs(ts, event, username, note)
+                    VALUES (datetime('now'), 'users.totp_mode_updated', NEW.username, NEW.totp_mode);
+                END;
+                """
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS audit_users_insert
+                AFTER INSERT ON users
+                BEGIN
+                    INSERT INTO audit_logs(ts, event, username, note)
+                    VALUES (datetime('now'), 'users.created', NEW.username, NULL);
+                END;
+                """
+            )
+        except Exception:
+            pass
 
         conn.commit()
 
@@ -170,6 +265,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             old_settings_row = conn.execute("SELECT json FROM app_settings WHERE id='global'").fetchone()
             password_to_set = "admin"  # デフォルト
             is_initial = 1
+            seed_source = "default"
             if old_settings_row:
                 try:
                     settings = json.loads(old_settings_row["json"])
@@ -177,6 +273,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                         password_to_set = settings["admin_password"]
                         # 既に設定されていた場合は初期パスワードではない
                         is_initial = 0 if password_to_set != "admin" else 1
+                        seed_source = "app_settings"
                         # 移行したので古い設定から削除
                         del settings["admin_password"]
                         conn.execute(
@@ -191,6 +288,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             if password_from_env and password_from_env != "admin":
                 password_to_set = password_from_env
                 is_initial = 0
+                seed_source = "env"
 
             # パスワードをハッシュ化して 'admin' ユーザーを作成
             hashed_password = pwd_context.hash(password_to_set)
@@ -202,6 +300,37 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 (hashed_password, is_initial),
             )
             conn.commit()
+            try:
+                now = datetime.now(UTC).isoformat()
+                conn.execute(
+                    "UPDATE users SET password_updated_at = ? WHERE username = 'admin'",
+                    (now,),
+                )
+                conn.commit()
+            except Exception:
+                pass
+            logging.getLogger("security").warning(
+                "admin_user_created from_init is_initial=%s seed_source=%s db=%s",
+                bool(is_initial),
+                seed_source,
+                db_path,
+            )
+            try:
+                conn.execute(
+                    "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, ?, ?)",
+                    (datetime.now(UTC).isoformat(), 'admin_user_created', 'admin', f'seed_source={seed_source}'),
+                )
+                conn.commit()
+            except Exception:
+                pass
+            try:
+                conn.execute(
+                    "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, ?, ?)",
+                    (datetime.now(UTC).isoformat(), 'admin_user_created', 'admin', None),
+                )
+                conn.commit()
+            except Exception:
+                pass
 
     finally:
         conn.close()
@@ -480,6 +609,21 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
 
 # --- ユーザー/認証関連の関数 ---
 
+def list_audit_logs(limit: int = 100, db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:
+    """監査ログの一覧（新しい順）。
+
+    注意: パスワードの平文やハッシュは保存していないため、ここにも含まれない。
+    """
+    conn = get_conn(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT ts, event, username, note FROM audit_logs ORDER BY id DESC LIMIT ?",
+            (int(limit),),
+        ).fetchall()
+        return list(rows)
+    finally:
+        conn.close()
+
 def get_user_by_username(username: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     """ユーザー名でユーザー情報を取得する。"""
     conn = get_conn(db_path)
@@ -489,15 +633,39 @@ def get_user_by_username(username: str, db_path: str = DEFAULT_DB_PATH) -> dict[
         conn.close()
 
 def update_password(username: str, new_password: str, db_path: str = DEFAULT_DB_PATH) -> None:
-    """ユーザーのパスワードを更新し、初期パスワードフラグを解除する。"""
+    """ユーザーのパスワードを更新し、初期パスワードフラグを解除する。
+
+    パスワード変更の監査ログを出力する（平文やハッシュは記録しない）。
+    """
+    logger = logging.getLogger("security")
     hashed_password = pwd_context.hash(new_password)
     conn = get_conn(db_path)
     try:
+        # 変更前の存在確認（監査の補助情報）
+        before = conn.execute(
+            "SELECT id FROM users WHERE username = ?",
+            (username,),
+        ).fetchone()
+        now = datetime.now(UTC).isoformat()
         conn.execute(
-            "UPDATE users SET hashed_password = ?, is_initial_password = 0 WHERE username = ?",
-            (hashed_password, username),
+            "UPDATE users SET hashed_password = ?, is_initial_password = 0, password_updated_at = ? WHERE username = ?",
+            (hashed_password, now, username),
         )
         conn.commit()
+        logger.warning(
+            "password_update username=%s existed_before=%s db=%s",
+            username,
+            bool(before),
+            db_path,
+        )
+        try:
+            conn.execute(
+                "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, ?, ?)",
+                (now, 'password_update', username, None),
+            )
+            conn.commit()
+        except Exception:
+            pass
     finally:
         conn.close()
 
@@ -510,8 +678,14 @@ def update_totp_secret(username: str, secret: str, db_path: str = DEFAULT_DB_PAT
     # 注意: 本番環境ではシークレットを暗号化して保存することが望ましい
     conn = get_conn(db_path)
     try:
-        conn.execute("UPDATE users SET totp_secret = ? WHERE username = ?", (secret, username))
+        now = datetime.now(UTC).isoformat()
+        conn.execute("UPDATE users SET totp_secret = ?, totp_changed_at = ? WHERE username = ?", (secret, now, username))
         conn.commit()
+        logging.getLogger("security").warning(
+            "totp_secret_updated username=%s db=%s",
+            username,
+            db_path,
+        )
     finally:
         conn.close()
 
@@ -520,17 +694,24 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
     conn = get_conn(db_path)
     try:
         # 有効化時はモードが 'off' の場合 'login_and_reset' に昇格、無効化時は 'off'
+        now = datetime.now(UTC).isoformat()
         if enabled:
             conn.execute(
-                "UPDATE users SET is_totp_enabled = 1, totp_mode = CASE WHEN COALESCE(totp_mode,'off')='off' THEN 'login_and_reset' ELSE totp_mode END WHERE username = ?",
-                (username,),
+                "UPDATE users SET is_totp_enabled = 1, totp_mode = CASE WHEN COALESCE(totp_mode,'off')='off' THEN 'login_and_reset' ELSE totp_mode END, totp_changed_at = ? WHERE username = ?",
+                (now, username),
             )
         else:
             conn.execute(
-                "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off' WHERE username = ?",
-                (username,),
+                "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off', totp_changed_at = ? WHERE username = ?",
+                (now, username),
             )
         conn.commit()
+        logging.getLogger("security").warning(
+            "totp_status_changed username=%s enabled=%s db=%s",
+            username,
+            bool(enabled),
+            db_path,
+        )
     finally:
         conn.close()
 
@@ -557,10 +738,18 @@ def set_totp_mode(username: str, mode: str, db_path: str = DEFAULT_DB_PATH) -> N
     try:
         # 'off' なら is_totp_enabled も 0、 それ以外は 1 に合わせる
         enabled = 0 if mode == 'off' else 1
+        now = datetime.now(UTC).isoformat()
         conn.execute(
-            "UPDATE users SET totp_mode = ?, is_totp_enabled = ? WHERE username = ?",
-            (mode, enabled, username),
+            "UPDATE users SET totp_mode = ?, is_totp_enabled = ?, totp_changed_at = ? WHERE username = ?",
+            (mode, enabled, now, username),
         )
         conn.commit()
+        logging.getLogger("security").warning(
+            "totp_mode_changed username=%s mode=%s enabled=%s db=%s",
+            username,
+            mode,
+            bool(enabled),
+            db_path,
+        )
     finally:
         conn.close()

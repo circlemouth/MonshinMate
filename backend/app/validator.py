@@ -53,6 +53,10 @@ class Validator:
                 if value not in ("yes", "no"):
                     raise HTTPException(status_code=400, detail=f"{key} は yes/no のいずれかで入力してください")
             elif item_type == "multi":
+                # 後方互換: 単一文字列が来た場合は [str] に正規化
+                if isinstance(value, str):
+                    answers[key] = [value]
+                    value = answers[key]
                 if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
                     raise HTTPException(status_code=400, detail=f"{key} は複数選択の配列で入力してください")
                 allow_freetext = (
