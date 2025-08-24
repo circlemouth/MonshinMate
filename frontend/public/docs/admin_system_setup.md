@@ -37,3 +37,20 @@
 
 ## 6. 付録：使い方ページ
 管理メニューの「使い方」ページでは、本ドキュメントが表示されます。院内マニュアルとして活用してください。
+
+
+## 7. 付録：TOTPシークレット暗号化への移行手順
+
+既存DBでTOTPを利用している場合は、次の手順でシークレットを暗号化してください。
+
+1. 暗号化キーを生成し `TOTP_ENC_KEY` として環境変数に設定します。
+   ```bash
+   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+   export TOTP_ENC_KEY="<生成したキー>"
+   ```
+2. `backend/tools/encrypt_totp_secrets.py` を実行します。
+   ```bash
+   python backend/tools/encrypt_totp_secrets.py
+   ```
+   既に暗号化済みのレコードはスキップされます。
+3. サービスを再起動し、ログインが成功することを確認します。
