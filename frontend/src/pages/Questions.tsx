@@ -20,11 +20,18 @@ export default function Questions() {
 
   const fetchQuestion = async () => {
     if (!sessionId) return;
-    const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-    const data = await res.json();
-    if (data.questions && data.questions.length > 0) {
-      setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
-    } else {
+    try {
+      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!res.ok) throw new Error('http error');
+      const data = await res.json();
+      if (data.questions && data.questions.length > 0) {
+        setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
+      } else {
+        sessionStorage.setItem('answers', JSON.stringify(answers));
+        navigate('/review');
+      }
+    } catch (e) {
+      console.error('fetchQuestion failed', e);
       sessionStorage.setItem('answers', JSON.stringify(answers));
       navigate('/review');
     }
@@ -55,6 +62,7 @@ export default function Questions() {
       setAnswer('');
       setCurrent(null);
       const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!res.ok) throw new Error('http error');
       const data = await res.json();
       if (data.questions && data.questions.length > 0) {
         setCurrent({ id: data.questions[0].id, text: data.questions[0].text });

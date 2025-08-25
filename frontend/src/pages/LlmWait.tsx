@@ -15,13 +15,15 @@ export default function LlmWait() {
     const check = async () => {
       try {
         const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+        if (!res.ok) throw new Error('http error');
         const data = await res.json();
         if (data.questions && data.questions.length > 0) {
           navigate('/questions');
         } else {
           navigate('/review');
         }
-      } catch {
+      } catch (e) {
+        console.error('llm question check failed', e);
         // 失敗時は追質問をスキップ
         navigate('/review');
       }

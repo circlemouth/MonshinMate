@@ -468,3 +468,7 @@
 - [x] サマリー作成モードが無効な場合は `POST /sessions/{id}/finalize` が空文字の要約を返すよう修正。
 - [x] サマリー作成モード有効時の要約生成を確認するテストを追加。
 - [x] ドキュメント更新: `docs/session_api.md`。
+
+## 56. 追加質問判定時のフェッチエラー処理改善（2025-11-13）
+- [x] LLM 追質問の要否判定および質問取得の際、HTTP エラーやネットワーク例外が発生した場合にレビュー画面へフォールバックするようにした。
+- [x] 変更: `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`。
