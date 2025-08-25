@@ -9,6 +9,7 @@ import {
   Text,
   HStack,
   Heading,
+  Box,
 } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -104,9 +105,7 @@ export default function AdminLogin() {
                   パスワードをお忘れですか？
                 </Button>
               ) : (
-                <Text fontSize="xs" color="gray.600">
-                  パスワードを忘れた場合は 所定のリセットコードをコマンドラインからを実行してください。
-                </Text>
+                <Box />
               )}
               <Button onClick={handleLogin} colorScheme="primary" isLoading={loading}>
                 ログイン
@@ -140,19 +139,7 @@ export default function AdminLogin() {
           </>
         )}
         {error && (
-          <VStack spacing={1}>
-            <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
-            {isTotpEnabled ? (
-              <Text fontSize="xs" color="gray.600">
-                パスワードをお忘れの場合は二段階認証によるリセットへ進んでください：
-                <Button as={RouterLink} to="/admin/password/reset" variant="link" size="xs" colorScheme="primary">パスワードをリセット</Button>
-              </Text>
-            ) : (
-              <Text fontSize="xs" color="gray.600">
-                パスワードを忘れた場合は 所定のリセットコードをコマンドラインからを実行してください。
-              </Text>
-            )}
-          </VStack>
+          <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
         )}
       </VStack>
     </Container>

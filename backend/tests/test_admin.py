@@ -86,6 +86,7 @@ def test_admin_auth_flow():
     # 古いパスワードでログイン → 失敗
     res = client.post("/admin/login", json={"password": new_password})
     assert res.status_code == 401
+    assert res.json()["detail"] == "パスワードが間違っています"
 
     # 新しいパスワードでログイン → 成功（2段階認証）
     res = client.post("/admin/login", json={"password": password_after_reset})
