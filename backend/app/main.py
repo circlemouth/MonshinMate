@@ -1562,12 +1562,20 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     SessionFSM(session, llm_gateway).update_completion()
+    # サマリー生成の有効設定（テンプレID→default の順に確認）
+    cfg = get_summary_config(session.questionnaire_id, session.visit_type) or get_summary_config(
+        "default", session.visit_type
+    )
+    summary_enabled = bool(cfg and cfg.get("enabled"))
     # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
-    session.summary = llm_gateway.summarize(session.answers)
+    if summary_enabled:
+        session.summary = llm_gateway.summarize(session.answers)
+        global METRIC_SUMMARIES
+        METRIC_SUMMARIES += 1
+    else:
+        session.summary = ""
     session.finalized_at = datetime.now(UTC)
     session.completion_status = "finalized"
-    global METRIC_SUMMARIES
-    METRIC_SUMMARIES += 1
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
     # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
@@ -1589,13 +1597,8 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
             s.summary = new_summary
             save_session(s)
 
-    # サマリー生成の有効設定（テンプレID→default の順に確認）
-    cfg = get_summary_config(session.questionnaire_id, session.visit_type) or get_summary_config(
-        "default", session.visit_type
-    )
     if (
-        cfg
-        and bool(cfg.get("enabled"))
+        summary_enabled
         and getattr(llm_gateway.settings, "enabled", True)
         and getattr(llm_gateway.settings, "base_url", None)
     ):
