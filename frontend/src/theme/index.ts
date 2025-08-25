@@ -1,26 +1,15 @@
 // 医療機関向け UI デザイントークン + Chakra テーマ
 // 方針: 高コントラスト/可読性・一貫した間隔・半径8px・最小限のモーション
 import { extendTheme, ThemeConfig } from '@chakra-ui/react';
+import { themePalettes, ThemeName, themeNames } from './palettes';
 
 const config: ThemeConfig = {
   initialColorMode: 'light',
   useSystemColorMode: false,
 };
 
-// カラーパレット（ややデサチュレートのブルーを主系）
-const colors = {
-  primary: {
-    50: '#e3f2fd',
-    100: '#bbdefb',
-    200: '#90caf9',
-    300: '#64b5f6',
-    400: '#42a5f5',
-    500: '#1e88e5', // 基調色（安心感のあるブルー）
-    600: '#1565c0',
-    700: '#0d47a1',
-    800: '#0b3b85',
-    900: '#082a5e',
-  },
+// 共通カラーパレット（primary は動的に差し替え）
+const baseColors = {
   success: {
     50: '#e8f5e9',
     100: '#c8e6c9',
@@ -89,9 +78,12 @@ const semanticTokens = {
 };
 
 const fonts = {
-  heading: "'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'",
-  body: "'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'",
-  mono: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  heading:
+    "'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'",
+  body:
+    "'Noto Sans JP', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Apple Color Emoji', 'Segoe UI Emoji'",
+  mono:
+    "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
 };
 
 const styles = {
@@ -108,7 +100,7 @@ const styles = {
       WebkitFontSmoothing: 'antialiased',
       MozOsxFontSmoothing: 'grayscale',
     },
-    'a': {
+    a: {
       color: 'link.default',
     },
     // 印刷最適化
@@ -193,13 +185,16 @@ const components = {
   },
 };
 
-const theme = extendTheme({
-  config,
-  colors,
-  semanticTokens,
-  fonts,
-  styles,
-  components,
-});
+export function createTheme(themeName: ThemeName) {
+  return extendTheme({
+    config,
+    colors: { ...baseColors, primary: themePalettes[themeName] },
+    semanticTokens,
+    fonts,
+    styles,
+    components,
+  });
+}
 
-export default theme;
+export { themeNames, ThemeName };
+export default createTheme;

@@ -42,6 +42,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
       { label: 'セキュリティ', to: '/admin/security' },
+      { label: 'テーマ設定', to: '/admin/theme' },
       { label: '使い方', to: '/admin/manual' },
     ],
     []

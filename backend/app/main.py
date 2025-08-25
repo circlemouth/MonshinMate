@@ -1051,6 +1051,37 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
         return payload
 
 
+class ThemeColorSettings(BaseModel):
+    """管理画面のテーマカラー設定。"""
+    theme: str
+
+
+@app.get("/system/theme-color", response_model=ThemeColorSettings)
+def get_theme_color() -> ThemeColorSettings:
+    """現在のテーマカラーを返す。未設定時は既定値。"""
+    DEFAULT = "blue"
+    try:
+        stored = load_app_settings() or {}
+        t = stored.get("theme_color") or DEFAULT
+        return ThemeColorSettings(theme=t)
+    except Exception:
+        logger.exception("get_theme_color_failed")
+        return ThemeColorSettings(theme=DEFAULT)
+
+
+@app.put("/system/theme-color", response_model=ThemeColorSettings)
+def set_theme_color(payload: ThemeColorSettings) -> ThemeColorSettings:
+    """テーマカラーを保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["theme_color"] = payload.theme or "blue"
+        save_app_settings(current)
+        return ThemeColorSettings(theme=current["theme_color"])
+    except Exception:
+        logger.exception("set_theme_color_failed")
+        return payload
+
+
 # --- 管理者認証 API ---
 
 class AdminLoginRequest(BaseModel):

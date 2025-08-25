@@ -21,6 +21,7 @@ import LLMChat from './pages/LLMChat';
 import LlmWait from './pages/LlmWait';
 import AdminSystemName from './pages/AdminSystemName';
 import AdminManual from './pages/AdminManual';
+import AdminTheme from './pages/AdminTheme';
 import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
+          <Route path="/admin/theme" element={<AdminLayout><AdminTheme /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
         </Routes>
       </Box>

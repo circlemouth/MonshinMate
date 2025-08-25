@@ -468,3 +468,9 @@
 - [x] サマリー作成モードが無効な場合は `POST /sessions/{id}/finalize` が空文字の要約を返すよう修正。
 - [x] サマリー作成モード有効時の要約生成を確認するテストを追加。
 - [x] ドキュメント更新: `docs/session_api.md`。
+
+## 56. 管理画面でのテーマカラー選択機能（2025-11-13）
+- [x] 管理画面に「テーマ設定」ページを追加し、10種類のパステルカラーから選択できるようにした。
+- [x] フロント: `ThemeContext` を導入してテーマを切り替え可能にし、`AdminTheme.tsx` で保存操作を実装。
+- [x] バックエンド: `GET/PUT /system/theme-color` を追加し、選択したテーマを `app_settings` に保存。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
