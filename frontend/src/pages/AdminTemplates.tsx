@@ -714,43 +714,65 @@ export default function AdminTemplates() {
           {/* サマリー生成設定＋プロンプト編集 */}
           <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
             <Heading size="sm" mb={2}>サマリー自動作成</Heading>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={1}>
-              <Checkbox isChecked={initialEnabled} isDisabled={!llmAvailable} onChange={(e) => { setInitialEnabled(e.target.checked); markDirty(); }}>
-                初診
-              </Checkbox>
-              <Checkbox isChecked={followupEnabled} isDisabled={!llmAvailable} onChange={(e) => { setFollowupEnabled(e.target.checked); markDirty(); }}>
-                再診
-              </Checkbox>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3} mb={3}>
+              <Box>
+                <Checkbox
+                  isChecked={initialEnabled}
+                  isDisabled={!llmAvailable}
+                  onChange={(e) => {
+                    setInitialEnabled(e.target.checked);
+                    markDirty();
+                  }}
+                >
+                  初診
+                </Checkbox>
+                {initialEnabled && (
+                  <FormControl mt={2}>
+                    <FormLabel>初診用プロンプト</FormLabel>
+                    <Textarea
+                      placeholder="初診サマリーの生成方針を記述（システムプロンプト）"
+                      value={initialPrompt}
+                      onChange={(e) => {
+                        setInitialPrompt(e.target.value);
+                        markDirty();
+                      }}
+                      rows={6}
+                    />
+                  </FormControl>
+                )}
+              </Box>
+              <Box>
+                <Checkbox
+                  isChecked={followupEnabled}
+                  isDisabled={!llmAvailable}
+                  onChange={(e) => {
+                    setFollowupEnabled(e.target.checked);
+                    markDirty();
+                  }}
+                >
+                  再診
+                </Checkbox>
+                {followupEnabled && (
+                  <FormControl mt={2}>
+                    <FormLabel>再診用プロンプト</FormLabel>
+                    <Textarea
+                      placeholder="再診サマリーの生成方針を記述（システムプロンプト）"
+                      value={followupPrompt}
+                      onChange={(e) => {
+                        setFollowupPrompt(e.target.value);
+                        markDirty();
+                      }}
+                      rows={6}
+                    />
+                  </FormControl>
+                )}
+              </Box>
             </SimpleGrid>
             {!llmAvailable && (
-              <Text fontSize="sm" color="gray.500" mb={3}>
+              <Text fontSize="sm" color="gray.500">
                 サマリー作成は、LLM設定が有効かつ疎通テストが成功している場合のみオンにできます。
               </Text>
             )}
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-              {initialEnabled && (
-                <FormControl>
-                  <FormLabel>初診用プロンプト</FormLabel>
-                  <Textarea
-                    placeholder="初診サマリーの生成方針を記述（システムプロンプト）"
-                    value={initialPrompt}
-                    onChange={(e) => { setInitialPrompt(e.target.value); markDirty(); }}
-                    rows={6}
-                  />
-                </FormControl>
-              )}
-              {followupEnabled && (
-                <FormControl>
-                  <FormLabel>再診用プロンプト</FormLabel>
-                  <Textarea
-                    placeholder="再診サマリーの生成方針を記述（システムプロンプト）"
-                    value={followupPrompt}
-                    onChange={(e) => { setFollowupPrompt(e.target.value); markDirty(); }}
-                    rows={6}
-                  />
-                </FormControl>
-              )}
-            </SimpleGrid>
           </Box>
 
           {/* 問診内容（ラベルのみ）の簡易一覧 */}
