@@ -15,6 +15,7 @@ import {
   Switch,
   Text,
   Spinner,
+  useToast,
 } from '@chakra-ui/react';
 
 interface Settings {
@@ -44,7 +45,8 @@ export default function AdminLlm() {
     base_url: '',
     api_key: '',
   });
-  const [testResult, setTestResult] = useState<string>('');
+  const [message, setMessage] = useState<string>('');
+  const toast = useToast();
   const [models, setModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
 
@@ -71,7 +73,7 @@ export default function AdminLlm() {
 
   const fetchModels = async () => {
     setIsLoadingModels(true);
-    setTestResult('');
+    setMessage('');
     try {
       const res = await fetch('/llm/list-models', {
         method: 'POST',
@@ -86,19 +88,19 @@ export default function AdminLlm() {
         const data = await res.json();
         setModels(data);
         if (data.length > 0) {
-          setTestResult(`${data.length}件のモデルを読み込みました`);
+          setMessage(`${data.length}件のモデルを読み込みました`);
           // 現在のモデルが一覧にない場合は、先頭のモデルを選択
           if (settings.model && !data.includes(settings.model)) {
             setSettings({ ...settings, model: data[0] });
           }
         } else {
-          setTestResult('モデルが見つかりません');
+          setMessage('モデルが見つかりません');
         }
       } else {
-        setTestResult('モデルの読み込みに失敗しました');
+        setMessage('モデルの読み込みに失敗しました');
       }
     } catch (error) {
-      setTestResult('モデルの読み込み中にエラーが発生しました');
+      setMessage('モデルの読み込み中にエラーが発生しました');
     } finally {
       setIsLoadingModels(false);
     }
@@ -194,14 +196,17 @@ export default function AdminLlm() {
       <HStack>
         <Button
           onClick={async () => {
-            setTestResult('');
+            setMessage('');
             try {
               const res = await fetch('/llm/settings', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settings),
               });
-              if (!res.ok) throw new Error('save_failed');
+              if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'save_failed');
+              }
               // 保存後に再取得してUIへ確実に反映
               const re = await fetch('/llm/settings');
               if (re.ok) {
@@ -219,31 +224,17 @@ export default function AdminLlm() {
                   setModels((prev) => (prev.includes(data.model) ? prev : [data.model, ...prev]));
                 }
               }
-              setTestResult('保存しました');
-            } catch (e) {
-              setTestResult('保存に失敗しました');
+              setMessage('保存しました');
+            } catch (e: any) {
+              toast({ title: '疎通テストに失敗しました', description: e.message, status: 'error' });
+              setMessage('保存に失敗しました');
             }
           }}
           colorScheme="primary"
         >
           LLM設定を保存
         </Button>
-        <Button
-          variant="outline"
-          onClick={() =>
-            fetch('/llm/settings', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(settings),
-            })
-              .then(() => fetch('/llm/settings/test', { method: 'POST' }))
-              .then((r) => r.json())
-              .then((res) => setTestResult(res.status === 'ok' ? '疎通OK' : `疎通NG: ${res.detail ?? ''}`))
-          }
-        >
-          疎通テスト
-        </Button>
-        <Text>{testResult}</Text>
+        <Text>{message}</Text>
       </HStack>
     </VStack>
   );
