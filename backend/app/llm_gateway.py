@@ -50,9 +50,11 @@ class LLMGateway:
         # base_url が指定されていなければ常に OK（ローカル/スタブ運用）。
         s = self.settings
         if not s.enabled:
-            return {"status": "ok"}
+            # フロントエンドは有効な場合のみこの関数を呼ぶことを想定しているが、
+            # 直接APIが呼ばれるケースも考慮し、無効時は疎通NGとする。
+            return {"status": "ng", "detail": "llm is disabled"}
         if not s.base_url:
-            return {"status": "ok"}
+            return {"status": "ng", "detail": "base_url is not configured"}
 
         try:
             # プロバイダ毎に最小の疎通確認を行う

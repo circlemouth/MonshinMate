@@ -1559,8 +1559,7 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
         raise HTTPException(status_code=404, detail="session not found")
     SessionFSM(session, llm_gateway).update_completion()
     # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
-    labels = {it.id: it.label for it in session.template_items}
-    session.summary = llm_gateway.summarize(session.answers, labels=labels)
+    session.summary = llm_gateway.summarize(session.answers)
     session.finalized_at = datetime.now(UTC)
     session.completion_status = "finalized"
     global METRIC_SUMMARIES

@@ -50,9 +50,11 @@ class LLMGateway:
         # base_url が指定されていなければ常に OK（ローカル/スタブ運用）。
         s = self.settings
         if not s.enabled:
-            return {"status": "ok"}
+            # フロントエンドは有効な場合のみこの関数を呼ぶことを想定しているが、
+            # 直接APIが呼ばれるケースも考慮し、無効時は疎通NGとする。
+            return {"status": "ng", "detail": "llm is disabled"}
         if not s.base_url:
-            return {"status": "ok"}
+            return {"status": "ng", "detail": "base_url is not configured"}
 
         try:
             # プロバイダ毎に最小の疎通確認を行う
@@ -349,12 +351,11 @@ class LLMGateway:
                 raise RuntimeError("empty content in choice")
             return content
 
-    def summarize(self, answers: dict[str, Any], labels: dict[str, str] | None = None) -> str:
+    def summarize(self, answers: dict[str, Any]) -> str:
         """回答内容を簡易に要約した文字列を返す。
 
         Args:
             answers: 質問項目IDをキーとした回答の辞書。
-            labels: 質問IDとラベルのマッピング（任意）。
 
         Returns:
             str: 連結された回答を含む要約文字列。
@@ -365,13 +366,9 @@ class LLMGateway:
         parts = []
         for k in order:
             if k in answers:
-                label = labels.get(k) if labels else k
-                answer = answers[k]
-                if isinstance(answer, list):
-                    answer = ",".join(map(str, answer))
-                parts.append(f"{label}:{answer}")
-        summary_items = "\n".join(parts)
-        result = f"{summary_items}"
+                parts.append(f"{k}:{answers[k]}")
+        summary_items = ", ".join(parts)
+        result = f"要約: {summary_items}"
         duration = (time.perf_counter() - start) * 1000
         logging.getLogger("llm").info("summarize took_ms=%.1f", duration)
         return result
