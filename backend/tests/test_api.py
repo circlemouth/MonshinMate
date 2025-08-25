@@ -100,7 +100,7 @@ def test_create_session() -> None:
     finalize_res = client.post(f"/sessions/{session_id}/finalize")
     assert finalize_res.status_code == 200
     data = finalize_res.json()
-    assert data["summary"].startswith("要約")
+    assert data["summary"] == ""
     assert data["status"] == "finalized"
     assert "finalized_at" in data and data["finalized_at"]
 
@@ -132,6 +132,29 @@ def test_add_answers() -> None:
     assert ans["chief_complaint"] == "腹痛"
     assert ans["onset"] == "1週間前から"
 
+
+def test_finalize_with_summary_enabled() -> None:
+    """サマリー作成モード有効時に要約が生成されることを確認する。"""
+    on_startup()
+    # サマリー作成を有効化
+    client.post(
+        "/questionnaires/default/summary-prompt",
+        json={"visit_type": "initial", "prompt": "", "enabled": True},
+    )
+    payload = {
+        "patient_name": "佐藤健",
+        "dob": "1992-03-03",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "発熱"},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    session_id = res.json()["id"]
+
+    fin = client.post(f"/sessions/{session_id}/finalize")
+    assert fin.status_code == 200
+    data = fin.json()
+    assert data["summary"].startswith("要約")
 
 def test_blank_answer_saved_as_not_applicable() -> None:
     """空欄回答が「該当なし」として保存されることを確認する。"""

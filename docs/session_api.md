@@ -41,7 +41,7 @@
 ## POST /sessions/{session_id}/finalize
 - **概要**: セッションを確定し要約を生成する。
 - **レスポンス**:
-  - `summary` (str): 生成された要約
+  - `summary` (str): 生成された要約。サマリー作成モードが無効の場合は空文字
   - `answers` (object): 確定した回答
   - `finalized_at` (str): ISO8601形式の確定時刻
   - `status` (str): `finalized`
