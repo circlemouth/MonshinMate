@@ -478,3 +478,10 @@
 - [x] 変更（バックエンド）: `backend/app/main.py` に `GET/PUT /system/theme-color` を追加。
 - [x] 変更（フロント）: `frontend/src/contexts/ThemeColorContext.tsx`, `frontend/src/theme/index.ts`, `frontend/src/pages/AdminTheme.tsx`, `frontend/src/components/AdminLayout.tsx`, `frontend/src/main.tsx`, `frontend/src/App.tsx`。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`。
+
+## 58. 管理ログイン失敗時のメッセージ簡略化（2025-11-15）
+- [x] 管理画面へのログインでパスワードが誤っている場合の応答を「パスワードが間違っています」に変更。
+- [x] 不要なパスワードリセット案内をログイン画面から削除。
+- [x] 変更: `backend/app/main.py`, `frontend/src/pages/AdminLogin.tsx`。
+- [x] テスト更新: `backend/tests/test_admin.py`。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。

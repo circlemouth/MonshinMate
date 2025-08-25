@@ -1215,7 +1215,7 @@ def admin_login(payload: AdminLoginRequest) -> dict:
             logging.getLogger("security").info("admin_login_failed")
         except Exception:
             pass
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=401, detail="パスワードが間違っています")
 
     mode = get_totp_mode("admin")
     if admin_user.get("is_totp_enabled") and not admin_user.get("totp_secret"):
