@@ -689,7 +689,7 @@ export default function AdminTemplates() {
             {followupAdvanced && (
               <Box mt={3}>
                 <Text fontSize="sm" color="gray.600" mb={2}>
-                  LLMは追加質問をJSON配列のみで返す必要があります。<br />
+                  LLMは追加質問をJSON配列で返します。うまくいかないときは、プロンプトを調節してください。<br />
                   <code>{'{max_questions}'}</code> は最大質問数に置換されます。
                 </Text>
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
