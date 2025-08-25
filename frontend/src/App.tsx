@@ -19,13 +19,13 @@ import AdminSessions from './pages/AdminSessions';
 import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
 import LlmWait from './pages/LlmWait';
-import AdminSystemName from './pages/AdminSystemName';
+import AdminAppearance from './pages/AdminAppearance';
 import AdminManual from './pages/AdminManual';
 import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
-import AdminTheme from './pages/AdminTheme';
+
 
 // Layouts
 import AdminLayout from './components/AdminLayout';
@@ -157,13 +157,12 @@ export default function App() {
           <Route path="/admin/initial-password" element={<AdminInitialPassword />} />
           <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
           <Route path="/admin" element={<Navigate to="/admin/templates" replace />} />
-          <Route path="/admin/system-name" element={<AdminLayout><AdminSystemName /></AdminLayout>} />
+          <Route path="/admin/appearance" element={<AdminLayout><AdminAppearance /></AdminLayout>} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
           <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
-          <Route path="/admin/theme" element={<AdminLayout><AdminTheme /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
         </Routes>
       </Box>

@@ -684,7 +684,7 @@ export default function AdminTemplates() {
               </Text>
             )}
             <Checkbox mt={3} isChecked={followupAdvanced} isDisabled={!llmFollowupEnabled || !llmAvailable} onChange={(e) => { setFollowupAdvanced(e.target.checked); markDirty(); }}>
-              アドバンストモード（プロンプトを編集）
+              プロンプトを編集
             </Checkbox>
             {followupAdvanced && (
               <Box mt={3}>

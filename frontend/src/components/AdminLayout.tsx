@@ -37,12 +37,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const navItems = useMemo(
     () => [
-      { label: 'システム表示名', to: '/admin/system-name' },
-      { label: 'テーマカラー', to: '/admin/theme' },
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
       { label: 'セキュリティ', to: '/admin/security' },
+      { label: '表示設定', to: '/admin/appearance' },
       { label: '使い方', to: '/admin/manual' },
     ],
     []

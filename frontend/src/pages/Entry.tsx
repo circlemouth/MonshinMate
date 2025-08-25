@@ -15,6 +15,7 @@ export default function Entry() {
   const [dobYear, setDobYear] = useState<number | ''>('');
   const [dobMonth, setDobMonth] = useState<number | ''>('');
   const [dobDay, setDobDay] = useState<number | ''>('');
+  const [entryMessage, setEntryMessage] = useState('不明点があれば受付にお知らせください'); // New state
 
   const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
   const maxDay = typeof dobYear === 'number' && typeof dobMonth === 'number' ? daysInMonth(dobYear, dobMonth) : 31;
@@ -94,6 +95,13 @@ export default function Entry() {
     }
   }, [attempted, name, dob, gender]);
 
+  // Fetch entry message
+  useEffect(() => {
+    fetch('/system/entry-message')
+      .then((r) => r.json())
+      .then((d) => setEntryMessage(d.message || '不明点があれば受付にお知らせください'));
+  }, []);
+
   return (
     <VStack spacing={4} align="stretch">
       <ErrorSummary
@@ -108,23 +116,19 @@ export default function Entry() {
         ]}
       />
       <FormControl isRequired isInvalid={attempted && !name}>
-        <HStack alignItems="center">
-          <FormLabel htmlFor="patient_name" mb={0} w="100px">氏名</FormLabel>
-          <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
-        </HStack>
-        <FormErrorMessage ml="116px">氏名を入力してください</FormErrorMessage>
+        <FormLabel htmlFor="patient_name">氏名</FormLabel>
+        <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+        <FormErrorMessage>氏名を入力してください</FormErrorMessage>
       </FormControl>
       <FormControl isRequired isInvalid={attempted && !gender}>
-        <HStack alignItems="center">
-          <FormLabel mb={0} w="100px">性別</FormLabel>
-          <RadioGroup value={gender} onChange={setGender}>
-            <HStack spacing={4}>
-              <Radio value="male" name="gender">男</Radio>
-              <Radio value="female" name="gender">女</Radio>
-            </HStack>
-          </RadioGroup>
-        </HStack>
-        <FormErrorMessage ml="116px">性別を選択してください</FormErrorMessage>
+        <FormLabel>性別</FormLabel>
+        <RadioGroup value={gender} onChange={setGender}>
+          <HStack spacing={4}>
+            <Radio value="male" name="gender">男</Radio>
+            <Radio value="female" name="gender">女</Radio>
+          </HStack>
+        </RadioGroup>
+        <FormErrorMessage>性別を選択してください</FormErrorMessage>
       </FormControl>
       <FormControl
         isRequired
@@ -132,31 +136,29 @@ export default function Entry() {
           attempted && (!dob || (dob && dob > new Date().toISOString().slice(0, 10)))
         }
       >
-        <HStack alignItems="center">
-          <FormLabel mb={0} w="100px">生年月日</FormLabel>
-          <HStack flex={1}>
-            <Select id="dob-year" placeholder="年" value={dobYear}
-                    onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
-              {years.map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </Select>
-            <Select id="dob-month" placeholder="月" value={dobMonth}
-                    onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
-              {months.map((m) => (
-                <option key={m} value={m}>{m}</option>
-              ))}
-            </Select>
-            <Select id="dob-day" placeholder="日" value={dobDay}
-                    onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
-                    isDisabled={!dobYear || !dobMonth}>
-              {days.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </Select>
-          </HStack>
+        <FormLabel>生年月日</FormLabel>
+        <HStack>
+          <Select id="dob-year" placeholder="年" value={dobYear}
+                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </Select>
+          <Select id="dob-month" placeholder="月" value={dobMonth}
+                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
+            {months.map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </Select>
+          <Select id="dob-day" placeholder="日" value={dobDay}
+                  onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
+                  isDisabled={!dobYear || !dobMonth}>
+            {days.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </Select>
         </HStack>
-        <FormErrorMessage ml="116px">
+        <FormErrorMessage>
           {dob && dob > new Date().toISOString().slice(0, 10)
             ? '生年月日に未来の日付は指定できません'
             : '生年月日を入力してください'}
@@ -170,7 +172,7 @@ export default function Entry() {
             <Radio value="followup">受診したことがある</Radio>
           </HStack>
         </RadioGroup>
-        <FormHelperText id="visit-type-help">不明点があれば受付にお知らせください</FormHelperText>
+        <FormHelperText id="visit-type-help" textAlign="center">{entryMessage}</FormHelperText>
         <FormErrorMessage>選択してください</FormErrorMessage>
       </FormControl>
       <Flex justifyContent="center">

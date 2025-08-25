@@ -1030,6 +1030,33 @@ def set_completion_message(payload: CompletionMessageSettings) -> CompletionMess
         logger.exception("set_completion_message_failed")
         return payload
 
+class EntryMessageSettings(BaseModel):
+    message: str
+
+@app.get("/system/entry-message", response_model=EntryMessageSettings)
+def get_entry_message() -> EntryMessageSettings:
+    """エントリ画面に表示する文言を返す。未設定時は既定値。"""
+    DEFAULT = "不明点があれば受付にお知らせください"
+    try:
+        stored = load_app_settings() or {}
+        msg = stored.get("entry_message") or DEFAULT
+        return EntryMessageSettings(message=msg)
+    except Exception:
+        logger.exception("get_entry_message_failed")
+        return EntryMessageSettings(message=DEFAULT)
+
+@app.put("/system/entry-message", response_model=EntryMessageSettings)
+def set_entry_message(payload: EntryMessageSettings) -> EntryMessageSettings:
+    """エントリ画面に表示する文言を保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["entry_message"] = payload.message or "不明点があれば受付にお知らせください"
+        save_app_settings(current)
+        return EntryMessageSettings(message=current["entry_message"])
+    except Exception:
+        logger.exception("set_entry_message_failed")
+        return payload
+
 @app.get("/system/theme-color", response_model=ThemeColorSettings)
 def get_theme_color() -> ThemeColorSettings:
     """UIのテーマカラーを返す。未設定時は既定値。"""
