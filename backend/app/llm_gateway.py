@@ -54,7 +54,7 @@ class LLMGateway:
             # 直接APIが呼ばれるケースも考慮し、無効時は疎通NGとする。
             return {"status": "ng", "detail": "llm is disabled"}
         if not s.base_url:
-            return {"status": "ng", "detail": "base_url is not configured"}
+            return {"status": "ok"}
 
         try:
             # プロバイダ毎に最小の疎通確認を行う

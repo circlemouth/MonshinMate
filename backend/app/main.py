@@ -333,7 +333,7 @@ def on_startup() -> None:
         logging.getLogger(__name__).exception("failed to log startup admin status")
 
 default_llm_settings = LLMSettings(
-    provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=True
+    provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=False
 )
 llm_gateway = LLMGateway(default_llm_settings)
 
@@ -357,7 +357,7 @@ def healthz() -> dict:
 def readyz() -> dict:
     """依存疎通確認用のエンドポイント。"""
     db_ok = False
-    llm_ok = False
+    llm_ok = not llm_gateway.settings.enabled
     llm_detail = "disabled"
     try:
         _ = list_templates()
@@ -917,11 +917,15 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
         except Exception:
             logger.exception("bg_regen_summaries_failed")
 
-    # LLM 接続が有効で疎通OKのときのみバックグラウンドで再生成を起動
+    # 保存後に疎通テストを実施し、成功時のみバックグラウンドで再生成を起動
     try:
-        ok = llm_gateway.settings.enabled and bool(getattr(llm_gateway.settings, "base_url", None))
-        if ok and llm_gateway.test_connection().get("status") == "ok":
+        if settings.enabled:
+            res = llm_gateway.test_connection()
+            if res.get("status") != "ok":
+                raise HTTPException(status_code=400, detail=res.get("detail") or "LLM接続に失敗しました")
             background.add_task(_bg_regen_summaries)
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("llm_settings_post_update_check_failed")
 
