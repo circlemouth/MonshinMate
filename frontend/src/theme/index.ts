@@ -211,5 +211,5 @@ export function createTheme(primaryColor: string): Theme {
   return extendTheme({ config, colors, semanticTokens, fonts, styles, components });
 }
 
-const theme = createTheme('#1e88e5');
+const theme = createTheme('#1976D2');
 export default theme;

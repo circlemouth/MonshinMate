@@ -1103,15 +1103,19 @@ class AdminAuthStatus(BaseModel):
 class TotpVerifyRequest(BaseModel):
     """TOTP検証リクエスト。"""
     totp_code: str
+    use_for_login: bool = True
+
 
 class PasswordResetRequest(BaseModel):
     """パスワードリセットリクエスト（TOTPコードを含む）。"""
     totp_code: str
 
+
 class PasswordResetConfirm(BaseModel):
     """パスワードリセットの確認。"""
     token: str
     new_password: str
+
 
 @app.get("/admin/auth/status", response_model=AdminAuthStatus)
 def get_admin_auth_status() -> AdminAuthStatus:
@@ -1148,6 +1152,7 @@ def get_admin_auth_status() -> AdminAuthStatus:
         pass
     return result
 
+
 @app.post("/admin/password")
 def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
     """管理者パスワードを更新する。"""
@@ -1172,6 +1177,7 @@ def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
     except Exception:
         pass
     return {"status": "ok"}
+
 
 @app.post("/admin/login")
 def admin_login(payload: AdminLoginRequest) -> dict:
@@ -1209,6 +1215,7 @@ def admin_login(payload: AdminLoginRequest) -> dict:
         pass
     return {"status": "ok", "message": "Login successful"}
 
+
 @app.post("/admin/login/totp")
 def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
     """管理画面へのログイン（TOTP検証）。"""
@@ -1229,6 +1236,7 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
     except Exception:
         pass
     return {"status": "ok", "message": "Login successful"}
+
 
 @app.get("/admin/totp/setup")
 def admin_totp_setup() -> StreamingResponse:
@@ -1256,6 +1264,7 @@ def admin_totp_setup() -> StreamingResponse:
 
     return StreamingResponse(buf, media_type="image/png")
 
+
 @app.post("/admin/totp/verify")
 def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
     """提供されたTOTPコードを検証し、有効化する。"""
@@ -1270,8 +1279,17 @@ def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
 
     # 検証成功、TOTPを有効化
     set_totp_status("admin", enabled=True)
+
+    # TOTPの利用モードを設定
+    if payload.use_for_login:
+        set_totp_mode("admin", "login_and_reset")
+    else:
+        set_totp_mode("admin", "reset_only")
+
     try:
-        logging.getLogger("security").warning("totp_enabled username=admin")
+        logging.getLogger("security").warning(
+            "totp_enabled username=admin use_for_login=%s", payload.use_for_login
+        )
     except Exception:
         pass
     return {"status": "ok"}
