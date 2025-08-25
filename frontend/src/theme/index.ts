@@ -1,75 +1,82 @@
 // 医療機関向け UI デザイントークン + Chakra テーマ
 // 方針: 高コントラスト/可読性・一貫した間隔・半径8px・最小限のモーション
-import { extendTheme, ThemeConfig } from '@chakra-ui/react';
+import { extendTheme, ThemeConfig, Theme } from '@chakra-ui/react';
+import tinycolor from 'tinycolor2';
 
 const config: ThemeConfig = {
   initialColorMode: 'light',
   useSystemColorMode: false,
 };
 
-// カラーパレット（ややデサチュレートのブルーを主系）
-const colors = {
-  primary: {
-    50: '#e3f2fd',
-    100: '#bbdefb',
-    200: '#90caf9',
-    300: '#64b5f6',
-    400: '#42a5f5',
-    500: '#1e88e5', // 基調色（安心感のあるブルー）
-    600: '#1565c0',
-    700: '#0d47a1',
-    800: '#0b3b85',
-    900: '#082a5e',
-  },
-  success: {
-    50: '#e8f5e9',
-    100: '#c8e6c9',
-    200: '#a5d6a7',
-    300: '#81c784',
-    400: '#66bb6a',
-    500: '#2e7d32',
-    600: '#1b5e20',
-    700: '#124a18',
-    800: '#0c3611',
-    900: '#07240b',
-  },
-  warning: {
-    50: '#fff3e0',
-    100: '#ffe0b2',
-    200: '#ffcc80',
-    300: '#ffb74d',
-    400: '#ffa726',
-    500: '#ed6c02',
-    600: '#e65100',
-    700: '#b33f00',
-    800: '#803000',
-    900: '#4d1d00',
-  },
-  danger: {
-    50: '#ffebee',
-    100: '#ffcdd2',
-    200: '#ef9a9a',
-    300: '#e57373',
-    400: '#ef5350',
-    500: '#d32f2f',
-    600: '#b71c1c',
-    700: '#911515',
-    800: '#6c0f0f',
-    900: '#470a0a',
-  },
-  neutral: {
-    50: '#fafafa',
-    100: '#f5f5f5',
-    200: '#eeeeee',
-    300: '#e0e0e0',
-    400: '#bdbdbd',
-    500: '#9e9e9e',
-    600: '#757575',
-    700: '#616161',
-    800: '#424242',
-    900: '#212121',
-  },
+const success = {
+  50: '#e8f5e9',
+  100: '#c8e6c9',
+  200: '#a5d6a7',
+  300: '#81c784',
+  400: '#66bb6a',
+  500: '#2e7d32',
+  600: '#1b5e20',
+  700: '#124a18',
+  800: '#0c3611',
+  900: '#07240b',
 };
+
+const warning = {
+  50: '#fff3e0',
+  100: '#ffe0b2',
+  200: '#ffcc80',
+  300: '#ffb74d',
+  400: '#ffa726',
+  500: '#ed6c02',
+  600: '#e65100',
+  700: '#b33f00',
+  800: '#803000',
+  900: '#4d1d00',
+};
+
+const danger = {
+  50: '#ffebee',
+  100: '#ffcdd2',
+  200: '#ef9a9a',
+  300: '#e57373',
+  400: '#ef5350',
+  500: '#d32f2f',
+  600: '#b71c1c',
+  700: '#911515',
+  800: '#6c0f0f',
+  900: '#470a0a',
+};
+
+const neutral = {
+  50: '#fafafa',
+  100: '#f5f5f5',
+  200: '#eeeeee',
+  300: '#e0e0e0',
+  400: '#bdbdbd',
+  500: '#9e9e9e',
+  600: '#757575',
+  700: '#616161',
+  800: '#424242',
+  900: '#212121',
+};
+
+function generatePrimary(base: string) {
+  const c = tinycolor(base);
+  const def = tinycolor('#1e88e5');
+  const valid = c.isValid() ? c : def;
+  return {
+    50: valid.clone().lighten(40).toHexString(),
+    100: valid.clone().lighten(32).toHexString(),
+    200: valid.clone().lighten(24).toHexString(),
+    300: valid.clone().lighten(16).toHexString(),
+    400: valid.clone().lighten(8).toHexString(),
+    500: valid.toHexString(),
+    600: valid.clone().darken(8).toHexString(),
+    700: valid.clone().darken(16).toHexString(),
+    800: valid.clone().darken(24).toHexString(),
+    900: valid.clone().darken(32).toHexString(),
+  };
+}
 
 // セマンティックトークン（ライト基調）
 const semanticTokens = {
@@ -193,13 +200,16 @@ const components = {
   },
 };
 
-const theme = extendTheme({
-  config,
-  colors,
-  semanticTokens,
-  fonts,
-  styles,
-  components,
-});
+export function createTheme(primaryColor: string): Theme {
+  const colors = {
+    primary: generatePrimary(primaryColor),
+    success,
+    warning,
+    danger,
+    neutral,
+  };
+  return extendTheme({ config, colors, semanticTokens, fonts, styles, components });
+}
 
+const theme = createTheme('#1e88e5');
 export default theme;

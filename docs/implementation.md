@@ -472,3 +472,9 @@
 ## 56. 追加質問判定時のフェッチエラー処理改善（2025-11-13）
 - [x] LLM 追質問の要否判定および質問取得の際、HTTP エラーやネットワーク例外が発生した場合にレビュー画面へフォールバックするようにした。
 - [x] 変更: `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`。
+
+## 57. テーマカラー設定機能（2025-11-14）
+- [x] 管理画面でUIのテーマカラーを変更できるようにし、パステルカラー10種のサンプルと任意のカラーコード入力に対応。
+- [x] 変更（バックエンド）: `backend/app/main.py` に `GET/PUT /system/theme-color` を追加。
+- [x] 変更（フロント）: `frontend/src/contexts/ThemeColorContext.tsx`, `frontend/src/theme/index.ts`, `frontend/src/pages/AdminTheme.tsx`, `frontend/src/components/AdminLayout.tsx`, `frontend/src/main.tsx`, `frontend/src/App.tsx`。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`。

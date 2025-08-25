@@ -25,6 +25,7 @@ import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
+import AdminTheme from './pages/AdminTheme';
 
 // Layouts
 import AdminLayout from './components/AdminLayout';
@@ -162,6 +163,7 @@ export default function App() {
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
+          <Route path="/admin/theme" element={<AdminLayout><AdminTheme /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
         </Routes>
       </Box>
