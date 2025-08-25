@@ -975,6 +975,10 @@ class DefaultQuestionnaireSettings(BaseModel):
     """デフォルト問診テンプレートの設定。"""
     questionnaire_id: str
 
+class ThemeColorSettings(BaseModel):
+    """UIのテーマカラー設定。"""
+    color: str
+
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
     """システムの表示名（ヘッダーに出す名称）を返す。未設定時は既定値。"""
@@ -1024,6 +1028,30 @@ def set_completion_message(payload: CompletionMessageSettings) -> CompletionMess
         return CompletionMessageSettings(message=current["completion_message"])
     except Exception:
         logger.exception("set_completion_message_failed")
+        return payload
+
+@app.get("/system/theme-color", response_model=ThemeColorSettings)
+def get_theme_color() -> ThemeColorSettings:
+    """UIのテーマカラーを返す。未設定時は既定値。"""
+    DEFAULT = "#1e88e5"
+    try:
+        stored = load_app_settings() or {}
+        color = stored.get("theme_color") or DEFAULT
+        return ThemeColorSettings(color=color)
+    except Exception:
+        logger.exception("get_theme_color_failed")
+        return ThemeColorSettings(color=DEFAULT)
+
+@app.put("/system/theme-color", response_model=ThemeColorSettings)
+def set_theme_color(payload: ThemeColorSettings) -> ThemeColorSettings:
+    """UIのテーマカラーを保存する。"""
+    try:
+        current = load_app_settings() or {}
+        current["theme_color"] = payload.color or "#1e88e5"
+        save_app_settings(current)
+        return ThemeColorSettings(color=current["theme_color"])
+    except Exception:
+        logger.exception("set_theme_color_failed")
         return payload
 
 @app.get("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
