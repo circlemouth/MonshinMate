@@ -13,8 +13,12 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+type Props = {
+  inModal?: boolean;
+  onSuccess?: () => void;
+};
 
-export default function AdminLogin() {
+export default function AdminLogin({ inModal = false, onSuccess }: Props) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,14 +40,15 @@ export default function AdminLogin() {
       if (!res.ok) {
         throw new Error(data.detail || 'ログインに失敗しました');
       }
-      
+
       if (data?.status === 'totp_required') {
         setTotpRequired(true);
         return;
       }
-      
+
       sessionStorage.setItem('adminLoggedIn', '1');
       await checkAuthStatus(); // AuthContextの状態を更新
+      onSuccess?.();
       navigate('/admin/templates');
 
     } catch (e: any) {
@@ -72,6 +77,7 @@ export default function AdminLogin() {
       }
       sessionStorage.setItem('adminLoggedIn', '1');
       await checkAuthStatus(); // AuthContextの状態を更新
+      onSuccess?.();
       navigate('/admin/templates');
     } catch (e: any) {
       setError(e.message);
@@ -80,8 +86,7 @@ export default function AdminLogin() {
     }
   };
 
-  return (
-    <Container centerContent pt={10}>
+  const content = (
       <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
         <Heading size="lg">管理者ログイン</Heading>
 
@@ -142,6 +147,15 @@ export default function AdminLogin() {
           <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
         )}
       </VStack>
+  );
+
+  if (inModal) {
+    return content;
+  }
+
+  return (
+    <Container centerContent pt={10}>
+      {content}
     </Container>
   );
 }

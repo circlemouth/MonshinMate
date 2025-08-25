@@ -1,4 +1,4 @@
-import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text } from '@chakra-ui/react';
+import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { flushQueue } from './retryQueue';
@@ -75,11 +75,14 @@ export default function App() {
     return () => window.removeEventListener('systemDisplayNameUpdated' as any, onUpdated);
   }, []);
 
+  const { isOpen: isLoginOpen, onOpen: openLogin, onClose: closeLogin } = useDisclosure();
+
+  // 管理画面ボタン押下時にログイン用モーダルを開く
   const handleAdminClick = () => {
     if (isAuthenticated) {
       navigate('/admin/templates');
     } else {
-      navigate('/admin/login');
+      openLogin();
     }
   };
 
@@ -175,6 +178,16 @@ export default function App() {
           <Text mt={1} fontSize="xs" color="gray.500">MonshinMate</Text>
         </Box>
       )}
+
+      <Modal isOpen={isLoginOpen} onClose={closeLogin} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalCloseButton />
+          <ModalBody>
+            <AdminLogin inModal onSuccess={closeLogin} />
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Container>
   );
 }

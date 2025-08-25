@@ -324,7 +324,7 @@
   - 変更: `frontend/src/App.tsx` のフッター表示条件を `!isChatPage && !isAdminPage` に変更。
 
 ## 31. 管理ログインをモーダル化（2025-08-23）
-- [x] 患者画面から管理画面へ遷移する際、ポップアップ（モーダル）でパスワード入力。
+- [x] 患者画面から管理画面へ遷移する際、画面内モーダルでパスワード入力。
   - 変更: `frontend/src/App.tsx` にログイン用モーダルを実装。ヘッダーの「管理画面」クリックでモーダルを開き、成功後に `/admin/templates` へ遷移。
   - 直接URLでのアクセス時は従来通り `/admin/login` へ誘導（ガード継続）。
 
@@ -484,4 +484,14 @@
 - [x] 不要なパスワードリセット案内をログイン画面から削除。
 - [x] 変更: `backend/app/main.py`, `frontend/src/pages/AdminLogin.tsx`。
 - [x] テスト更新: `backend/tests/test_admin.py`。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 59. 管理ログインを画面内モーダル化（2025-11-16）
+- [x] 患者画面の「管理画面」ボタン押下時に、別ウィンドウではなくモーダルでログインフォームを表示し、成功後に `/admin/templates` へ遷移。
+- [x] 変更: `frontend/src/App.tsx`。
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 60. 二段階認証画面を同モーダル内に表示（2025-11-16）
+- [x] パスワード送信後の二段階認証コード入力も同じモーダル内で行えるようにした。
+- [x] 変更: `frontend/src/pages/AdminLogin.tsx`。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
