@@ -10,13 +10,18 @@ export default function LlmWait() {
 
   const finalize = async () => {
     if (!sessionId) return;
+    const err = sessionStorage.getItem('llm_error');
     try {
-      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
+      const res = await fetch(`/sessions/${sessionId}/finalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ llm_error: err }),
+      });
       const data = await res.json();
       sessionStorage.setItem('summary', data.summary);
     } catch (e) {
       console.error('finalize failed', e);
-      postWithRetry(`/sessions/${sessionId}/finalize`, {});
+      postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
     navigate('/done');
@@ -39,6 +44,10 @@ export default function LlmWait() {
         }
       } catch (e) {
         console.error('llm question check failed', e);
+        try {
+          const msg = e instanceof Error ? e.message : String(e);
+          sessionStorage.setItem('llm_error', msg);
+        } catch {}
         await finalize();
       }
     };

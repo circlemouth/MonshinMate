@@ -1498,6 +1498,12 @@ class SessionDetail(BaseModel):
     finalized_at: str | None = None
 
 
+class FinalizeRequest(BaseModel):
+    """セッション確定時に受け取る追加情報。"""
+
+    llm_error: str | None = None
+
+
 @app.post("/sessions", response_model=SessionCreateResponse)
 def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     """新しいセッションを作成して返す。"""
@@ -1628,7 +1634,9 @@ def get_llm_questions(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/finalize")
-def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
+def finalize_session(
+    session_id: str, background: BackgroundTasks, payload: FinalizeRequest | None = None
+) -> dict:
     """セッションを確定し要約を返す。"""
 
     session = sessions.get(session_id)
@@ -1647,6 +1655,9 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
         METRIC_SUMMARIES += 1
     else:
         session.summary = ""
+    if payload and payload.llm_error:
+        suffix = f"[LLMエラー]: {payload.llm_error}"
+        session.summary = f"{session.summary}\n{suffix}" if session.summary else suffix
     session.finalized_at = datetime.now(UTC)
     session.completion_status = "finalized"
     logger.info("session_finalized id=%s", session_id)
@@ -1674,6 +1685,7 @@ def finalize_session(session_id: str, background: BackgroundTasks) -> dict:
         summary_enabled
         and getattr(llm_gateway.settings, "enabled", True)
         and getattr(llm_gateway.settings, "base_url", None)
+        and not (payload and payload.llm_error)
     ):
         background.add_task(_bg_summary_task, session.id)
 

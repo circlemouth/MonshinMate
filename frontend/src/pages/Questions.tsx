@@ -20,14 +20,19 @@ export default function Questions() {
 
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
+    const err = sessionStorage.getItem('llm_error');
     try {
-      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
+      const res = await fetch(`/sessions/${sessionId}/finalize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ llm_error: err }),
+      });
       const data = await res.json();
       sessionStorage.setItem('summary', data.summary);
       sessionStorage.setItem('answers', JSON.stringify(ans));
     } catch {
       sessionStorage.setItem('answers', JSON.stringify(ans));
-      postWithRetry(`/sessions/${sessionId}/finalize`, {});
+      postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
     navigate('/done');
@@ -46,6 +51,10 @@ export default function Questions() {
       }
     } catch (e) {
       console.error('fetchQuestion failed', e);
+      try {
+        const msg = e instanceof Error ? e.message : String(e);
+        sessionStorage.setItem('llm_error', msg);
+      } catch {}
       await finalize(answers);
     }
   };
@@ -82,8 +91,12 @@ export default function Questions() {
       } else {
         await finalize(newAnswers);
       }
-    } catch {
+    } catch (e) {
       const newAnswers = { ...answers, [current.id]: answer };
+      try {
+        const msg = e instanceof Error ? e.message : String(e);
+        sessionStorage.setItem('llm_error', msg);
+      } catch {}
       await finalize(newAnswers);
     }
   };
