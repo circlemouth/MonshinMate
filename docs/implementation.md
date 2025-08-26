@@ -524,3 +524,8 @@
 - [x] Entry ページ表示時に旧セッション情報を `sessionStorage` から削除し、常に新しいセッションIDで問診を開始できるようにした。
 - [x] 患者向け入力フォームの `autoComplete` を `off` に設定し、ブラウザの自動入力によるデータ混同を防止。
 - 変更: `frontend/src/pages/Entry.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/Questions.tsx`, `frontend/src/components/DateSelect.tsx`。
+
+## 66. TOTP有効化タイミングの修正（2025-11-21）
+- [x] `set_totp_mode` で `is_totp_enabled` を自動的に更新しないようにし、QRコード発行後にコードを検証して初めて有効化されるよう変更。
+- [x] モード変更のみでは有効化されないことを確認するテストを追加。
+- [x] 変更: `backend/app/db.py`, `backend/tests/test_admin.py`, `docs/admin_system_setup.md`。

@@ -899,19 +899,26 @@ def set_totp_mode(username: str, mode: str, db_path: str = DEFAULT_DB_PATH) -> N
         raise ValueError('invalid totp mode')
     conn = get_conn(db_path)
     try:
-        # 'off' なら is_totp_enabled も 0、 それ以外は 1 に合わせる
-        enabled = 0 if mode == 'off' else 1
         now = datetime.now(UTC).isoformat()
-        conn.execute(
-            "UPDATE users SET totp_mode = ?, is_totp_enabled = ?, totp_changed_at = ? WHERE username = ?",
-            (mode, enabled, now, username),
-        )
+        if mode == 'off':
+            conn.execute(
+                "UPDATE users SET totp_mode = 'off', is_totp_enabled = 0, totp_changed_at = ? WHERE username = ?",
+                (now, username),
+            )
+        else:
+            conn.execute(
+                "UPDATE users SET totp_mode = ?, totp_changed_at = ? WHERE username = ?",
+                (mode, now, username),
+            )
         conn.commit()
+        row = conn.execute(
+            "SELECT is_totp_enabled FROM users WHERE username = ?", (username,)
+        ).fetchone()
         logging.getLogger("security").warning(
             "totp_mode_changed username=%s mode=%s enabled=%s db=%s",
             username,
             mode,
-            bool(enabled),
+            bool(row["is_totp_enabled"]) if row else None,
             db_path,
         )
     finally:
