@@ -166,6 +166,7 @@ export default function QuestionnaireForm() {
   }, [attempted, visibleItems, answers]);
 
   return (
+    <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
     <VStack spacing={6} align="stretch">
       <ErrorSummary errors={errorsForSummary} />
       {visibleItems.map((item) => (
@@ -245,6 +246,7 @@ export default function QuestionnaireForm() {
                       setFreeTexts({ ...freeTexts, [item.id]: val });
                       setAnswers({ ...answers, [item.id]: updated });
                     }}
+                    autoComplete="off"
                   />
                 )}
               </>
@@ -259,6 +261,7 @@ export default function QuestionnaireForm() {
                 aria-describedby={helperTexts[item.id] ? `help-item-${item.id}` : undefined}
                 value={answers[item.id] || ''}
                 onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
+                autoComplete="off"
               />
             )}
             <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
@@ -269,5 +272,6 @@ export default function QuestionnaireForm() {
         次へ
       </Button>
     </VStack>
+    </form>
   );
 }

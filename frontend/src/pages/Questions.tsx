@@ -102,16 +102,18 @@ export default function Questions() {
   };
 
   return (
+    <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
     <VStack spacing={4} align="stretch">
       {current && (
         <>
           <Box>{current.text}</Box>
-          <Input value={answer} onChange={(e) => setAnswer(e.target.value)} />
+          <Input value={answer} onChange={(e) => setAnswer(e.target.value)} autoComplete="off" />
           <Button onClick={submit} colorScheme="primary">
             送信
           </Button>
         </>
       )}
     </VStack>
+    </form>
   );
 }
