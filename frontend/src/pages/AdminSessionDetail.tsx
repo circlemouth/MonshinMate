@@ -124,7 +124,7 @@ export default function AdminSessionDetail() {
 
       {detail.llm_question_texts && Object.keys(detail.llm_question_texts).length > 0 && (
         <VStack align="stretch" spacing={4}>
-          <Heading size="md">追加質問（LLM）</Heading>
+          <Heading size="md">追加質問</Heading>
           {Object.entries(detail.llm_question_texts)
             .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
             .map(([qid, qtext]) => (

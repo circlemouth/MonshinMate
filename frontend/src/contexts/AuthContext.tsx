@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
 
 // APIレスポンスの型定義
 interface AuthStatus {
@@ -28,9 +28,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isTotpEnabled, setIsTotpEnabled] = useState(false);
   const [showTotpSetup, setShowTotpSetup] = useState(false);
 
-  const checkAuthStatus = async () => {
-    // 状態チェック中はローディングを維持
-    if (!isLoading) setIsLoading(true);
+  // NOTE: checkAuthStatus が再生成されると依存コンポーネントの useEffect が連続発火し、
+  // 画面がローディング↔入力の高速切替（フリッカー）を起こすため、useCallbackで安定化する。
+  const checkAuthStatus = useCallback(async () => {
+    setIsLoading(true);
     try {
       const loggedIn = sessionStorage.getItem('adminLoggedIn') === '1';
       setIsAuthenticated(loggedIn);
@@ -49,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkAuthStatus();
@@ -66,7 +67,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsAuthenticated(false);
   };
 
-  const value = {
+  // Context値もuseMemoで包んで不要な再レンダ/参照変化を抑制
+  const value = useMemo(() => ({
     isLoading,
     isAuthenticated,
     isInitialPassword,
@@ -76,7 +78,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     login,
     logout,
     checkAuthStatus,
-  };
+  }), [
+    isLoading,
+    isAuthenticated,
+    isInitialPassword,
+    isTotpEnabled,
+    showTotpSetup,
+    login,
+    logout,
+    checkAuthStatus,
+  ]);
 
   return (
     <AuthContext.Provider value={value}>

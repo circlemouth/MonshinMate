@@ -144,7 +144,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 session_id TEXT NOT NULL,
                 item_id TEXT NOT NULL,
                 answer_json TEXT NOT NULL,
-                -- 追加質問（LLM）の場合に限り、提示した質問文を保持する
+                -- 追加質問の場合に限り、提示した質問文を保持する
                 question_text TEXT,
                 ts TEXT NOT NULL,
                 PRIMARY KEY (session_id, item_id),

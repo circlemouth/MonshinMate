@@ -206,7 +206,7 @@ export default function AdminSessions() {
                 ))}
                 {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
                   <>
-                    <Heading size="sm">追加質問（LLM）</Heading>
+                    <Heading size="sm"></Heading>
                     {Object.entries(selectedDetail.llm_question_texts)
                       .sort(([a]: any, [b]: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
                       .map(([qid, qtext]: any) => (
