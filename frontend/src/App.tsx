@@ -10,7 +10,6 @@ import { useAuth } from './contexts/AuthContext';
 import Entry from './pages/Entry';
 import QuestionnaireForm from './pages/QuestionnaireForm';
 import Questions from './pages/Questions';
-import Review from './pages/Review';
 import Done from './pages/Done';
 import AdminLogin from './pages/AdminLogin';
 import AdminTemplates from './pages/AdminTemplates';
@@ -151,7 +150,6 @@ export default function App() {
           <Route path="/questionnaire" element={<QuestionnaireForm />} />
           <Route path="/llm-wait" element={<LlmWait />} />
           <Route path="/questions" element={<Questions />} />
-          <Route path="/review" element={<Review />} />
           <Route path="/done" element={<Done />} />
           <Route path="/chat" element={<LLMChat />} />
 

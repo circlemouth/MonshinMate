@@ -18,6 +18,21 @@ export default function Questions() {
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
 
+  const finalize = async (ans: Record<string, any>) => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
+      const data = await res.json();
+      sessionStorage.setItem('summary', data.summary);
+      sessionStorage.setItem('answers', JSON.stringify(ans));
+    } catch {
+      sessionStorage.setItem('answers', JSON.stringify(ans));
+      postWithRetry(`/sessions/${sessionId}/finalize`, {});
+      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
+    }
+    navigate('/done');
+  };
+
   const fetchQuestion = async () => {
     if (!sessionId) return;
     try {
@@ -27,13 +42,11 @@ export default function Questions() {
       if (data.questions && data.questions.length > 0) {
         setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
       } else {
-        sessionStorage.setItem('answers', JSON.stringify(answers));
-        navigate('/review');
+        await finalize(answers);
       }
     } catch (e) {
       console.error('fetchQuestion failed', e);
-      sessionStorage.setItem('answers', JSON.stringify(answers));
-      navigate('/review');
+      await finalize(answers);
     }
   };
 
@@ -67,14 +80,11 @@ export default function Questions() {
       if (data.questions && data.questions.length > 0) {
         setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
       } else {
-        sessionStorage.setItem('answers', JSON.stringify(newAnswers));
-        navigate('/review');
+        await finalize(newAnswers);
       }
     } catch {
-      // ネットワークエラー時は回答をキューに保存し確認画面へ遷移
       const newAnswers = { ...answers, [current.id]: answer };
-      sessionStorage.setItem('answers', JSON.stringify(newAnswers));
-      navigate('/review');
+      await finalize(newAnswers);
     }
   };
 

@@ -21,8 +21,6 @@ export default function FlowProgress() {
       case '/llm-wait':
         return 64;
       case '/questions':
-        return 72;
-      case '/review':
         return 88;
       case '/done':
         return 100;
