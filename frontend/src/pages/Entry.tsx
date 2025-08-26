@@ -35,6 +35,21 @@ export default function Entry() {
   const [attempted, setAttempted] = useState(false);
   const navigate = useNavigate();
 
+  // 新規セッション開始時に前回のデータをクリア
+  useEffect(() => {
+    [
+      'session_id',
+      'answers',
+      'questionnaire_items',
+      'summary',
+      'visit_type',
+      'llm_error',
+      'patient_name',
+      'dob',
+      'gender',
+    ].forEach((k) => sessionStorage.removeItem(k));
+  }, []);
+
   const handleNext = async () => {
     setAttempted(true);
     const errs: string[] = [];
@@ -103,6 +118,7 @@ export default function Entry() {
   }, []);
 
   return (
+    <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
     <VStack spacing={4} align="stretch">
       <ErrorSummary
         errors={[
@@ -117,7 +133,7 @@ export default function Entry() {
       />
       <FormControl isRequired isInvalid={attempted && !name}>
         <FormLabel htmlFor="patient_name">氏名</FormLabel>
-        <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+        <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
         <FormErrorMessage>氏名を入力してください</FormErrorMessage>
       </FormControl>
       <FormControl isRequired isInvalid={attempted && !gender}>
@@ -139,20 +155,20 @@ export default function Entry() {
         <FormLabel>生年月日</FormLabel>
         <HStack>
           <Select id="dob-year" placeholder="年" value={dobYear}
-                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}>
+                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')} autoComplete="off">
             {years.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </Select>
           <Select id="dob-month" placeholder="月" value={dobMonth}
-                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}>
+                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')} autoComplete="off">
             {months.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </Select>
           <Select id="dob-day" placeholder="日" value={dobDay}
                   onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
-                  isDisabled={!dobYear || !dobMonth}>
+                  isDisabled={!dobYear || !dobMonth} autoComplete="off">
             {days.map((d) => (
               <option key={d} value={d}>{d}</option>
             ))}
@@ -181,5 +197,6 @@ export default function Entry() {
         </Button>
       </Flex>
     </VStack>
+    </form>
   );
 }

@@ -25,20 +25,20 @@ export default function DateSelect({ value, onChange }: { value?: string; onChan
 
   return (
     <HStack>
-      <Select placeholder="年" value={year || ''} onChange={(e) => update(e.target.value, month, day)}>
+      <Select placeholder="年" value={year || ''} onChange={(e) => update(e.target.value, month, day)} autoComplete="off">
         {years.map((y) => (
           <option key={y} value={y}>{y}</option>
         ))}
       </Select>
-      <Select placeholder="月" value={month || ''} onChange={(e) => update(year, e.target.value, day)}>
+      <Select placeholder="月" value={month || ''} onChange={(e) => update(year, e.target.value, day)} autoComplete="off">
         {months.map((m) => (
           <option key={m} value={m}>{m}</option>
         ))}
       </Select>
-      <Select placeholder="日" value={day || ''} onChange={(e) => update(year, month, e.target.value)}>
-        {days.map((d) => (
-          <option key={d} value={d}>{d}</option>
-        ))}
+      <Select placeholder="日" value={day || ''} onChange={(e) => update(year, month, e.target.value)} autoComplete="off">
+    {days.map((d) => (
+      <option key={d} value={d}>{d}</option>
+    ))}
       </Select>
     </HStack>
   );

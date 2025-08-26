@@ -519,3 +519,8 @@
 - [x] ボタン直下に「パスワードをリセットするには二段階認証の有効化が必要であり推奨する」旨のメッセージを表示。
 - [x] 二段階認証が有効になって初めて「QRコードを表示」ボタンや「パスワードをリセット」ボタンが表示されるよう条件分岐を整理。
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`。
+
+## 65. セッション開始時の旧データ初期化と自動入力抑止（2025-11-20）
+- [x] Entry ページ表示時に旧セッション情報を `sessionStorage` から削除し、常に新しいセッションIDで問診を開始できるようにした。
+- [x] 患者向け入力フォームの `autoComplete` を `off` に設定し、ブラウザの自動入力によるデータ混同を防止。
+- 変更: `frontend/src/pages/Entry.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/Questions.tsx`, `frontend/src/components/DateSelect.tsx`。
