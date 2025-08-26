@@ -529,3 +529,9 @@
 - [x] `set_totp_mode` で `is_totp_enabled` を自動的に更新しないようにし、QRコード発行後にコードを検証して初めて有効化されるよう変更。
 - [x] モード変更のみでは有効化されないことを確認するテストを追加。
 - [x] 変更: `backend/app/db.py`, `backend/tests/test_admin.py`, `docs/admin_system_setup.md`。
+
+## 67. 二段階認証無効化時のシークレット削除（2025-11-22）
+- [x] 無効化すると登録済みのTOTPシークレットを削除し、再有効化時に旧コードが利用されないようにした。
+  - 変更: `backend/app/db.py`, `backend/app/main.py`
+  - テスト: `backend/tests/test_admin.py`
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
