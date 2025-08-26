@@ -24,7 +24,6 @@
 
 ## 4. 印刷最適化
 - グローバルに `@media print`、`.print-hidden`/`.print-only`/`.print-break` を定義
-- Review: 印刷専用レイアウト（見出し、区切り、pre-wrap）
 - Done: ボタン類は印刷時に非表示にし、本文の可読性を確保
 
 ## 5. 今後の確認事項

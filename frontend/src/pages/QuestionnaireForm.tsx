@@ -75,6 +75,21 @@ export default function QuestionnaireForm() {
 
   const [attempted, setAttempted] = useState(false);
 
+  const finalize = async (ans: Record<string, any>) => {
+    if (!sessionId) return;
+    try {
+      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
+      const data = await res.json();
+      sessionStorage.setItem('summary', data.summary);
+      sessionStorage.setItem('answers', JSON.stringify(ans));
+    } catch {
+      sessionStorage.setItem('answers', JSON.stringify(ans));
+      postWithRetry(`/sessions/${sessionId}/finalize`, {});
+      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
+    }
+    navigate('/done');
+  };
+
   const handleSubmit = async () => {
     if (!sessionId) return;
     setAttempted(true);
@@ -93,16 +108,15 @@ export default function QuestionnaireForm() {
     const llmFollowupEnabled = flag === '1' || flag === null;
     try {
       await postWithRetry(`/sessions/${sessionId}/answers`, { answers });
-      sessionStorage.setItem('answers', JSON.stringify(answers));
       if (llmFollowupEnabled) {
+        sessionStorage.setItem('answers', JSON.stringify(answers));
         navigate('/llm-wait');
       } else {
-        navigate('/review');
+        await finalize(answers);
       }
     } catch {
-      // ネットワークエラー時は回答をキューに保存し確認画面へ遷移
       sessionStorage.setItem('answers', JSON.stringify(answers));
-      navigate('/review');
+      await finalize(answers);
     }
   };
 
