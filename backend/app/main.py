@@ -1630,13 +1630,14 @@ def get_llm_questions(session_id: str) -> dict:
         raise HTTPException(status_code=404, detail="session not found")
 
     fsm = SessionFSM(session, llm_gateway)
-    question = fsm.next_question()
+    questions = fsm.next_questions()
     save_session(session)
-    if not question:
+    if not questions:
         logger.info("llm_question_limit id=%s", session_id)
         return {"questions": []}
-    logger.info("llm_question id=%s item=%s", session_id, question["id"])
-    return {"questions": [question]}
+    for q in questions:
+        logger.info("llm_question id=%s item=%s", session_id, q["id"])
+    return {"questions": questions}
 
 
 @app.post("/sessions/{session_id}/finalize")

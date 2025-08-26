@@ -92,6 +92,23 @@ class SessionFSM:
         self.session.additional_questions_used += 1
         return question
 
+    def next_questions(self) -> list[dict[str, Any]]:
+        """追加質問をまとめて取得する。
+
+        `next_question` を繰り返し呼び出し、LLM への問い合わせは
+        最初の1回で済ませつつ、生成された全ての質問を返す。
+
+        Returns:
+            list[dict[str, Any]]: 生成された追加質問のリスト。
+        """
+        questions: list[dict[str, Any]] = []
+        while True:
+            q = self.next_question()
+            if not q:
+                break
+            questions.append(q)
+        return questions
+
     def update_completion(self) -> None:
         """外部から明示的に完了状態を更新したい場合に使用。"""
         self._finalize_item()

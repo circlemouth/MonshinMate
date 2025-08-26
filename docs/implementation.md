@@ -536,3 +536,9 @@
   - 変更: `backend/app/db.py`, `backend/app/main.py`
   - テスト: `backend/tests/test_admin.py`
   - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 68. 追加質問の一括返却（2025-08-27）
+- [x] LLM への問い合わせを1度だけ行い、生成された追加質問をまとめて返す `next_questions` を追加。
+- [x] エンドポイント `/sessions/{id}/llm-questions` は全ての質問を一括で返却するよう変更。
+- [x] ドキュメント更新: `docs/session_api.md`。
+- [x] テスト更新: `backend/tests/test_api.py`。
