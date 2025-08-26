@@ -166,8 +166,8 @@ def test_totp_disable_clears_secret_and_reissue():
     res = local_client.post("/admin/totp/verify", json={"totp_code": totp.now()})
     assert res.status_code == 200
 
-    # 無効化するとシークレットも削除される
-    res = local_client.post("/admin/totp/disable")
+    # 無効化するときは確認のために正しいTOTPコードが必要
+    res = local_client.post("/admin/totp/disable", json={"totp_code": totp.now()})
     assert res.status_code == 200
     user = get_user_by_username("admin")
     assert user["totp_secret"] is None

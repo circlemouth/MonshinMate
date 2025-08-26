@@ -19,6 +19,9 @@ export default function AdminSecurity() {
   const toast = useToast();
   const navigate = useNavigate();
   const { isOpen, onOpen, onClose } = useDisclosure();
+  // 無効化確認用モーダル
+  const disableModal = useDisclosure();
+  const [disableCode, setDisableCode] = useState('');
 
   const loadStatus = async () => {
     try {
@@ -79,16 +82,26 @@ export default function AdminSecurity() {
   };
 
   const disableTotp = async () => {
+    if (!disableCode) return;
     setLoading(true);
     try {
-      const r = await fetch('/admin/totp/disable', { method: 'POST' });
-      if (!r.ok) throw new Error();
+      const r = await fetch('/admin/totp/disable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ totp_code: disableCode }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || '無効化に失敗しました');
+      }
       toast({ title: '2要素認証を無効化しました', status: 'success' });
       setQrUrl(null);
       setCode('');
+      setDisableCode('');
       loadStatus();
-    } catch {
-      toast({ title: '無効化に失敗しました', status: 'error' });
+      disableModal.onClose();
+    } catch (e: any) {
+      toast({ title: e.message, status: 'error' });
     } finally {
       setLoading(false);
     }
@@ -182,15 +195,10 @@ export default function AdminSecurity() {
         ) : (
           <VStack align="stretch" spacing={3} mt={4}>
             <HStack>
-              <Button colorScheme="primary" onClick={disableTotp} isLoading={loading}>
+              <Button colorScheme="primary" onClick={disableModal.onOpen} isLoading={loading}>
                 二段階認証を無効化する
               </Button>
-              <Button variant="outline" onClick={async () => { setQrUrl(null); setCode(''); onOpen(); await startSetup(); }} isLoading={loading}>QRコードを表示</Button>
-              <Button onClick={regenerate} isLoading={loading}>
-                再設定（再生成）
-              </Button>
             </HStack>
-            <Text fontSize="xs" color="gray.600">再設定すると古いコードは無効になります。再度QRをスキャンしてください。</Text>
           </VStack>
         )}
       </Box>
@@ -241,6 +249,35 @@ export default function AdminSecurity() {
                 }}
               >
                 有効化を確定
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* 二段階認証の無効化確認モーダル */}
+      <Modal isOpen={disableModal.isOpen} onClose={() => { disableModal.onClose(); setDisableCode(''); }} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>二段階認証の無効化</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={3}>
+              <Text fontSize="sm">Authenticatorに表示されている6桁のコードを入力してください。</Text>
+              <FormControl>
+                <FormLabel>6桁コード</FormLabel>
+                <Input value={disableCode} onChange={(e) => setDisableCode(e.target.value)} maxW="200px" />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack>
+              <Button variant="ghost" onClick={() => { disableModal.onClose(); setDisableCode(''); }}>キャンセル</Button>
+              <Button colorScheme="red" isLoading={loading}
+                isDisabled={!disableCode || disableCode.length !== 6}
+                onClick={disableTotp}
+              >
+                無効化する
               </Button>
             </HStack>
           </ModalFooter>

@@ -542,3 +542,11 @@
 - [x] エンドポイント `/sessions/{id}/llm-questions` は全ての質問を一括で返却するよう変更。
 - [x] ドキュメント更新: `docs/session_api.md`。
 - [x] テスト更新: `backend/tests/test_api.py`。
+
+## 69. セキュリティタブのTOTP無効化フロー見直し（2025-08-26）
+- [x] 二段階認証が有効な状態では、QRコードの再表示および再設定（再生成）ボタンを非表示にした。
+- [x] 「二段階認証を無効化する」実行時に画面内モーダルで6桁コードの入力を必須化。正しいコード入力時のみ無効化。
+- [x] バックエンド `/admin/totp/disable` を TOTPコード必須に変更（検証ウィンドウ±1ステップ）。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`
+- [x] 変更（バックエンド）: `backend/app/main.py`
+- [x] テスト更新: `backend/tests/test_admin.py`

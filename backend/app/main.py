@@ -1322,11 +1322,25 @@ def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
     return {"status": "ok"}
 
 @app.post("/admin/totp/disable")
-def admin_totp_disable() -> dict:
-    """TOTP を無効化する（管理操作）。"""
+def admin_totp_disable(payload: TotpVerifyRequest) -> dict:
+    """TOTP を無効化する（管理操作）。
+
+    セキュリティ上の理由から、無効化時には現在の TOTP コードを要求し、
+    正しいコードが入力された場合のみ無効化を実行する。
+    """
     admin_user = get_user_by_username("admin")
     if not admin_user:
         raise HTTPException(status_code=500, detail="Admin user not found")
+
+    # シークレットが存在しない、もしくは未有効の場合は操作不可
+    if not admin_user.get("totp_secret") or not admin_user.get("is_totp_enabled"):
+        raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
+
+    # 入力された TOTP コードを検証
+    totp = pyotp.TOTP(admin_user["totp_secret"])
+    if not totp.verify(payload.totp_code, valid_window=1):
+        raise HTTPException(status_code=400, detail="Invalid TOTP code")
+
     # 無効化時に既存のシークレットも削除する
     set_totp_status("admin", enabled=False, clear_secret=True)
     try:
