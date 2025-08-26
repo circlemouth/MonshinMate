@@ -36,6 +36,8 @@ class LLMGateway:
 
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
+        # 直近のリモート呼び出しエラー内容を保持する。
+        self.last_error: str | None = None
 
     def update_settings(self, settings: LLMSettings) -> None:
         """設定値を更新する。"""
@@ -49,10 +51,12 @@ class LLMGateway:
         """
         # base_url が指定されていなければ常に OK（ローカル/スタブ運用）。
         s = self.settings
+        self.last_error = None
         if not s.enabled:
             # フロントエンドは有効な場合のみこの関数を呼ぶことを想定しているが、
             # 直接APIが呼ばれるケースも考慮し、無効時は疎通NGとする。
-            return {"status": "ng", "detail": "llm is disabled"}
+            self.last_error = "llm is disabled"
+            return {"status": "ng", "detail": self.last_error}
         if not s.base_url:
             return {"status": "ok"}
 
@@ -75,7 +79,8 @@ class LLMGateway:
                 r.raise_for_status()
                 return {"status": "ok"}
         except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
-            return {"status": "ng", "detail": str(e)}
+            self.last_error = str(e)
+            return {"status": "ng", "detail": self.last_error}
 
     def list_models(self) -> list[str]:
         """利用可能なモデル名の一覧を返す。
@@ -132,6 +137,7 @@ class LLMGateway:
         """
         start = time.perf_counter()
         s = self.settings
+        self.last_error = None
         if s.enabled and s.base_url:
             try:
                 timeout = httpx.Timeout(15.0)
@@ -206,6 +212,7 @@ class LLMGateway:
                             return content
                     raise RuntimeError("empty response from lm studio")
             except Exception as e:  # noqa: BLE001 - 呼び出し側でフォールバック
+                self.last_error = str(e)
                 logging.getLogger("llm").exception(
                     "remote_generate_question_failed: %s", e
                 )
@@ -229,6 +236,7 @@ class LLMGateway:
     ) -> list[str]:
         """ユーザー回答全体を基に追加質問を生成する。"""
         s = self.settings
+        self.last_error = None
         if not s.enabled:
             return []
         user_prompt = (prompt or DEFAULT_FOLLOWUP_PROMPT).replace(
@@ -262,6 +270,7 @@ class LLMGateway:
                         return [str(x) for x in arr][:max_questions]
                 raise RuntimeError("invalid response")
             except Exception as e:  # noqa: BLE001
+                self.last_error = str(e)
                 logging.getLogger("llm").exception(
                     "generate_followups_failed: %s", e
                 )
@@ -273,6 +282,7 @@ class LLMGateway:
         """チャット形式での応答を模擬的に返す。"""
         start = time.perf_counter()
         s = self.settings
+        self.last_error = None
         # リモート設定が有効な場合は HTTP 経由で実行し、失敗時はスタブへフォールバック
         if s.enabled and s.base_url:
             try:
@@ -280,9 +290,9 @@ class LLMGateway:
                 duration = (time.perf_counter() - start) * 1000
                 logging.getLogger("llm").info("chat(remote) took_ms=%.1f", duration)
                 return reply
-            except Exception:
+            except Exception as e:
+                self.last_error = str(e)
                 logging.getLogger("llm").exception("remote_chat_failed; falling back to stub")
-
         # フォールバック（スタブ）
         result = f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
         duration = (time.perf_counter() - start) * 1000
@@ -385,6 +395,7 @@ class LLMGateway:
         リモート設定が有効かつ base_url がある場合はリモート LLM に投げ、
         失敗時はスタブ的な要約にフォールバックする。
         """
+        self.last_error = None
         try:
             s = self.settings
             # 質問と回答のペアを整形
@@ -450,6 +461,7 @@ class LLMGateway:
                         if content:
                             return content
         except Exception as e:  # noqa: BLE001 - フォールバックへ
+            self.last_error = str(e)
             logging.getLogger("llm").exception("summarize_with_prompt failed: %s", e)
 
         # フォールバック（スタブ要約）

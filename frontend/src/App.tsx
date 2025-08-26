@@ -1,4 +1,4 @@
-import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
+import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton, ModalHeader } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { flushQueue } from './retryQueue';
@@ -54,6 +54,7 @@ export default function App() {
   }, [location.pathname]);
 
   const [displayName, setDisplayName] = useState('Monshinクリニック');
+  const [llmError, setLlmError] = useState<string | null>(null);
 
   // システム表示名の取得と更新イベント購読
   useEffect(() => {
@@ -76,6 +77,13 @@ export default function App() {
   }, []);
 
   const { isOpen: isLoginOpen, onOpen: openLogin, onClose: closeLogin } = useDisclosure();
+
+  // LLM エラー通知の購読
+  useEffect(() => {
+    const handler = (e: any) => setLlmError(e.detail);
+    window.addEventListener('llmError' as any, handler);
+    return () => window.removeEventListener('llmError' as any, handler);
+  }, []);
 
   // 管理画面ボタン押下時にログイン用モーダルを開く
   const handleAdminClick = () => {
@@ -178,6 +186,17 @@ export default function App() {
           <Text mt={1} fontSize="xs" color="gray.500">MonshinMate</Text>
         </Box>
       )}
+
+      <Modal isOpen={!!llmError} onClose={() => setLlmError(null)} motionPreset="slideInTop" isCentered={false}>
+        <ModalOverlay />
+        <ModalContent mt={4}>
+          <ModalHeader>LLM通信エラー</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text whiteSpace="pre-wrap">{llmError}</Text>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       <Modal isOpen={isLoginOpen} onClose={closeLogin} isCentered>
         <ModalOverlay />

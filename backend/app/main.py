@@ -815,12 +815,15 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/llm/chat", response_model=ChatResponse)
-def llm_chat(req: ChatRequest) -> ChatResponse:
+def llm_chat(req: ChatRequest, response: Response) -> ChatResponse:
     """LLM との対話を行う。"""
 
     global METRIC_LLM_CHATS
     METRIC_LLM_CHATS += 1
-    return ChatResponse(reply=llm_gateway.chat(req.message))
+    reply = llm_gateway.chat(req.message)
+    if llm_gateway.last_error:
+        response.headers["X-LLM-Error"] = llm_gateway.last_error
+    return ChatResponse(reply=reply)
 
 
 @app.get("/llm/settings", response_model=LLMSettings)
@@ -933,9 +936,12 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
 
 
 @app.post("/llm/settings/test")
-def test_llm_settings() -> dict:
+def test_llm_settings(response: Response) -> dict:
     """LLM 接続テスト（スタブ）。"""
-    return llm_gateway.test_connection()
+    res = llm_gateway.test_connection()
+    if llm_gateway.last_error:
+        response.headers["X-LLM-Error"] = llm_gateway.last_error
+    return res
 
 
 class ListModelsRequest(BaseModel):
@@ -1611,7 +1617,7 @@ def submit_llm_answer(session_id: str, req: LlmAnswerRequest) -> dict:
 
 
 @app.post("/sessions/{session_id}/llm-questions")
-def get_llm_questions(session_id: str) -> dict:
+def get_llm_questions(session_id: str, response: Response) -> dict:
     """不足項目に応じた追加質問を返す。"""
     session = sessions.get(session_id)
     if not session:
@@ -1620,6 +1626,8 @@ def get_llm_questions(session_id: str) -> dict:
     fsm = SessionFSM(session, llm_gateway)
     question = fsm.next_question()
     save_session(session)
+    if llm_gateway.last_error:
+        response.headers["X-LLM-Error"] = llm_gateway.last_error
     if not question:
         logger.info("llm_question_limit id=%s", session_id)
         return {"questions": []}

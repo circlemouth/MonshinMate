@@ -495,3 +495,9 @@
 - [x] パスワード送信後の二段階認証コード入力も同じモーダル内で行えるようにした。
 - [x] 変更: `frontend/src/pages/AdminLogin.tsx`。
 - [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`。
+
+## 61. LLM通信失敗時のエラーモーダル表示（2025-11-17）
+- [x] 変更（バックエンド）: LLM通信失敗時にレスポンスヘッダ `X-LLM-Error` を付与。
+- [x] 変更（フロント）: グローバルfetchでヘッダを検知し、画面上部モーダルにエラー内容を表示。
+- [x] テスト: `backend/tests/test_api.py` にヘッダ付与の確認テストを追加。
+- [x] ドキュメント更新: `docs/session_api.md`。

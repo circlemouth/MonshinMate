@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+from typing import Any
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -66,6 +67,93 @@ def test_llm_settings_get_and_update() -> None:
     assert updated["enabled"] is True
     chat_res = client.post("/llm/chat", json={"message": "hi"})
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
+
+
+def test_llm_error_header(monkeypatch) -> None:
+    """LLM 通信失敗時にエラーヘッダが付与されることを確認する。"""
+    on_startup()
+    client.put(
+        "/llm/settings",
+        json={
+            "provider": "ollama",
+            "model": "llama2",
+            "temperature": 0.5,
+            "system_prompt": "",
+            "enabled": True,
+            "base_url": "http://dummy",
+        },
+    )
+
+    from app.main import llm_gateway
+
+    def fake_remote(message: str) -> str:  # noqa: ARG001
+        raise RuntimeError("remote error")
+
+    monkeypatch.setattr(llm_gateway, "_chat_remote", fake_remote)
+
+    res = client.post("/llm/chat", json={"message": "hi"})
+    assert res.status_code == 200
+    assert res.headers.get("X-LLM-Error") == "remote error"
+    assert res.json()["reply"].startswith("LLM応答")
+    client.put(
+        "/llm/settings",
+        json={
+            "provider": "ollama",
+            "model": "llama2",
+            "temperature": 0.2,
+            "system_prompt": "",
+            "enabled": True,
+            "base_url": None,
+        },
+    )
+
+
+def test_llm_questions_error_header(monkeypatch) -> None:
+    """追加質問生成失敗時にもエラーヘッダが返ることを確認する。"""
+    on_startup()
+    client.put(
+        "/llm/settings",
+        json={
+            "provider": "ollama",
+            "model": "llama2",
+            "temperature": 0.5,
+            "system_prompt": "",
+            "enabled": True,
+            "base_url": "http://dummy",
+        },
+    )
+
+    from app.main import llm_gateway
+
+    def fake_followups(context: dict[str, Any], max_questions: int, prompt: str | None = None) -> list[str]:  # noqa: ARG001
+        llm_gateway.last_error = "remote error"
+        raise RuntimeError("remote error")
+
+    monkeypatch.setattr(llm_gateway, "generate_followups", fake_followups)
+
+    payload = {
+        "patient_name": "山田太郎",
+        "dob": "1990-01-01",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "頭痛"},
+    }
+    res = client.post("/sessions", json=payload)
+    session_id = res.json()["id"]
+
+    q_res = client.post(f"/sessions/{session_id}/llm-questions")
+    assert q_res.status_code == 200
+    assert q_res.headers.get("X-LLM-Error") == "remote error"
+    client.put(
+        "/llm/settings",
+        json={
+            "provider": "ollama",
+            "model": "llama2",
+            "temperature": 0.2,
+            "system_prompt": "",
+            "enabled": True,
+            "base_url": None,
+        },
+    )
 
 
 def test_create_session() -> None:
