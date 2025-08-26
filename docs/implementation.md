@@ -498,3 +498,12 @@
 ## 61. 問診完了後の確認画面を廃止（2025-11-17）
 - [x] Review 画面を削除し、質問終了後は直接完了画面へ遷移するよう変更。
 - [x] フロントエンドおよびドキュメントを更新。
+
+## 62. LLM通信失敗時のエラーモーダル表示（2025-11-18）
+- [x] LLMとの通信エラー内容を画面上部のモーダルで表示しつつ既存のフォールバックを継続するよう変更。
+- [x] 変更: `frontend/src/components/TopErrorModal.tsx`, `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`, `frontend/src/pages/Done.tsx`。
+
+## 63. LLM通信エラー情報の自動表示とサマリー追記（2025-11-19）
+- [x] エラーモーダルは10秒後に自動的に閉じるようにし、ユーザー操作が不要に。
+- [x] LLM通信エラー内容をサマリー末尾に追記し、問診結果DBから参照できるようにした。
+- [x] 変更: `frontend/src/components/TopErrorModal.tsx`, `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`, `backend/app/main.py`。
