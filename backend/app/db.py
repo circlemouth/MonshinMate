@@ -849,8 +849,17 @@ def update_totp_secret(username: str, secret: str, db_path: str = DEFAULT_DB_PAT
     finally:
         conn.close()
 
-def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH) -> None:
-    """TOTPの有効/無効状態を設定する。"""
+def set_totp_status(
+    username: str,
+    enabled: bool,
+    db_path: str = DEFAULT_DB_PATH,
+    *,
+    clear_secret: bool = False,
+) -> None:
+    """TOTPの有効/無効状態を設定する。
+
+    無効化時に ``clear_secret=True`` を指定すると、登録済みシークレットも削除する。
+    """
     conn = get_conn(db_path)
     try:
         # 有効化時はモードが 'off' の場合 'login_and_reset' に昇格、無効化時は 'off'
@@ -861,10 +870,21 @@ def set_totp_status(username: str, enabled: bool, db_path: str = DEFAULT_DB_PATH
                 (now, username),
             )
         else:
-            conn.execute(
-                "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off', totp_changed_at = ? WHERE username = ?",
-                (now, username),
-            )
+            if clear_secret:
+                conn.execute(
+                    "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off', totp_secret = NULL, totp_changed_at = ? WHERE username = ?",
+                    (now, username),
+                )
+                logging.getLogger("security").warning(
+                    "totp_secret_cleared username=%s db=%s",
+                    username,
+                    db_path,
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET is_totp_enabled = 0, totp_mode = 'off', totp_changed_at = ? WHERE username = ?",
+                    (now, username),
+                )
         conn.commit()
         logging.getLogger("security").warning(
             "totp_status_changed username=%s enabled=%s db=%s",
@@ -901,8 +921,9 @@ def set_totp_mode(username: str, mode: str, db_path: str = DEFAULT_DB_PATH) -> N
     try:
         now = datetime.now(UTC).isoformat()
         if mode == 'off':
+            # 無効化時はシークレットも削除する
             conn.execute(
-                "UPDATE users SET totp_mode = 'off', is_totp_enabled = 0, totp_changed_at = ? WHERE username = ?",
+                "UPDATE users SET totp_mode = 'off', is_totp_enabled = 0, totp_secret = NULL, totp_changed_at = ? WHERE username = ?",
                 (now, username),
             )
         else:

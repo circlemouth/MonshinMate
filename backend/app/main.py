@@ -1327,7 +1327,8 @@ def admin_totp_disable() -> dict:
     admin_user = get_user_by_username("admin")
     if not admin_user:
         raise HTTPException(status_code=500, detail="Admin user not found")
-    set_totp_status("admin", enabled=False)
+    # 無効化時に既存のシークレットも削除する
+    set_totp_status("admin", enabled=False, clear_secret=True)
     try:
         logging.getLogger("security").warning("totp_disabled username=admin")
     except Exception:

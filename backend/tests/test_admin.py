@@ -151,6 +151,35 @@ def test_totp_mode_change_does_not_enable_without_verification():
     assert status["is_totp_enabled"] is True
 
 
+def test_totp_disable_clears_secret_and_reissue():
+    """二段階認証を無効化するとシークレットが削除され、再設定時に新しいシークレットが発行されることを確認。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+    local_client = TestClient(app)
+
+    # まず二段階認証を有効化
+    res = local_client.get("/admin/totp/setup")
+    assert res.status_code == 200
+    old_secret = get_user_by_username("admin")["totp_secret"]
+    totp = pyotp.TOTP(old_secret)
+    res = local_client.post("/admin/totp/verify", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+
+    # 無効化するとシークレットも削除される
+    res = local_client.post("/admin/totp/disable")
+    assert res.status_code == 200
+    user = get_user_by_username("admin")
+    assert user["totp_secret"] is None
+    assert user["is_totp_enabled"] == 0
+
+    # 再度セットアップすると新しいシークレットが発行される
+    res = local_client.get("/admin/totp/setup")
+    assert res.status_code == 200
+    new_secret = get_user_by_username("admin")["totp_secret"]
+    assert new_secret is not None
+    assert new_secret != old_secret
+
 def test_legacy_admin_password_ignored():
     """旧 app_settings の admin_password が無視されることを確認。"""
     if DB_PATH.exists():
