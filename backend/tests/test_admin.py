@@ -125,6 +125,32 @@ def test_totp_flag_without_secret_disables_totp_on_login():
     assert admin_user["totp_mode"] == "off"
 
 
+def test_totp_mode_change_does_not_enable_without_verification():
+    """TOTPモード変更だけでは有効化されないことを確認する。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+    local_client = TestClient(app)
+
+    # QRコード生成とモード設定（旧仕様ではここで有効化されていた）
+    res = local_client.get("/admin/totp/setup")
+    assert res.status_code == 200
+    res = local_client.put("/admin/totp/mode", json={"mode": "login_and_reset"})
+    assert res.status_code == 200
+
+    # 検証前は is_totp_enabled が False のまま
+    status = local_client.get("/admin/auth/status").json()
+    assert status["is_totp_enabled"] is False
+
+    # 正しいコードを検証して初めて有効化される
+    secret = get_user_by_username("admin")["totp_secret"]
+    totp = pyotp.TOTP(secret)
+    res = local_client.post("/admin/totp/verify", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+    status = local_client.get("/admin/auth/status").json()
+    assert status["is_totp_enabled"] is True
+
+
 def test_legacy_admin_password_ignored():
     """旧 app_settings の admin_password が無視されることを確認。"""
     if DB_PATH.exists():
