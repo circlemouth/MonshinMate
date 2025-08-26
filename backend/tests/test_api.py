@@ -187,15 +187,18 @@ def test_llm_question_loop() -> None:
     }
     res = client.post("/sessions", json=create_payload)
     session_id = res.json()["id"]
-
-    q1 = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"][0]
-    assert q1["id"] == "llm_1"
+    q_list = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"]
+    assert len(q_list) >= 2
+    assert q_list[0]["id"] == "llm_1"
+    assert q_list[1]["id"] == "llm_2"
     client.post(
         f"/sessions/{session_id}/llm-answers",
-        json={"item_id": q1["id"], "answer": "昨日から"},
+        json={"item_id": q_list[0]["id"], "answer": "昨日から"},
     )
-    q2 = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"][0]
-    assert q2["id"] == "llm_2"
+    client.post(
+        f"/sessions/{session_id}/llm-answers",
+        json={"item_id": q_list[1]["id"], "answer": "咳"},
+    )
 
 
 def test_followup_session_flow() -> None:
@@ -504,11 +507,9 @@ def test_llm_followup_max_questions() -> None:
     )
     session_id = res.json()["id"]
     q1 = client.post(f"/sessions/{session_id}/llm-questions").json()
-    assert len(q1["questions"]) == 1
+    assert len(q1["questions"]) == 2
     q2 = client.post(f"/sessions/{session_id}/llm-questions").json()
-    assert len(q2["questions"]) == 1
-    q3 = client.post(f"/sessions/{session_id}/llm-questions").json()
-    assert q3["questions"] == []
+    assert q2["questions"] == []
     client.delete("/questionnaires/maxq?visit_type=initial")
 
 
