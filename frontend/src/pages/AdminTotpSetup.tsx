@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, Container, Heading, Text, VStack, Image, Input, Button, useToast, Spinner, FormControl, FormLabel, Checkbox } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,6 +32,14 @@ export default function AdminTotpSetup() {
       setIsLoading(false);
     }
   };
+
+  // 画面表示と同時にQRの取得を開始して、すぐにコード入力まで進められるようにする
+  // （セキュリティタブからの起動要件に対応）
+  useEffect(() => {
+    if (!isQrCodeVisible && !qrCodeUrl) {
+      handleEnableTotp();
+    }
+  }, []);
 
   const handleVerify = async () => {
     if (!totpCode || totpCode.length !== 6) {

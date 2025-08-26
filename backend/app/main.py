@@ -12,7 +12,7 @@ import io
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
 import sqlite3
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import pyotp
 import qrcode
 from jose import JWTError, jwt
@@ -1460,6 +1460,9 @@ class Session(BaseModel):
     pending_llm_questions: list[dict[str, Any]] = []
     finalized_at: datetime | None = None
     followup_prompt: str = DEFAULT_FOLLOWUP_PROMPT
+    # LLM が提示した追加質問の「質問文」を保持するマップ。
+    # キーは `llm_1` のような item_id。
+    llm_question_texts: dict[str, str] = Field(default_factory=dict)
 
 
 class SessionCreateResponse(BaseModel):
@@ -1494,6 +1497,8 @@ class SessionDetail(BaseModel):
     visit_type: str
     questionnaire_id: str
     answers: dict[str, Any]
+    # LLM による追加質問の提示文マップ（例: {"llm_1": "いつから症状がありますか？"}）
+    llm_question_texts: dict[str, str] | None = None
     summary: str | None = None
     finalized_at: str | None = None
 
@@ -1727,6 +1732,7 @@ def admin_get_session(session_id: str) -> SessionDetail:
         visit_type=s["visit_type"],
         questionnaire_id=s["questionnaire_id"],
         answers=s.get("answers", {}),
+        llm_question_texts=s.get("llm_question_texts") or {},
         summary=s.get("summary"),
         finalized_at=s.get("finalized_at"),
     )

@@ -48,7 +48,7 @@
   - `finalized_at` (str): ISO8601形式の確定時刻
   - `status` (str): `finalized`
 
-※ 現段階ではセッションはメモリ上にのみ保持される。
+※ セッションと回答は SQLite に永続化される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象（`session_responses.question_text`）。
 
 ## GET /llm/settings
 - **概要**: 現在の LLM 設定を取得する。
@@ -113,6 +113,7 @@
   - `visit_type` (str)
   - `questionnaire_id` (str)
   - `answers` (object)
+  - `llm_question_texts` (object, 任意): 追加質問ID（`llm_1` など）と提示した質問文のマップ
   - `summary` (str|null)
   - `finalized_at` (str|null)
 

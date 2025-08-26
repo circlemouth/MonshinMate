@@ -327,6 +327,12 @@
   - 変更: `frontend/src/App.tsx` にログイン用モーダルを実装。ヘッダーの「管理画面」クリックでモーダルを開き、成功後に `/admin/templates` へ遷移。
   - 直接URLでのアクセス時は従来通り `/admin/login` へ誘導（ガード継続）。
 
+## 33. LLM 追加質問の質問文と回答ペアの永続化（2025-08-27）
+- [x] DB スキーマ拡張：`session_responses` に `question_text` 列を追加し、LLM 生成の追加質問に限り提示した質問文を保存。
+- [x] 保存ロジック：`SessionFSM` が `pending_llm_questions` 生成時に `session.llm_question_texts` にマッピングを保持し、`save_session` が `llm_*` 回答と紐付けて保存するよう変更。
+- [x] 取得ロジック：`db.get_session` で `llm_question_texts` を復元し、管理詳細 `GET /admin/sessions/{id}` のレスポンスに含める。
+- [x] ドキュメント更新：`docs/session_api.md` に保存仕様とレスポンス項目を追記。
+
 ## 32. アプリのロゴ文言を変更（2025-08-23）
 - [x] ロゴ表示を「MonshinMate」→「問診メイト」に変更。
   - 変更: `frontend/src/App.tsx` のヘッダーロゴ文言。
@@ -507,3 +513,9 @@
 - [x] エラーモーダルは10秒後に自動的に閉じるようにし、ユーザー操作が不要に。
 - [x] LLM通信エラー内容をサマリー末尾に追記し、問診結果DBから参照できるようにした。
 - [x] 変更: `frontend/src/components/TopErrorModal.tsx`, `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`, `backend/app/main.py`。
+
+## 64. セキュリティタブに「二段階認証を有効化」ボタンを追加（2025-08-27）
+- [x] 管理画面のセキュリティタブで、未有効時に明示的な「二段階認証を有効化する」ボタンを表示。
+- [x] ボタン直下に「パスワードをリセットするには二段階認証の有効化が必要であり推奨する」旨のメッセージを表示。
+- [x] 二段階認証が有効になって初めて「QRコードを表示」ボタンや「パスワードをリセット」ボタンが表示されるよう条件分岐を整理。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`。

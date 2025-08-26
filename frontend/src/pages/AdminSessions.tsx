@@ -204,6 +204,21 @@ export default function AdminSessions() {
                     {formatAnswer(selectedDetail.answers?.[it.id])}
                   </Box>
                 ))}
+                {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
+                  <>
+                    <Heading size="sm">追加質問（LLM）</Heading>
+                    {Object.entries(selectedDetail.llm_question_texts)
+                      .sort(([a]: any, [b]: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                      .map(([qid, qtext]: any) => (
+                        <Box key={qid} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
+                          <Text fontWeight="bold" mb={1}>
+                            {qtext}
+                          </Text>
+                          {formatAnswer(selectedDetail.answers?.[qid])}
+                        </Box>
+                      ))}
+                  </>
+                )}
                 {selectedDetail.summary && (
                   <VStack align="stretch" spacing={2} mt={2}>
                     <Heading size="sm">自動生成サマリー</Heading>

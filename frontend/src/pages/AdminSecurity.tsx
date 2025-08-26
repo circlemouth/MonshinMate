@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Box, Heading, Text, VStack, HStack, Button, Image, Input, FormControl, FormLabel, useToast, Divider, Badge, Checkbox } from '@chakra-ui/react';
+import { Box, Heading, Text, VStack, HStack, Button, Image, Input, FormControl, FormLabel, useToast, Divider, Badge, Checkbox, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, ModalFooter, Spinner } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 
 interface AuthStatus {
@@ -15,8 +15,10 @@ export default function AdminSecurity() {
   const [loading, setLoading] = useState(false);
   const [modeSaving, setModeSaving] = useState(false);
   const [currentMode, setCurrentMode] = useState<AuthStatus['totp_mode']>('off');
+  // 画面内モーダルで TOTP セットアップを行う
   const toast = useToast();
   const navigate = useNavigate();
+  const { isOpen, onOpen, onClose } = useDisclosure();
 
   const loadStatus = async () => {
     try {
@@ -50,7 +52,7 @@ export default function AdminSecurity() {
     }
   };
 
-  const verify = async () => {
+  const verify = async (): Promise<boolean> => {
     if (!code) return;
     setLoading(true);
     try {
@@ -67,8 +69,10 @@ export default function AdminSecurity() {
       setQrUrl(null);
       setCode('');
       loadStatus();
+      return true;
     } catch (e: any) {
       toast({ title: e.message, status: 'error' });
+      return false;
     } finally {
       setLoading(false);
     }
@@ -133,28 +137,30 @@ export default function AdminSecurity() {
             {status?.is_totp_enabled ? '有効' : '無効'}
           </Badge>
         </HStack>
-        <VStack mt={2} align="flex-start" spacing={1}>
-          {(() => {
-            const loginChecked = currentMode === 'login_and_reset';
-            const onToggleLogin = async (checked: boolean) => {
-              // ログインに使用: on → login_and_reset, off → reset_only（リセットは常に2FAを要求）
-              await setMode(checked ? 'login_and_reset' : 'reset_only');
-            };
-            return (
-              <>
-                <HStack>
-                  <Checkbox isChecked={loginChecked} isDisabled={modeSaving}
-                    onChange={(e)=> onToggleLogin(e.target.checked)}>
-                    ログインに使用
-                  </Checkbox>
-                </HStack>
-                <Text fontSize="xs" color="gray.600">
-                  ※パスワードリセットには二段階認証が必須です。。
-                </Text>
-              </>
-            );
-          })()}
-        </VStack>
+        {status?.is_totp_enabled && (
+          <VStack mt={2} align="flex-start" spacing={1}>
+            {(() => {
+              const loginChecked = currentMode === 'login_and_reset';
+              const onToggleLogin = async (checked: boolean) => {
+                // ログインに使用: on → login_and_reset, off → reset_only（リセットは常に2FAを要求）
+                await setMode(checked ? 'login_and_reset' : 'reset_only');
+              };
+              return (
+                <>
+                  <HStack>
+                    <Checkbox isChecked={loginChecked} isDisabled={modeSaving}
+                      onChange={(e)=> onToggleLogin(e.target.checked)}>
+                      ログインに使用
+                    </Checkbox>
+                  </HStack>
+                  <Text fontSize="xs" color="gray.600">
+                    ※パスワードリセットには二段階認証が必須です。
+                  </Text>
+                </>
+              );
+            })()}
+          </VStack>
+        )}
 
         <Text fontSize="xs" color="gray.600" mt={4}>
           Microsoft Authenticator や Google Authenticator などの認証アプリをご利用いただけます。
@@ -162,26 +168,27 @@ export default function AdminSecurity() {
 
         {!status?.is_totp_enabled ? (
           <VStack align="stretch" spacing={3} mt={4}>
-            <Text fontSize="sm">Authenticator アプリでQRをスキャンし、6桁コードを入力して有効化します。</Text>
-            <HStack>
-              <Button onClick={startSetup} isLoading={loading} colorScheme="primary">QRコードを表示</Button>
-            </HStack>
-            {qrUrl && (
-              <VStack>
-                <Image src={qrUrl} alt="TOTP QR" maxW="280px" w="100%" />
-                <FormControl>
-                  <FormLabel>6桁コード</FormLabel>
-                  <Input value={code} onChange={(e) => setCode(e.target.value)} maxW="200px" />
-                </FormControl>
-                <Button onClick={verify} isLoading={loading} colorScheme="primary">有効化</Button>
-              </VStack>
-            )}
+            <Button
+              colorScheme="primary"
+              onClick={async () => { setQrUrl(null); setCode(''); onOpen(); await startSetup(); }}
+              alignSelf="flex-start"
+            >
+              二段階認証を有効化する
+            </Button>
+            <Text fontSize="sm" color="gray.700">
+              パスワードをリセットするには二段階認証の有効化が必要です。セキュリティ強化のため有効化を推奨します。
+            </Text>
           </VStack>
         ) : (
           <VStack align="stretch" spacing={3} mt={4}>
             <HStack>
-              <Button variant="outline" onClick={disableTotp} isLoading={loading}>無効化</Button>
-              <Button onClick={regenerate} isLoading={loading} colorScheme="primary">再設定（再生成）</Button>
+              <Button colorScheme="primary" onClick={disableTotp} isLoading={loading}>
+                二段階認証を無効化する
+              </Button>
+              <Button variant="outline" onClick={async () => { setQrUrl(null); setCode(''); onOpen(); await startSetup(); }} isLoading={loading}>QRコードを表示</Button>
+              <Button onClick={regenerate} isLoading={loading}>
+                再設定（再生成）
+              </Button>
             </HStack>
             <Text fontSize="xs" color="gray.600">再設定すると古いコードは無効になります。再度QRをスキャンしてください。</Text>
           </VStack>
@@ -190,13 +197,55 @@ export default function AdminSecurity() {
 
       <Divider />
 
-      <Box>
-        <Heading size="md">パスワードの変更</Heading>
-        <Text mt={2} fontSize="sm">セキュリティのため、パスワード変更は二段階認証による本人確認のうえで実施します。</Text>
-        <HStack mt={3}>
-          <Button as={RouterLink} to="/admin/password/reset" colorScheme="primary">パスワードをリセット</Button>
-        </HStack>
-      </Box>
+      {status?.is_totp_enabled && (
+        <Box>
+          <Heading size="md">パスワードの変更</Heading>
+          <Text mt={2} fontSize="sm">セキュリティのため、パスワード変更は二段階認証による本人確認のうえで実施します。</Text>
+          <HStack mt={3}>
+            <Button as={RouterLink} to="/admin/password/reset" colorScheme="primary">パスワードをリセット</Button>
+          </HStack>
+        </Box>
+      )}
+
+      {/* 二段階認証の設定用モーダル */}
+      <Modal isOpen={isOpen} onClose={() => { onClose(); setQrUrl(null); setCode(''); }} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>二段階認証の設定</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={3}>
+              <Text fontSize="sm">認証アプリ（Google/Microsoft Authenticator など）で以下のQRコードをスキャンしてください。</Text>
+              {!qrUrl ? (
+                <HStack>
+                  <Spinner size="sm" />
+                  <Text fontSize="sm">QRコードを生成中...</Text>
+                </HStack>
+              ) : (
+                <Image src={qrUrl} alt="TOTP QR" maxW="280px" w="100%" alignSelf="center" />
+              )}
+              <FormControl>
+                <FormLabel>6桁コード</FormLabel>
+                <Input value={code} onChange={(e) => setCode(e.target.value)} maxW="200px" />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack>
+              <Button variant="ghost" onClick={() => { onClose(); setQrUrl(null); setCode(''); }}>閉じる</Button>
+              <Button colorScheme="primary" isLoading={loading}
+                isDisabled={!qrUrl || !code || code.length !== 6}
+                onClick={async () => {
+                  const ok = await verify();
+                  if (ok) onClose();
+                }}
+              >
+                有効化を確定
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
     </VStack>
   );
 }

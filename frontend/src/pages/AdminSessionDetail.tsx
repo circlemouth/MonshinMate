@@ -10,6 +10,7 @@ interface SessionDetail {
   visit_type: string;
   questionnaire_id: string;
   answers: Record<string, any>;
+  llm_question_texts?: Record<string, string>;
   summary?: string | null;
   finalized_at?: string | null;
 }
@@ -120,6 +121,22 @@ export default function AdminSessionDetail() {
           </Box>
         ))}
       </VStack>
+
+      {detail.llm_question_texts && Object.keys(detail.llm_question_texts).length > 0 && (
+        <VStack align="stretch" spacing={4}>
+          <Heading size="md">追加質問（LLM）</Heading>
+          {Object.entries(detail.llm_question_texts)
+            .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
+            .map(([qid, qtext]) => (
+              <Box key={qid} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+                <Text fontWeight="bold" mb={1}>
+                  {qtext}
+                </Text>
+                {formatAnswer(detail.answers[qid])}
+              </Box>
+            ))}
+        </VStack>
+      )}
 
       {detail.summary && (
         <VStack align="stretch" spacing={4} mt={4}>

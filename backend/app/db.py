@@ -144,12 +144,21 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 session_id TEXT NOT NULL,
                 item_id TEXT NOT NULL,
                 answer_json TEXT NOT NULL,
+                -- 追加質問（LLM）の場合に限り、提示した質問文を保持する
+                question_text TEXT,
                 ts TEXT NOT NULL,
                 PRIMARY KEY (session_id, item_id),
                 FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
             )
             """
         )
+        # 既存DB向けに question_text カラムを後付け（存在時は無視）
+        try:
+            conn.execute(
+                "ALTER TABLE session_responses ADD COLUMN question_text TEXT"
+            )
+        except Exception:
+            pass
 
         # LLM 設定（単一行）
         conn.execute(
@@ -655,13 +664,25 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
 
         conn.execute("DELETE FROM session_responses WHERE session_id=?", (session.id,))
         ts = session.finalized_at.isoformat() if session.finalized_at else ""
+        # LLM 追加質問の提示文マッピング（存在しない場合は空）
+        llm_qtexts = getattr(session, "llm_question_texts", {}) or {}
         for item_id, ans in session.answers.items():
+            qtext = None
+            # 追加質問IDは `llm_` 接頭辞で管理している
+            if isinstance(item_id, str) and item_id.startswith("llm_"):
+                qtext = llm_qtexts.get(item_id)
             conn.execute(
                 """
-                INSERT INTO session_responses (session_id, item_id, answer_json, ts)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO session_responses (session_id, item_id, answer_json, question_text, ts)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (session.id, item_id, json.dumps(ans, ensure_ascii=False), ts),
+                (
+                    session.id,
+                    item_id,
+                    json.dumps(ans, ensure_ascii=False),
+                    qtext,
+                    ts,
+                ),
             )
         conn.commit()
     finally:
@@ -720,11 +741,20 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         if not srow:
             return None
         rrows = conn.execute(
-            "SELECT item_id, answer_json FROM session_responses WHERE session_id=?",
+            "SELECT item_id, answer_json, question_text FROM session_responses WHERE session_id=?",
             (session_id,),
         ).fetchall()
         answers = {r["item_id"]: json.loads(r["answer_json"]) for r in rrows}
+        # LLM 追加質問の質問文マッピングも返却に含める（API レイヤでは必要に応じて利用）
+        llm_qtexts: dict[str, str] = {}
+        for r in rrows:
+            iid = r.get("item_id")
+            qtext = r.get("question_text")
+            if iid and isinstance(iid, str) and iid.startswith("llm_") and qtext:
+                llm_qtexts[iid] = qtext
         srow["answers"] = answers
+        if llm_qtexts:
+            srow["llm_question_texts"] = llm_qtexts
         srow["remaining_items"] = json.loads(srow.get("remaining_items_json") or "[]")
         srow["attempt_counts"] = json.loads(srow.get("attempt_counts_json") or "{}")
         return srow

@@ -41,20 +41,46 @@ class SessionFSM:
 
         if not self.session.pending_llm_questions:
             try:
+                remaining_slots = max(0, int(self.session.max_additional_questions) - int(self.session.additional_questions_used))
+                if remaining_slots <= 0:
+                    return None
                 texts = self.llm_gateway.generate_followups(
                     context=self.session.answers,
-                    max_questions=self.session.max_additional_questions,
+                    max_questions=remaining_slots,
                     prompt=self.session.followup_prompt,
                 )
-                self.session.pending_llm_questions = [
-                    {
-                        "id": f"llm_{i + 1}",
-                        "text": t,
-                        "expected_input_type": "string",
-                        "priority": 1,
-                    }
-                    for i, t in enumerate(texts)
-                ]
+                self.session.pending_llm_questions = []
+                # LLM 追加質問の提示文も保存（永続化用）。
+                # セッションに llm_question_texts 辞書がなければ初期化する。
+                if not hasattr(self.session, "llm_question_texts") or self.session.llm_question_texts is None:
+                    self.session.llm_question_texts = {}
+                # すでに発行した llm_* の最大番号を求め、連番が重複しないようにする
+                def _extract_num(key: str) -> int:
+                    try:
+                        return int(key.split("_")[1]) if key.startswith("llm_") else 0
+                    except Exception:
+                        return 0
+                current_max = 0
+                try:
+                    for k in list(self.session.llm_question_texts.keys()) + list(self.session.answers.keys()):
+                        if isinstance(k, str) and k.startswith("llm_"):
+                            n = _extract_num(k)
+                            if n > current_max:
+                                current_max = n
+                except Exception:
+                    current_max = 0
+                for i, t in enumerate(texts):
+                    qid = f"llm_{current_max + i + 1}"
+                    self.session.pending_llm_questions.append(
+                        {
+                            "id": qid,
+                            "text": t,
+                            "expected_input_type": "string",
+                            "priority": 1,
+                        }
+                    )
+                    # 表示した質問文をマッピングとして保持
+                    self.session.llm_question_texts[qid] = t
             except Exception:
                 logging.getLogger("llm").exception("generate_followups_failed")
                 self.session.pending_llm_questions = []
