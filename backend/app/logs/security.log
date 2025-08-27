@@ -2525,3 +2525,450 @@
 2025-08-27 08:38:04,878 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
 2025-08-27 08:38:05,170 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
 2025-08-27 08:38:05,457 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:05,749 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:06,054 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:06,343 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:06,630 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:06,934 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:07,224 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:07,506 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:07,790 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:08,076 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:08,363 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:08,648 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:08,933 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:09,230 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:09,517 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:09,800 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:10,107 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:10,394 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:10,687 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:10,976 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:11,262 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:11,559 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:11,852 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:12,141 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:12,429 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:12,719 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:13,036 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:13,332 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:13,624 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:13,912 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:14,203 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:14,491 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:14,776 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:15,060 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:15,351 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:15,641 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:15,954 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:16,247 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:16,532 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:16,824 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:17,115 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:17,407 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:17,699 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:17,990 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:18,279 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:18,568 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:18,863 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:19,153 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:19,462 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:19,753 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:20,044 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:20,341 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:20,631 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:20,966 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:21,290 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:21,577 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:21,860 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:22,151 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:22,438 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:22,746 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:23,113 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:23,419 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:23,721 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:24,016 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:24,329 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:24,656 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:24,953 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:25,235 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:25,516 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:25,802 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:26,084 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:26,368 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:26,656 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:26,952 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:27,238 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:27,519 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:27,801 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:28,106 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:28,392 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:28,678 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:28,964 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:29,255 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:29,537 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:29,818 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:30,101 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:30,383 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:30,670 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:30,955 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:31,239 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:31,544 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:31,578 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:31,843 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:31,871 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,142 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,163 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,439 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,449 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,736 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:32,739 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,044 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,046 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,048 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,349 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,350 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,651 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,651 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,937 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:33,951 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,226 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,249 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,512 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,546 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,804 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:34,841 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,086 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,135 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,369 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,429 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,661 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,724 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:35,955 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,024 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,262 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,320 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,558 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,615 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,857 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:36,926 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,135 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,220 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,428 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,518 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,718 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:37,811 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,011 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,109 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,299 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,405 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,591 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,702 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:38,881 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,000 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,174 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,295 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,464 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,591 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,774 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:39,888 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,068 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,194 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,356 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,489 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,647 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,786 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:40,942 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,079 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,272 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,377 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,596 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,676 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,891 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:41,976 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,162 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,271 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,459 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,570 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,748 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:42,866 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,045 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,155 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,414 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,449 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,726 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:43,743 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,031 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,038 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,343 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,351 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,637 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,650 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:44,935 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,236 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,274 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,531 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,540 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,827 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,827 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:45,833 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,114 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,127 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,401 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,421 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,677 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,715 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:46,971 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,015 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,263 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,311 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,550 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,607 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,830 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:47,904 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,110 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,197 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,416 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,491 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,703 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,788 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:48,987 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,087 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,279 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,386 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,571 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,683 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,839 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:49,977 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,127 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,271 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,409 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,565 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,709 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,860 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:50,977 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,159 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,268 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,455 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,545 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,759 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,871 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,901 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:51,910 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,071 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,170 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,192 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,195 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,379 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,467 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,479 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,481 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,686 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,762 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,763 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:52,775 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,012 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,084 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,090 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,093 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,330 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,367 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,372 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,404 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,649 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,686 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,687 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,689 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,957 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:38:53,975 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:13,205 INFO admin_login_password_ok_totp_required
+2025-08-27 08:39:25,978 INFO admin_login_totp_success
+2025-08-27 08:39:26,289 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:27,904 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:28,184 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:29,094 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:29,378 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:29,668 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:29,955 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:30,244 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:30,530 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:30,814 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:31,096 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:31,378 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:31,677 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:31,970 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:32,259 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:32,542 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:32,824 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:33,109 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:33,397 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:33,684 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:33,977 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:34,262 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:34,545 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:34,830 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:35,120 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:35,419 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:35,722 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:36,008 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:36,299 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:36,585 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:36,867 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:37,158 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:37,440 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:37,722 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:38,004 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:38,289 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:38,576 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:38,867 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:39,159 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:39,446 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:39,730 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:40,015 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:40,298 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:40,592 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:40,876 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:41,158 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:41,440 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:41,728 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:42,017 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:42,313 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:42,601 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:42,901 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:43,190 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:43,473 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:43,761 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:44,069 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:44,352 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:44,635 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:44,919 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:45,209 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:45,492 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:45,775 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:46,066 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:46,356 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:46,641 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:46,924 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:47,214 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:47,501 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:47,787 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:48,072 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:48,356 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:48,640 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:48,923 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:49,212 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:49,507 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:49,796 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:50,084 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:50,374 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:50,658 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:50,945 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:51,232 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:51,520 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:51,816 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:52,106 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:52,405 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:52,688 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:52,970 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:53,251 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:53,534 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:53,822 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:54,111 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:54,400 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:54,688 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:54,977 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:55,267 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:55,549 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:55,831 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:56,121 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:56,404 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:56,688 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:56,973 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:57,259 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:57,543 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:57,827 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:58,111 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:58,402 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:58,688 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:58,977 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:59,262 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:59,544 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:39:59,829 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:00,114 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:00,399 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:00,714 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:01,009 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:01,301 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:01,635 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:01,931 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:02,232 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:02,520 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:02,816 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:03,104 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:03,399 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:03,686 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 08:40:03,974 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-08-27 21:31:35,044 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:35,329 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:35,611 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:35,894 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:36,193 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:36,488 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:36,778 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:37,068 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:37,356 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:37,647 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:37,940 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:38,246 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:38,538 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:38,831 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:39,118 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:39,404 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:39,716 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:40,009 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:40,301 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:31:40,602 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:32:45,877 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:32:54,573 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:54,888 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:55,169 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:55,489 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:55,633 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:55,921 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:56,214 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:32:56,499 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:33:10,285 INFO admin_login_failed
+2025-08-27 21:33:13,672 INFO admin_login_failed
+2025-08-27 21:33:18,438 INFO admin_login_failed
+2025-08-27 21:34:35,459 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:34:43,915 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:34:44,220 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:34:48,906 INFO admin_login_success
+2025-08-27 21:34:49,193 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:57:06,603 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:06,889 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:07,175 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:07,461 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:07,754 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:08,049 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:08,340 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:08,631 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:08,920 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:09,213 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:09,513 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:09,812 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:10,105 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:10,398 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:10,687 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:10,974 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:11,288 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:11,580 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:11,878 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:57:12,173 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-27 21:58:07,684 INFO admin_login_failed
+2025-08-27 21:58:11,140 INFO admin_login_failed
+2025-08-27 21:58:39,052 INFO admin_login_failed
+2025-08-27 21:58:42,291 INFO admin_login_success
+2025-08-27 21:58:42,576 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:58:44,444 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-27 21:58:44,726 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off

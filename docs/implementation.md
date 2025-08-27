@@ -81,6 +81,15 @@
   - [x] `provider=lm_studio` 時は OpenAI互換 `POST {base_url}/v1/chat/completions` を使用
   - [x] `/llm/settings/test` は `base_url` 未設定時は常に OK、設定時は疎通を確認
   - [x] 失敗時はログ出力の上、スタブ応答にフォールバック
+  - [x] 追加質問生成で構造化出力を強制（LLMcommunication.md 準拠）
+    - Ollama: `/api/chat` の `format` に JSON Schema（`array<string>`、maxItems=上限）を指定
+    - LM Studio: `/v1/chat/completions` の `response_format.json_schema` に同スキーマを指定
+    - 返却は文字列JSONのため受信後に `json.loads()` でパースして配列に変換
+    - プロンプト側でも「JSON配列で返答」を明記（冗長対策）
+
+> 実装メモ（2025-08-27）：`backend/app/llm_gateway.py::generate_followups` を更新し、
+> LM Studio / Ollama 双方に対して JSON Schema による構造化出力を強制するよう変更。
+> これにより不正な文字列混入を防ぎ、配列パースの安定性を向上。
 
 ### MS7：UAT / 受け入れ
 - 目的：エンドツーエンド検証

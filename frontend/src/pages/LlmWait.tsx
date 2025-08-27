@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { VStack, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 /** LLM 追質問の要否判定待機画面。 */
 export default function LlmWait() {
@@ -24,6 +25,8 @@ export default function LlmWait() {
       postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
+    // LLM と通信可否の変化がありうるため、完了後に状態を更新
+    refreshLlmStatus();
     navigate('/done');
   };
 

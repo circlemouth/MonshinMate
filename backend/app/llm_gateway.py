@@ -237,30 +237,83 @@ class LLMGateway:
         if s.base_url:
             try:
                 timeout = httpx.Timeout(15.0)
-                url = s.base_url.rstrip("/") + "/v1/chat/completions"
-                headers = {"Content-Type": "application/json"}
-                if s.api_key:
-                    headers["Authorization"] = f"Bearer {s.api_key}"
-                messages = []
-                if s.system_prompt:
-                    messages.append({"role": "system", "content": s.system_prompt})
-                messages.append({"role": "user", "content": f"{context}\n{user_prompt}"})
-                payload = {
-                    "model": s.model,
-                    "messages": messages,
-                    "temperature": s.temperature,
-                    "stream": False,
-                }
-                r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-                r.raise_for_status()
-                data = r.json()
-                choices = data.get("choices") or []
-                if choices:
-                    content = choices[0].get("message", {}).get("content", "")
-                    arr = json.loads(content)
+                # プロバイダごとに構造化出力（JSON Schema）を強制する
+                if s.provider == "ollama":
+                    # Ollama: /api/chat に JSON Schema を format フィールドで指定
+                    url = s.base_url.rstrip("/") + "/api/chat"
+                    messages: list[dict[str, Any]] = []
+                    if s.system_prompt:
+                        messages.append({"role": "system", "content": s.system_prompt})
+                    messages.append({
+                        "role": "user",
+                        "content": f"{context}\n{user_prompt}",
+                    })
+                    schema = {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 0,
+                        "maxItems": max_questions,
+                    }
+                    payload: dict[str, Any] = {
+                        "model": s.model,
+                        "messages": messages,
+                        "stream": False,
+                        "options": {"temperature": s.temperature},
+                        # JSON Schema に適合した配列を強制
+                        "format": schema,
+                    }
+                    r = httpx.post(url, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    content = (
+                        (data.get("message") or {}).get("content")
+                        or data.get("response")
+                        or ""
+                    )
+                    arr = json.loads(content) if content else []
                     if isinstance(arr, list):
                         return [str(x) for x in arr][:max_questions]
-                raise RuntimeError("invalid response")
+                    raise RuntimeError("invalid structured response from ollama")
+                else:
+                    # LM Studio（OpenAI 互換）: response_format.json_schema で構造化出力を要求
+                    url = s.base_url.rstrip("/") + "/v1/chat/completions"
+                    headers = {"Content-Type": "application/json"}
+                    if s.api_key:
+                        headers["Authorization"] = f"Bearer {s.api_key}"
+                    messages: list[dict[str, Any]] = []
+                    if s.system_prompt:
+                        messages.append({"role": "system", "content": s.system_prompt})
+                    messages.append({"role": "user", "content": f"{context}\n{user_prompt}"})
+                    schema = {
+                        "name": "followup_questions",
+                        "strict": "true",  # LM Studio の Structured Output 仕様に合わせる
+                        "schema": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "minItems": 0,
+                            "maxItems": max_questions,
+                        },
+                    }
+                    payload = {
+                        "model": s.model,
+                        "messages": messages,
+                        "temperature": s.temperature,
+                        "stream": False,
+                        "response_format": {
+                            "type": "json_schema",
+                            "json_schema": schema,
+                        },
+                    }
+                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                    r.raise_for_status()
+                    data = r.json()
+                    choices = data.get("choices") or []
+                    if choices:
+                        content = choices[0].get("message", {}).get("content", "")
+                        arr = json.loads(content) if content else []
+                        if isinstance(arr, list):
+                            return [str(x) for x in arr][:max_questions]
+                    raise RuntimeError("invalid structured response from lm studio")
             except Exception as e:  # noqa: BLE001
                 logging.getLogger("llm").exception(
                     "generate_followups_failed: %s", e

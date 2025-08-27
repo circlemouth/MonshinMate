@@ -17,6 +17,7 @@ import {
   Spinner,
   useToast,
 } from '@chakra-ui/react';
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 interface Settings {
   provider: string;
@@ -87,6 +88,8 @@ export default function AdminLlm() {
       if (res.ok) {
         const data = await res.json();
         setModels(data);
+        // モデル一覧取得は LLM 疎通の一種。状態を最新化して通知。
+        refreshLlmStatus();
         if (data.length > 0) {
           setMessage(`${data.length}件のモデルを読み込みました`);
           // 現在のモデルが一覧にない場合は、先頭のモデルを選択
@@ -225,9 +228,13 @@ export default function AdminLlm() {
                 }
               }
               setMessage('保存しました');
+              // 設定更新後はステータスを即時更新
+              refreshLlmStatus();
             } catch (e: any) {
               toast({ title: '疎通テストに失敗しました', description: e.message, status: 'error' });
               setMessage('保存に失敗しました');
+              // 失敗時も現在のステータスを通知しておく
+              refreshLlmStatus();
             }
           }}
           colorScheme="primary"
