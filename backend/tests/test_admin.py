@@ -229,3 +229,36 @@ def test_admin_password_endpoint_rejects_when_flag_stale():
     # 直接更新は拒否される
     res = local_client.post("/admin/password", json={"password": "ChangeTwice2"})
     assert res.status_code == 403
+
+
+def test_password_change_disables_totp():
+    """パスワード変更時に二段階認証が無効化されることを確認する。"""
+    if DB_PATH.exists():
+        DB_PATH.unlink()
+    init_db()
+    local_client = TestClient(app)
+    # 初期パスワードを変更
+    res = local_client.post("/admin/password", json={"password": "OldPass123"})
+    assert res.status_code == 200
+    # TOTP を有効化
+    res = local_client.get("/admin/totp/setup")
+    assert res.status_code == 200
+    secret = get_user_by_username("admin")["totp_secret"]
+    totp = pyotp.TOTP(secret)
+    res = local_client.post("/admin/totp/verify", json={"totp_code": totp.now()})
+    assert res.status_code == 200
+    assert get_user_by_username("admin")["is_totp_enabled"] == 1
+    # 誤った現在パスワードでは失敗
+    res = local_client.post("/admin/password/change", json={"current_password": "wrong", "new_password": "NewPass456"})
+    assert res.status_code == 401
+    assert get_user_by_username("admin")["is_totp_enabled"] == 1
+    # 正しい現在パスワードで変更
+    res = local_client.post("/admin/password/change", json={"current_password": "OldPass123", "new_password": "NewPass456"})
+    assert res.status_code == 200
+    user = get_user_by_username("admin")
+    assert user["is_totp_enabled"] == 0
+    assert user["totp_secret"] is None
+    # 新しいパスワードでログインすると TOTP 要求はされない
+    res = local_client.post("/admin/login", json={"password": "NewPass456"})
+    assert res.status_code == 200
+    assert res.json()["status"] == "ok"

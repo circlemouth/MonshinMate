@@ -1161,6 +1161,12 @@ class AdminPasswordSetRequest(BaseModel):
     """管理者パスワード設定リクエスト。"""
     password: str
 
+
+class AdminPasswordChangeRequest(BaseModel):
+    """管理者パスワード変更リクエスト。"""
+    current_password: str
+    new_password: str
+
 class AdminAuthStatus(BaseModel):
     """管理者認証の状態。"""
     is_initial_password: bool
@@ -1244,6 +1250,28 @@ def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
         logging.getLogger("security").warning("admin_password_set_direct")
     except Exception:
         pass
+    return {"status": "ok"}
+
+
+@app.post("/admin/password/change")
+def admin_change_password(payload: AdminPasswordChangeRequest) -> dict:
+    """現在のパスワードを検証したうえで新しいパスワードに変更する。"""
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+    admin_user = get_user_by_username("admin")
+    if not admin_user or not verify_password(payload.current_password, admin_user["hashed_password"]):
+        try:
+            logging.getLogger("security").warning("admin_password_change_failed")
+        except Exception:
+            pass
+        raise HTTPException(status_code=401, detail="現在のパスワードが正しくありません")
+    update_password("admin", payload.new_password)
+    try:
+        if admin_user.get("is_totp_enabled"):
+            set_totp_status("admin", enabled=False, clear_secret=True)
+            logging.getLogger("security").warning("totp_disabled_due_to_password_change username=admin")
+    except Exception:
+        logging.getLogger(__name__).exception("failed to disable totp on password change")
     return {"status": "ok"}
 
 

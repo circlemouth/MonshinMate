@@ -22,6 +22,12 @@ export default function AdminSecurity() {
   // 無効化確認用モーダル
   const disableModal = useDisclosure();
   const [disableCode, setDisableCode] = useState('');
+  // パスワード変更用モーダル
+  const pwModal = useDisclosure();
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [newPw2, setNewPw2] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
 
   const loadStatus = async () => {
     try {
@@ -140,6 +146,35 @@ export default function AdminSecurity() {
     }
   };
 
+  const changePassword = async () => {
+    if (!currentPw || !newPw || newPw !== newPw2) {
+      toast({ title: '入力内容を確認してください', status: 'error' });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const r = await fetch('/admin/password/change', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: currentPw, new_password: newPw }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        throw new Error(d.detail || '変更に失敗しました');
+      }
+      toast({ title: 'パスワードを変更しました。二段階認証は無効化されました', status: 'success' });
+      setCurrentPw('');
+      setNewPw('');
+      setNewPw2('');
+      pwModal.onClose();
+      await loadStatus();
+    } catch (e: any) {
+      toast({ title: e.message, status: 'error' });
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
   return (
     <VStack align="stretch" spacing={6}>
       <Box>
@@ -205,15 +240,52 @@ export default function AdminSecurity() {
 
       <Divider />
 
-      {status?.is_totp_enabled && (
-        <Box>
-          <Heading size="md">パスワードの変更</Heading>
-          <Text mt={2} fontSize="sm">セキュリティのため、パスワード変更は二段階認証による本人確認のうえで実施します。</Text>
-          <HStack mt={3}>
+      <Box>
+        <Heading size="md">パスワードの変更</Heading>
+        <Text mt={2} fontSize="sm">
+          現在のパスワードを入力し、新しいパスワードを2回入力して変更します。変更すると二段階認証は無効化されます。
+        </Text>
+        <HStack mt={3}>
+          <Button colorScheme="primary" onClick={pwModal.onOpen}>パスワードを変更</Button>
+          {status?.is_totp_enabled && (
             <Button as={RouterLink} to="/admin/password/reset" colorScheme="primary">パスワードをリセット</Button>
-          </HStack>
-        </Box>
-      )}
+          )}
+        </HStack>
+      </Box>
+      {/* パスワード変更モーダル */}
+      <Modal isOpen={pwModal.isOpen} onClose={() => { pwModal.onClose(); setCurrentPw(''); setNewPw(''); setNewPw2(''); }} isCentered>
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>パスワードの変更</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <VStack align="stretch" spacing={3}>
+              <FormControl>
+                <FormLabel>現在のパスワード</FormLabel>
+                <Input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
+              </FormControl>
+              <FormControl>
+                <FormLabel>新しいパスワード</FormLabel>
+                <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+              </FormControl>
+              <FormControl>
+                <FormLabel>新しいパスワード（確認）</FormLabel>
+                <Input type="password" value={newPw2} onChange={(e) => setNewPw2(e.target.value)} />
+              </FormControl>
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack>
+              <Button variant="ghost" onClick={() => { pwModal.onClose(); setCurrentPw(''); setNewPw(''); setNewPw2(''); }}>キャンセル</Button>
+              <Button colorScheme="primary" isLoading={pwLoading} onClick={changePassword}
+                isDisabled={!currentPw || !newPw || newPw !== newPw2}
+              >
+                変更する
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       {/* 二段階認証の設定用モーダル */}
       <Modal isOpen={isOpen} onClose={() => { onClose(); setQrUrl(null); setCode(''); }} isCentered>
