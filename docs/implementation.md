@@ -581,3 +581,8 @@
 - [x] `LlmWait` で取得した追加質問を `pending_llm_questions` として保存し、`Questions` ページで再利用するようにした。
 - [x] 質問を消費した際は `pending_llm_questions` を更新し、空になった場合のみ `/llm-questions` を再呼び出すよう変更。
 - [x] ドキュメント更新: `docs/session_api.md`。
+
+## 73. 複数選択項目の自由記述チェックボックス追加（2025-12-06）
+- [x] 複数選択肢で自由入力を行う際、専用チェックボックスを新設し、チェック時のみテキスト入力欄が有効化されるよう変更。
+- [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`
+- [x] ドキュメント更新: `docs/PlannedDesign.md`

@@ -37,6 +37,7 @@ export default function QuestionnaireForm() {
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
   const [freeTexts, setFreeTexts] = useState<Record<string, string>>({});
+  const [freeTextChecks, setFreeTextChecks] = useState<Record<string, boolean>>({});
   const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
   const visitType = sessionStorage.getItem('visit_type') || 'initial';
   const navigate = useNavigate();
@@ -61,17 +62,22 @@ export default function QuestionnaireForm() {
 
   useEffect(() => {
     const ft: Record<string, string> = {};
+    const fc: Record<string, boolean> = {};
     items.forEach((item) => {
       if (item.type === 'multi' && item.allow_freetext) {
         const ans = answers[item.id];
         if (Array.isArray(ans)) {
           const opts = new Set(item.options || []);
           const other = ans.find((v: string) => !opts.has(v));
-          if (other) ft[item.id] = other;
+          if (other) {
+            ft[item.id] = other;
+            fc[item.id] = true;
+          }
         }
       }
     });
     setFreeTexts(ft);
+    setFreeTextChecks(fc);
   }, [items]);
 
   const [attempted, setAttempted] = useState(false);
@@ -222,7 +228,7 @@ export default function QuestionnaireForm() {
                   <CheckboxGroup
                     value={(answers[item.id] || []).filter((v: string) => v !== freeTexts[item.id])}
                     onChange={(vals) => {
-                      const other = freeTexts[item.id];
+                      const other = freeTextChecks[item.id] ? freeTexts[item.id] : null;
                       const newVals = other ? [...vals, other] : vals;
                       setAnswers({ ...answers, [item.id]: newVals });
                     }}
@@ -237,20 +243,38 @@ export default function QuestionnaireForm() {
                     </VStack>
                   </CheckboxGroup>
                   {item.allow_freetext && (
-                    <Input
-                      mt={2}
-                      placeholder="自由記述"
-                      value={freeTexts[item.id] || ''}
-                      onChange={(e) => {
-                        const prev = freeTexts[item.id] || '';
-                        const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
-                        const val = e.target.value;
-                        const updated = val ? [...selected, val] : selected;
-                        setFreeTexts({ ...freeTexts, [item.id]: val });
-                        setAnswers({ ...answers, [item.id]: updated });
-                      }}
-                      autoComplete="off"
-                    />
+                    <Box mt={2}>
+                      <Checkbox
+                        isChecked={freeTextChecks[item.id] || false}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const prev = freeTexts[item.id] || '';
+                          const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                          const updated = checked && prev ? [...selected, prev] : selected;
+                          setFreeTextChecks({ ...freeTextChecks, [item.id]: checked });
+                          setAnswers({ ...answers, [item.id]: updated });
+                          if (!checked) setFreeTexts({ ...freeTexts, [item.id]: '' });
+                        }}
+                        size="lg"
+                      >
+                        その他
+                      </Checkbox>
+                      <Input
+                        mt={2}
+                        placeholder="自由記述"
+                        value={freeTexts[item.id] || ''}
+                        onChange={(e) => {
+                          const prev = freeTexts[item.id] || '';
+                          const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                          const val = e.target.value;
+                          const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
+                          setFreeTexts({ ...freeTexts, [item.id]: val });
+                          setAnswers({ ...answers, [item.id]: updated });
+                        }}
+                        autoComplete="off"
+                        isDisabled={!freeTextChecks[item.id]}
+                      />
+                    </Box>
                   )}
                 </>
               ) : item.type === 'date' ? (
