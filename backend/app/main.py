@@ -17,7 +17,12 @@ import pyotp
 import qrcode
 from jose import JWTError, jwt
 
-from .llm_gateway import LLMGateway, LLMSettings, DEFAULT_FOLLOWUP_PROMPT
+from .llm_gateway import (
+    LLMGateway,
+    LLMSettings,
+    DEFAULT_FOLLOWUP_PROMPT,
+    DEFAULT_SYSTEM_PROMPT,
+)
 from .db import (
     init_db,
     upsert_template,
@@ -88,6 +93,16 @@ async def log_middleware(request: Request, call_next):
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
+    # 既存設定にシステムプロンプトが無い場合は既定値を適用
+    try:
+        stored = load_llm_settings()
+        if not stored:
+            save_llm_settings(default_llm_settings.model_dump())
+        elif not stored.get("system_prompt"):
+            stored["system_prompt"] = DEFAULT_SYSTEM_PROMPT
+            save_llm_settings(stored)
+    except Exception:
+        logging.getLogger(__name__).exception("failed to migrate llm settings")
     # 監査ログ（security）をファイルにも出力
     try:
         log_dir = Path(__file__).resolve().parent / "logs"
@@ -347,7 +362,11 @@ def on_startup() -> None:
         logging.getLogger(__name__).exception("failed to log startup admin status")
 
 default_llm_settings = LLMSettings(
-    provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=False
+    provider="ollama",
+    model="llama2",
+    temperature=0.2,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    enabled=False,
 )
 llm_gateway = LLMGateway(default_llm_settings)
 

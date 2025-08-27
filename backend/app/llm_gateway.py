@@ -9,9 +9,17 @@ from pydantic import BaseModel
 import httpx
 
 
+# 医療問診向けの既定システムプロンプト
+DEFAULT_SYSTEM_PROMPT = (
+    "あなたは医療問診を支援する日本語のAIアシスタントです。"
+    "患者の安全を最優先し、医学的に正確かつ簡潔に回答してください。"
+    "不要な前置きや説明は付けず、指定された形式に厳密に従ってください。"
+)
+
+# 追加質問生成に用いる既定プロンプト
 DEFAULT_FOLLOWUP_PROMPT = (
-    "上記の回答を踏まえ、追加で確認すべき質問を最大{max_questions}個、"
-    "日本語でJSON配列のみで返してください。"
+    "以下の患者回答をもとに、医学的に必要な追加確認質問を最大{max_questions}個生成してください。"
+    "出力は日本語の質問文のみからなるJSON配列とし、解説や余計な文字は一切含めないでください。"
 )
 
 
@@ -21,7 +29,7 @@ class LLMSettings(BaseModel):
     provider: str
     model: str
     temperature: float
-    system_prompt: str = ""
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT
     enabled: bool = True
     # リモート接続用設定（任意）。空の場合はスタブ動作を維持する。
     base_url: str | None = None
@@ -140,10 +148,16 @@ class LLMGateway:
                     messages = []
                     if s.system_prompt:
                         messages.append({"role": "system", "content": s.system_prompt})
+                    ctx = json.dumps(context or {}, ensure_ascii=False)
                     messages.append(
                         {
                             "role": "user",
-                            "content": f"{missing_item_label}について詳しく教えてください。",
+                            "content": (
+                                f"以下は患者の既知の回答です:\n{ctx}\n"
+                                f"この情報を踏まえ、{missing_item_label}について患者に尋ねる"
+                                "日本語の質問を1つ作成してください。質問文のみを返し、"
+                                "説明は不要です。"
+                            ),
                         }
                     )
                     payload: dict[str, Any] = {
@@ -177,10 +191,16 @@ class LLMGateway:
                     messages = []
                     if s.system_prompt:
                         messages.append({"role": "system", "content": s.system_prompt})
+                    ctx = json.dumps(context or {}, ensure_ascii=False)
                     messages.append(
                         {
                             "role": "user",
-                            "content": f"{missing_item_label}について詳しく教えてください。",
+                            "content": (
+                                f"以下は患者の既知の回答です:\n{ctx}\n"
+                                f"この情報を踏まえ、{missing_item_label}について患者に尋ねる"
+                                "日本語の質問を1つ作成してください。質問文のみを返し、"
+                                "説明は不要です。"
+                            ),
                         }
                     )
                     payload = {
@@ -455,10 +475,16 @@ class LLMGateway:
                     messages = []
                     if system_prompt:
                         messages.append({"role": "system", "content": system_prompt})
-                    messages.append({
-                        "role": "user",
-                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "以下は患者の問診回答です。臨床上重要な情報だけを"
+                                "簡潔な日本語で要約してください。\n"
+                                f"{pairs_text}"
+                            ),
+                        }
+                    )
                     payload: dict[str, Any] = {
                         "model": s.model,
                         "messages": messages,
@@ -483,10 +509,16 @@ class LLMGateway:
                     messages = []
                     if system_prompt:
                         messages.append({"role": "system", "content": system_prompt})
-                    messages.append({
-                        "role": "user",
-                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "以下は患者の問診回答です。臨床上重要な情報だけを"
+                                "簡潔な日本語で要約してください。\n"
+                                f"{pairs_text}"
+                            ),
+                        }
+                    )
                     payload = {
                         "model": s.model,
                         "messages": messages,

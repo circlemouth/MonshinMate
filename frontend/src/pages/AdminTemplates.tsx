@@ -57,7 +57,7 @@ interface Item {
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
-const DEFAULT_FOLLOWUP_PROMPT = '上記の回答を踏まえ、追加で確認すべき質問を最大{max_questions}個、日本語でJSON配列のみで返してください。';
+const DEFAULT_FOLLOWUP_PROMPT = '以下の患者回答をもとに、医学的に必要な追加確認質問を最大{max_questions}個生成してください。出力は日本語の質問文のみからなるJSON配列とし、解説や余計な文字は一切含めないでください。';
 
 /** テンプレート管理画面。 */
 export default function AdminTemplates() {

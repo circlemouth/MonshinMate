@@ -581,3 +581,10 @@
 - [x] `LlmWait` で取得した追加質問を `pending_llm_questions` として保存し、`Questions` ページで再利用するようにした。
 - [x] 質問を消費した際は `pending_llm_questions` を更新し、空になった場合のみ `/llm-questions` を再呼び出すよう変更。
 - [x] ドキュメント更新: `docs/session_api.md`。
+
+## 73. LLMプロンプトのブラッシュアップ（2025-11-26）
+- [x] 追加質問プロンプトを医療向け文面に改良し、JSON配列のみを返すよう明示。
+- [x] 医療問診に特化した既定システムプロンプトを追加し、未設定の環境には起動時に自動適用する移行処理を実装。
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py`, `backend/app/main.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/LLMcommunication.md`

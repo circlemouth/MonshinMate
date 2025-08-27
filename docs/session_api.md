@@ -56,7 +56,7 @@
   - `provider` (str)
   - `model` (str)
   - `temperature` (float)
-  - `system_prompt` (str)
+  - `system_prompt` (str): 未設定の場合は医療問診向けの既定プロンプトが適用される。
   - `enabled` (bool): LLM を利用するかどうか
 
 ## PUT /llm/settings
@@ -156,7 +156,7 @@
 - **概要**: 追加質問生成用プロンプトを保存する。
 - **リクエストボディ**:
   - `visit_type` (str): `initial` | `followup`
-  - `prompt` (str): プロンプト文字列。`{max_questions}` が上限値に置換される。
+  - `prompt` (str): プロンプト文字列。`{max_questions}` が上限値に置換される。既定値は「以下の患者回答をもとに、医学的に必要な追加確認質問を最大{max_questions}個生成してください。出力は日本語の質問文のみからなるJSON配列とし、解説や余計な文字は一切含めないでください。」
   - `enabled` (bool): アドバンストモードでのプロンプト使用を有効にするか。
 - **レスポンス**:
   - `{ status: "ok" }`
