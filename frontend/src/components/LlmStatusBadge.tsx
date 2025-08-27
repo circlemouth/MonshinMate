@@ -16,8 +16,7 @@ export default function LlmStatusBadge() {
       setStatus(st);
     };
     window.addEventListener('llmStatusUpdated' as any, onUpdated);
-    // 初期表示時に最新化
-    refreshLlmStatus();
+    // 疎通チェックは Entry 側で行い、ここではイベントのみ購読
     return () => {
       mounted = false;
       window.removeEventListener('llmStatusUpdated' as any, onUpdated);

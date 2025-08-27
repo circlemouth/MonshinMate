@@ -40,14 +40,18 @@ export default function App() {
     flushQueue();
     // ページ遷移時に認証状態をチェック（セッションが切れている場合などに対応）
     // checkAuthStatus(); // AuthProvider内で初回実行済み。必要に応じて追加。
-    // 起動直後に LLM 状態を最新化
-    refreshLlmStatus();
+    // 疎通チェックは初期画面（エントリ）表示時のみ行う
+    if (location.pathname === '/') {
+      refreshLlmStatus();
+    }
   }, []);
 
   useEffect(() => {
     track('page_view', { path: location.pathname });
-    // 画面遷移のたびに LLM 状態を更新（管理↔フロント往復時に最新化）
-    refreshLlmStatus();
+    // 疎通チェックは初期画面に戻ったときのみ行う
+    if (location.pathname === '/') {
+      refreshLlmStatus();
+    }
   }, [location.pathname]);
 
   // 管理画面以外へ遷移したら自動的にログアウト（セッションストレージのフラグのみクリア）

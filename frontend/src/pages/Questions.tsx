@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { VStack, Box, Input, Button } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
-import { refreshLlmStatus } from '../utils/llmStatus';
 
 interface LlmQuestion {
   id: string;
@@ -36,8 +35,6 @@ export default function Questions() {
       postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
-    // 完了後はステータス更新
-    refreshLlmStatus();
     navigate('/done');
   };
 
@@ -60,8 +57,6 @@ export default function Questions() {
       } catch {}
       await finalize(answers);
     }
-    // 問い合わせ後に最新状態へ
-    refreshLlmStatus();
   };
 
   useEffect(() => {
@@ -104,8 +99,6 @@ export default function Questions() {
       } catch {}
       await finalize(newAnswers);
     }
-    // 回答送信と問い合わせ後に最新状態へ
-    refreshLlmStatus();
   };
 
   return (

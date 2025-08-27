@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import ErrorSummary from '../components/ErrorSummary';
 import { track } from '../metrics';
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 /** 患者名と生年月日を入力するエントリページ。 */
 export default function Entry() {
@@ -48,6 +49,11 @@ export default function Entry() {
       'dob',
       'gender',
     ].forEach((k) => sessionStorage.removeItem(k));
+  }, []);
+
+  // エントリ画面表示時のみ LLM 疎通チェックを実行し、グローバルへ状態通知
+  useEffect(() => {
+    refreshLlmStatus();
   }, []);
 
   const handleNext = async () => {

@@ -41,6 +41,7 @@ import {
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
+import { LlmStatus } from '../utils/llmStatus';
 
 interface Item {
   id: string;
@@ -100,6 +101,9 @@ export default function AdminTemplates() {
   const [initialEnabled, setInitialEnabled] = useState<boolean>(false);
   const [followupEnabled, setFollowupEnabled] = useState<boolean>(false);
   const [llmAvailable, setLlmAvailable] = useState<boolean>(false);
+  const [llmStatus, setLlmStatus] = useState<LlmStatus>('disabled');
+  const [llmEnabledSetting, setLlmEnabledSetting] = useState<boolean>(false);
+  const [hasBaseUrl, setHasBaseUrl] = useState<boolean>(false);
   const [llmFollowupEnabled, setLlmFollowupEnabled] = useState<boolean>(true);
   const [initialLlmMax, setInitialLlmMax] = useState<number>(5);
   const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
@@ -153,27 +157,38 @@ export default function AdminTemplates() {
     };
   }, [defaultQuestionnaireId]);
 
-  // LLM の疎通状況を確認し、サマリー生成や追質問のオン可否を制御
+  // 疎通チェックは Entry に限定するため、本画面は設定値とイベントで可否を決める
   useEffect(() => {
-    let cancelled = false;
-    const check = async () => {
-      try {
-        const s = await fetch('/llm/settings').then((r) => r.json());
-        if (!s?.enabled || !s?.base_url) {
-          if (!cancelled) setLlmAvailable(false);
-          return;
-        }
-        const t = await fetch('/llm/settings/test', { method: 'POST' }).then((r) => r.json());
-        if (!cancelled) setLlmAvailable(t?.status === 'ok');
-      } catch (e) {
-        if (!cancelled) setLlmAvailable(false);
-      }
+    let mounted = true;
+    // 設定のみ取得（疎通はしない）
+    fetch('/llm/settings')
+      .then((r) => r.json())
+      .then((s) => {
+        if (!mounted) return;
+        const enabled = !!s?.enabled;
+        const base = !!s?.base_url;
+        setLlmEnabledSetting(enabled);
+        setHasBaseUrl(base);
+        setLlmAvailable(enabled && base && llmStatus === 'ok');
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setLlmEnabledSetting(false);
+        setHasBaseUrl(false);
+        setLlmAvailable(false);
+      });
+    const onUpdated = (e: any) => {
+      if (!mounted) return;
+      const st = (e?.detail as LlmStatus) ?? 'ng';
+      setLlmStatus(st);
+      setLlmAvailable(llmEnabledSetting && hasBaseUrl && st === 'ok');
     };
-    check();
+    window.addEventListener('llmStatusUpdated' as any, onUpdated);
     return () => {
-      cancelled = true;
+      mounted = false;
+      window.removeEventListener('llmStatusUpdated' as any, onUpdated);
     };
-  }, []);
+  }, [llmEnabledSetting, hasBaseUrl, llmStatus]);
 
   // LLM が利用できない場合は追質問設定を強制オフ
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { ReactNode, useMemo, useEffect, useState } from 'react';
 import { Box, Flex, VStack, Button, Text, Spacer } from '@chakra-ui/react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { LlmStatus } from '../utils/llmStatus';
 
 /**
  * 管理画面用レイアウト。
@@ -11,7 +12,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const current = location.pathname;
-  const [llmStatus, setLlmStatus] = useState<'ok' | 'ng' | 'disabled'>('disabled');
+  const [llmStatus, setLlmStatus] = useState<LlmStatus>('disabled');
 
   useEffect(() => {
     if (!sessionStorage.getItem('adminLoggedIn')) {
@@ -20,19 +21,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [navigate]);
 
   useEffect(() => {
-    fetch('/llm/settings')
-      .then((r) => r.json())
-      .then((s) => {
-        if (!s.enabled) {
-          setLlmStatus('disabled');
-          return;
-        }
-        fetch('/llm/settings/test', { method: 'POST' })
-          .then((res) => res.json())
-          .then((res) => setLlmStatus(res.status === 'ok' ? 'ok' : 'ng'))
-          .catch(() => setLlmStatus('ng'));
-      })
-      .catch(() => setLlmStatus('ng'));
+    let mounted = true;
+    const onUpdated = (e: any) => {
+      if (!mounted) return;
+      const st = (e?.detail as LlmStatus) ?? 'ng';
+      setLlmStatus(st);
+    };
+    window.addEventListener('llmStatusUpdated' as any, onUpdated);
+    return () => {
+      mounted = false;
+      window.removeEventListener('llmStatusUpdated' as any, onUpdated);
+    };
   }, []);
 
   const navItems = useMemo(

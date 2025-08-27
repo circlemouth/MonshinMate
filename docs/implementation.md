@@ -388,7 +388,8 @@
 ## 40. 管理/患者ヘッダーでの LLM 接続状態表示（2025-11-03）
 - [x] 管理画面ヘッダーの「問診画面に戻る」ボタンの左側に小さなバッジで LLM 接続状態を表示（接続OK=緑、エラー=赤、無効=灰）。
 - [x] 患者側ヘッダーでも「管理画面」ボタンの左側に同バッジを表示。
-- [x] 起動時に `/llm/settings` と `/llm/settings/test` を参照して状態を判定。
+- [x] 疎通チェックは「患者氏名等の初期入力画面（Entry）」に戻ったときのみ実施し、結果は `llmStatusUpdated` イベントで各画面へ伝播（不要な頻度の疎通を抑制）。
+- [x] 実装: `frontend/src/utils/llmStatus.ts` 追加、`Entry.tsx` で `refreshLlmStatus()` を発火、`LlmStatusBadge`/`AdminLayout`/`AdminTemplates` はイベント購読に統一。
 
 ## 41. LLM通信エラー時の自動フォールバック（2025-11-03）
 - [x] サマリ作成や追加質問生成で LLM 通信に失敗した場合、LLM を使わない処理へ自動的に切り替えるようにした。
