@@ -147,6 +147,21 @@
 - **レスポンス**:
   - `{ status: "ok" }`
 
+## GET /questionnaires/{id}/summary-prompt?visit_type=initial|followup
+- **概要**: サマリー生成に使用するシステムプロンプトと有効フラグを取得する。
+- **レスポンス**:
+  - `{ id: string, visit_type: string, prompt: string, enabled: bool }`
+  - 設定が存在しない場合、医療記録向けの既定プロンプトと `enabled: false` を返す。
+
+## POST /questionnaires/{id}/summary-prompt
+- **概要**: サマリー生成用プロンプトを保存する。
+- **リクエストボディ**:
+  - `visit_type` (str): `initial` | `followup`
+  - `prompt` (str): サマリー生成に用いるシステムプロンプト。
+  - `enabled` (bool): サマリー生成を有効にするか。
+- **レスポンス**:
+  - `{ status: "ok" }`
+
 ## GET /questionnaires/{id}/followup-prompt?visit_type=initial|followup
 - **概要**: 追加質問生成に使用するプロンプトと有効フラグを取得する。
 - **レスポンス**:
