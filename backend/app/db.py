@@ -116,6 +116,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 id TEXT PRIMARY KEY,
                 patient_name TEXT NOT NULL,
                 dob TEXT NOT NULL,
+                gender TEXT NOT NULL,
                 visit_type TEXT NOT NULL,
                 questionnaire_id TEXT NOT NULL,
                 answers_json TEXT NOT NULL,
@@ -133,6 +134,12 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         try:
             conn.execute(
                 "ALTER TABLE sessions ADD COLUMN followup_prompt TEXT"
+            )
+        except Exception:
+            pass
+        try:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN gender TEXT"
             )
         except Exception:
             pass
@@ -625,13 +632,14 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
         conn.execute(
             """
             INSERT INTO sessions (
-                id, patient_name, dob, visit_type, questionnaire_id, answers_json,
+                id, patient_name, dob, gender, visit_type, questionnaire_id, answers_json,
                 summary, remaining_items_json, completion_status, attempt_counts_json,
                 additional_questions_used, max_additional_questions, followup_prompt, finalized_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 patient_name=excluded.patient_name,
                 dob=excluded.dob,
+                gender=excluded.gender,
                 visit_type=excluded.visit_type,
                 questionnaire_id=excluded.questionnaire_id,
                 answers_json=excluded.answers_json,
@@ -648,6 +656,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 session.id,
                 session.patient_name,
                 session.dob,
+                session.gender,
                 session.visit_type,
                 session.questionnaire_id,
                 json.dumps(session.answers, ensure_ascii=False),

@@ -53,6 +53,7 @@ interface Item {
   use_followup: boolean;
   allow_freetext?: boolean;
   description?: string;
+  gender?: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -76,6 +77,7 @@ export default function AdminTemplates() {
     use_followup: boolean;
     allow_freetext: boolean;
     description: string;
+    gender: string;
   }>({
     label: '',
     type: 'string',
@@ -85,6 +87,7 @@ export default function AdminTemplates() {
     use_followup: true,
     allow_freetext: false,
     description: '',
+    gender: 'both',
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
@@ -93,6 +96,7 @@ export default function AdminTemplates() {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
+  const [previewGender, setPreviewGender] = useState<'male' | 'female'>('male');
   const previewModal = useDisclosure();
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -300,6 +304,7 @@ export default function AdminTemplates() {
         use_followup: newItem.use_followup,
         allow_freetext: newItem.allow_freetext,
         description: newItem.description,
+        gender: newItem.gender !== 'both' ? newItem.gender : undefined,
       },
     ]);
     markDirty();
@@ -313,6 +318,7 @@ export default function AdminTemplates() {
       use_followup: true,
       allow_freetext: false,
       description: '',
+      gender: 'both',
     });
     setIsAddingNewItem(false);
   };
@@ -571,6 +577,7 @@ export default function AdminTemplates() {
   const previewItems = items.filter((item) => {
     if (previewVisitType === 'initial' && !item.use_initial) return false;
     if (previewVisitType === 'followup' && !item.use_followup) return false;
+    if (item.gender && item.gender !== 'both' && item.gender !== previewGender) return false;
     return true;
   });
 
@@ -918,6 +925,19 @@ export default function AdminTemplates() {
                                       <FormLabel m={0}>補足説明</FormLabel>
                                       <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
                                     </FormControl>
+                                    <FormControl>
+                                      <FormLabel m={0}>対象性別</FormLabel>
+                                      <RadioGroup
+                                        value={item.gender || 'both'}
+                                        onChange={(val) => updateItem(idx, 'gender', val === 'both' ? undefined : val)}
+                                      >
+                                        <HStack spacing={4}>
+                                          <Radio value="both">制限なし</Radio>
+                                          <Radio value="male">男性のみ</Radio>
+                                          <Radio value="female">女性のみ</Radio>
+                                        </HStack>
+                                      </RadioGroup>
+                                    </FormControl>
                                     <HStack justifyContent="space-between">
                                       <FormControl maxW="360px">
                                         <FormLabel m={0}>入力方法</FormLabel>
@@ -1102,6 +1122,19 @@ export default function AdminTemplates() {
                     フリーテキスト入力を
                   </Checkbox>
                 )}
+                <FormControl>
+                  <FormLabel>対象性別</FormLabel>
+                  <RadioGroup
+                    value={newItem.gender}
+                    onChange={(val) => setNewItem({ ...newItem, gender: val })}
+                  >
+                    <HStack spacing={4}>
+                      <Radio value="both">制限なし</Radio>
+                      <Radio value="male">男性のみ</Radio>
+                      <Radio value="female">女性のみ</Radio>
+                    </HStack>
+                  </RadioGroup>
+                </FormControl>
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
                     必須
@@ -1154,6 +1187,21 @@ export default function AdminTemplates() {
                     <option value="initial">初診</option>
                     <option value="followup">再診</option>
                   </Select>
+                </FormControl>
+                <FormControl mb={4}>
+                  <FormLabel>性別</FormLabel>
+                  <RadioGroup
+                    value={previewGender}
+                    onChange={(v) => {
+                      setPreviewGender(v as any);
+                      setPreviewAnswers({});
+                    }}
+                  >
+                    <HStack spacing={4}>
+                      <Radio value="male">男性</Radio>
+                      <Radio value="female">女性</Radio>
+                    </HStack>
+                  </RadioGroup>
                 </FormControl>
                 <VStack spacing={3} align="stretch">
                   {previewItems.map((item) => (

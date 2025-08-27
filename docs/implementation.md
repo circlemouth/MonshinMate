@@ -107,6 +107,7 @@
    - [x] `questionnaires`（テンプレメタ + items[]）
    - [x] `sessions`（進行状態・完了フラグ・timestamps）
    - [x] `session_responses`（全回答・追加質問の履歴）
+   - [x] 問診項目に対象性別を追加し、テンプレート取得時にフィルタできるようにした（未設定時は男女ともに表示）
 2) **サービス**
    - [x] `SessionFSM`：`step("answer")`、`_finalize_item`、attempt/turn/questions 上限管理
    - [x] `LLMGateway`：`generate_question`、`decide_or_ask`、`summarize`（タイムアウト/再試行）
@@ -130,13 +131,14 @@
 2) **患者向け**
    - [x] `/`：氏名・生年月日＋受診種別の入力（選択後にセッション作成→`/questionnaire` へ）
    - [x] `/questionnaire`：テンプレに基づくフォーム（軽量条件表示、ドラフト保存）
+   - [x] 性別に応じた問診項目の出し分け
    - [x] `/questions`：LLM追加質問（モーダル or カード列）と進行インジケータ
    - [x] `/done`：完了メッセージと要約（印刷/コピー任意）
 3) **管理向け**
    - [x] `/admin/login`：管理者ログイン
    - [ ] `/admin`：ダッシュボード（廃止）
  - [x] `/admin/templates`：一覧/新規/編集/複製/削除
-  - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否を設定する表とプレビュー
+  - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否や対象性別を設定する表とプレビュー
   - [x] `/admin/sessions`：問診結果の一覧
   - [x] `/admin/sessions/:id`：質問と回答の詳細表示
   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と保存時の自動疎通テスト

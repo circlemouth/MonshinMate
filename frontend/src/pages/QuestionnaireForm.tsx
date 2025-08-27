@@ -28,6 +28,7 @@ interface Item {
   when?: { item_id: string; equals: string };
   allow_freetext?: boolean;
   description?: string;
+  gender?: string;
 }
 
 /** 患者向けの問診フォーム画面。 */
@@ -40,6 +41,7 @@ export default function QuestionnaireForm() {
   const [freeTextChecks, setFreeTextChecks] = useState<Record<string, boolean>>({});
   const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
   const visitType = sessionStorage.getItem('visit_type') || 'initial';
+  const gender = sessionStorage.getItem('gender') || '';
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function QuestionnaireForm() {
       navigate('/');
       return;
     }
-    fetch(`/questionnaires/default/template?visit_type=${visitType}`)
+    fetch(`/questionnaires/default/template?visit_type=${visitType}&gender=${gender}`)
       .then((res) => res.json())
       .then((data) => {
         setItems(data.items);
@@ -58,7 +60,7 @@ export default function QuestionnaireForm() {
           data.llm_followup_enabled ? '1' : '0'
         );
       });
-  }, [visitType, sessionId, navigate]);
+  }, [visitType, sessionId, navigate, gender]);
 
   useEffect(() => {
     const ft: Record<string, string> = {};
@@ -128,6 +130,7 @@ export default function QuestionnaireForm() {
   };
 
   const visibleItems = items.filter((item) => {
+    if (item.gender && item.gender !== 'both' && item.gender !== gender) return false;
     if (!item.when) return true;
     return answers[item.when.item_id] === item.when.equals;
   });

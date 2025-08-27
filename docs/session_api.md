@@ -7,6 +7,7 @@
 - **リクエストボディ**:
   - `patient_name` (str): 患者氏名
   - `dob` (str): 生年月日 (YYYY-MM-DD)
+  - `gender` (str): 性別 (`male` or `female`)
   - `visit_type` (str): 初診/再診などの種別
   - `answers` (object): 既知の回答
 - **レスポンス**:
@@ -125,8 +126,8 @@
   - `summary` (str|null)
   - `finalized_at` (str|null)
 
-## GET /questionnaires/{id}/template?visit_type=initial|followup
-- **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
+## GET /questionnaires/{id}/template?visit_type=initial|followup[&gender=male|female]
+- **概要**: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。`gender` を指定した場合は該当性別の項目のみを返す。項目側の `gender` が未設定または `"both"` の場合は常に含まれる。
 - **レスポンス**:
   - `Questionnaire`: `{ id: string, items: QuestionnaireItem[], llm_followup_enabled: bool, llm_followup_max_questions: int }`
 
@@ -141,7 +142,8 @@
   - `id` (str): テンプレートID
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
-    - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description? }`
+  - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description?, gender? }`
+    - `gender`: `"male"` | `"female"` | `"both"`（省略または `"both"` の場合は男女共通）
   - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
   - `llm_followup_max_questions` (int): 生成する追加質問の最大個数
 - **レスポンス**:
