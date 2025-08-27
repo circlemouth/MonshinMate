@@ -9,9 +9,15 @@ from pydantic import BaseModel
 import httpx
 
 
+DEFAULT_SYSTEM_PROMPT = (
+    "あなたは日本語で応答する熟練した医療問診支援AIです。"
+    "患者の入力を理解し、医学的に適切で簡潔な回答や質問を行ってください。"
+    "不要な前置きや断り書きは避け、常に敬体で表現してください。"
+)
+
 DEFAULT_FOLLOWUP_PROMPT = (
-    "上記の回答を踏まえ、追加で確認すべき質問を最大{max_questions}個、"
-    "日本語でJSON配列のみで返してください。"
+    "上記の患者回答を踏まえ、診療に必要な追加確認事項を最大{max_questions}個生成してください。"
+    "各質問は丁寧な日本語の文章で記述し、文字列のみを要素とするJSON配列として返してください。"
 )
 
 
@@ -21,7 +27,7 @@ class LLMSettings(BaseModel):
     provider: str
     model: str
     temperature: float
-    system_prompt: str = ""
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT
     enabled: bool = True
     # リモート接続用設定（任意）。空の場合はスタブ動作を維持する。
     base_url: str | None = None

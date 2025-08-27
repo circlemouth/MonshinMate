@@ -577,3 +577,13 @@ def test_followup_prompt_api() -> None:
     rec = db_get_session(sid)
     assert rec["followup_prompt"] == DEFAULT_FOLLOWUP_PROMPT
     client.delete("/questionnaires/adv?visit_type=initial")
+
+
+def test_summary_prompt_api_default() -> None:
+    """サマリープロンプトの既定値取得を確認する。"""
+    on_startup()
+    res = client.get("/questionnaires/unknown/summary-prompt?visit_type=initial")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["prompt"].startswith("あなたは医療記録作成の専門家です")
+    assert data["enabled"] is False

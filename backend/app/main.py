@@ -17,7 +17,12 @@ import pyotp
 import qrcode
 from jose import JWTError, jwt
 
-from .llm_gateway import LLMGateway, LLMSettings, DEFAULT_FOLLOWUP_PROMPT
+from .llm_gateway import (
+    LLMGateway,
+    LLMSettings,
+    DEFAULT_FOLLOWUP_PROMPT,
+    DEFAULT_SYSTEM_PROMPT,
+)
 from .db import (
     init_db,
     upsert_template,
@@ -347,7 +352,11 @@ def on_startup() -> None:
         logging.getLogger(__name__).exception("failed to log startup admin status")
 
 default_llm_settings = LLMSettings(
-    provider="ollama", model="llama2", temperature=0.2, system_prompt="", enabled=False
+    provider="ollama",
+    model="llama2",
+    temperature=0.2,
+    system_prompt=DEFAULT_SYSTEM_PROMPT,
+    enabled=False,
 )
 llm_gateway = LLMGateway(default_llm_settings)
 
@@ -800,8 +809,10 @@ def get_summary_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
     if cfg is None:
         cfg = {
             "prompt": (
-                "以下の問診項目と回答をもとに、簡潔で読みやすい日本語のサマリーを作成してください。"
-                "重要項目（主訴・発症時期）は冒頭にまとめてください。"
+                "あなたは医療記録作成の専門家です。"
+                "以下の問診項目と回答をもとに、患者情報を正確かつ簡潔な日本語のサマリーにまとめてください。"
+                "主訴と発症時期などの重要事項を冒頭に記載し、その後に関連情報を読みやすく整理してください。"
+                "推測や不要な前置きは避け、医療従事者がすぐ理解できる表現を用いてください。"
             ),
             "enabled": False,
         }

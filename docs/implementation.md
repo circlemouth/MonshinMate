@@ -586,3 +586,10 @@
 - [x] 複数選択肢で自由入力を行う際、専用チェックボックスを新設し、チェック時のみテキスト入力欄が有効化されるよう変更。
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`
 - [x] ドキュメント更新: `docs/PlannedDesign.md`
+
+## 74. プロンプト文言の改良（2025-12-07）
+- [x] 追加質問とサマリー生成の既定プロンプトを医療向けに詳細化。
+- [x] LLM 設定のシステムプロンプトに医療問診支援向け文言を追加。
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py`, `backend/app/main.py`, `backend/tests/test_api.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/LLMcommunication.md`, `docs/session_api.md`, `docs/implementation.md`
