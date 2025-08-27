@@ -112,7 +112,13 @@ def on_startup() -> None:
         {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
         {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
         {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
-        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "chief_complaint",
+            "label": "どういった症状で受診されましたか？",
+            "type": "string",
+            "required": True,
+            "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+        },
         {
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
@@ -128,6 +134,7 @@ def on_startup() -> None:
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
+            "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
         },
         {
             "id": "prior_treatments",
@@ -266,7 +273,13 @@ def on_startup() -> None:
         {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
     ]
     followup_items = [
-        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "chief_complaint",
+            "label": "どういった症状で受診されましたか？",
+            "type": "string",
+            "required": True,
+            "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+        },
         {
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
@@ -282,6 +295,7 @@ def on_startup() -> None:
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
+            "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
         },
     ]
     upsert_template(
@@ -406,6 +420,7 @@ class QuestionnaireItem(BaseModel):
     required: bool = False
     options: list[str] | None = None
     allow_freetext: bool = False
+    description: str | None = None
     when: WhenCondition | None = None
 
 
@@ -474,8 +489,20 @@ def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questi
             "id": "default",
             "visit_type": visit_type,
             "items": [
-                {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
-                {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
+                {
+                    "id": "chief_complaint",
+                    "label": "主訴は何ですか？",
+                    "type": "string",
+                    "required": True,
+                    "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+                },
+                {
+                    "id": "onset",
+                    "label": "発症時期はいつからですか？",
+                    "type": "string",
+                    "required": False,
+                    "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
+                },
             ],
             "llm_followup_enabled": True,
             "llm_followup_max_questions": 5,
@@ -558,7 +585,13 @@ def reset_default_template() -> dict:
         {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
         {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
         {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
-        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "chief_complaint",
+            "label": "どういった症状で受診されましたか？",
+            "type": "string",
+            "required": True,
+            "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+        },
         {
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
@@ -574,6 +607,7 @@ def reset_default_template() -> dict:
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
+            "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
         },
         {
             "id": "prior_treatments",
@@ -712,7 +746,13 @@ def reset_default_template() -> dict:
         {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
     ]
     followup_items = [
-        {"id": "chief_complaint", "label": "どういった症状で受診されましたか？", "type": "string", "required": True},
+        {
+            "id": "chief_complaint",
+            "label": "どういった症状で受診されましたか？",
+            "type": "string",
+            "required": True,
+            "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+        },
         {
             "id": "symptom_location",
             "label": "症状があるのはどこですか？",
@@ -728,6 +768,7 @@ def reset_default_template() -> dict:
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
+            "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
         },
     ]
     upsert_template(
@@ -1546,10 +1587,22 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         tpl = {
             "id": "default",
             "items": [
-                {"id": "chief_complaint", "label": "主訴は何ですか？", "type": "string", "required": True},
-                {"id": "onset", "label": "発症時期はいつからですか？", "type": "string", "required": False},
+                {
+                    "id": "chief_complaint",
+                    "label": "主訴は何ですか？",
+                    "type": "string",
+                    "required": True,
+                    "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+                },
+                {
+                    "id": "onset",
+                    "label": "発症時期はいつからですか？",
+                    "type": "string",
+                    "required": False,
+                    "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
+                },
             ],
-    }
+        }
     items = [QuestionnaireItem(**it) for it in tpl["items"]]
     Validator.validate_partial(items, req.answers)
     for k, v in list(req.answers.items()):

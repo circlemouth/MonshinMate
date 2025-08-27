@@ -550,3 +550,10 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`
 - [x] 変更（バックエンド）: `backend/app/main.py`
 - [x] テスト更新: `backend/tests/test_admin.py`
+
+## 70. 問診項目の補足説明入力機能追加（2025-11-23）
+- [x] 各問診項目に任意の補足説明を設定できるようにした。
+- [x] 変更（バックエンド）: `backend/app/main.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
+- [x] テスト追加: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/plannedSystem.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`

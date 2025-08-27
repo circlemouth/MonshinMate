@@ -37,6 +37,7 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
+  FormHelperText,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
@@ -50,6 +51,7 @@ interface Item {
   use_initial: boolean;
   use_followup: boolean;
   allow_freetext?: boolean;
+  description?: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -72,6 +74,7 @@ export default function AdminTemplates() {
     use_initial: boolean;
     use_followup: boolean;
     allow_freetext: boolean;
+    description: string;
   }>({
     label: '',
     type: 'string',
@@ -80,6 +83,7 @@ export default function AdminTemplates() {
     use_initial: true,
     use_followup: true,
     allow_freetext: false,
+    description: '',
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
@@ -280,6 +284,7 @@ export default function AdminTemplates() {
         use_initial: newItem.use_initial,
         use_followup: newItem.use_followup,
         allow_freetext: newItem.allow_freetext,
+        description: newItem.description,
       },
     ]);
     markDirty();
@@ -292,6 +297,7 @@ export default function AdminTemplates() {
       use_initial: true,
       use_followup: true,
       allow_freetext: false,
+      description: '',
     });
     setIsAddingNewItem(false);
   };
@@ -336,8 +342,18 @@ export default function AdminTemplates() {
     if (!templateId) return;
     setSaveStatus('saving');
     try {
-      const initialItems = items.filter((it) => it.use_initial).map(({ use_initial, use_followup, ...rest }) => rest);
-      const followupItems = items.filter((it) => it.use_followup).map(({ use_initial, use_followup, ...rest }) => rest);
+      const initialItems = items
+        .filter((it) => it.use_initial)
+        .map(({ use_initial, use_followup, description, ...rest }) => ({
+          ...rest,
+          ...(description ? { description } : {}),
+        }));
+      const followupItems = items
+        .filter((it) => it.use_followup)
+        .map(({ use_initial, use_followup, description, ...rest }) => ({
+          ...rest,
+          ...(description ? { description } : {}),
+        }));
       await fetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -883,6 +899,10 @@ export default function AdminTemplates() {
                                       <FormLabel m={0}>問診内容</FormLabel>
                                       <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
                                     </FormControl>
+                                    <FormControl>
+                                      <FormLabel m={0}>補足説明</FormLabel>
+                                      <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
+                                    </FormControl>
                                     <HStack justifyContent="space-between">
                                       <FormControl maxW="360px">
                                         <FormLabel m={0}>入力方法</FormLabel>
@@ -985,6 +1005,14 @@ export default function AdminTemplates() {
                     placeholder="例: 主訴は何ですか？"
                     value={newItem.label}
                     onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>補足説明</FormLabel>
+                  <Textarea
+                    placeholder="例: わかる範囲で構いません"
+                    value={newItem.description}
+                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                   />
                 </FormControl>
                 <FormControl>
@@ -1116,6 +1144,9 @@ export default function AdminTemplates() {
                   {previewItems.map((item) => (
                     <FormControl key={item.id} isRequired={item.required}>
                       <FormLabel>{item.label}</FormLabel>
+                      {item.description && (
+                        <FormHelperText mb={2}>{item.description}</FormHelperText>
+                      )}
                       {item.type === 'yesno' ? (
                         <RadioGroup
                           onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
