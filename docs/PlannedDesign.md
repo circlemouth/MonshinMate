@@ -274,6 +274,7 @@ interface QuestionItem {
   options?: { value: string; label: string }[]; // single/multi
   allowFreeText?: boolean; // multi のときに自由記述欄をチェックボックスで有効化
   when?: { itemId: string; operator: 'eq' | 'ne' | 'in' | 'nin'; value: any }[];
+  gender?: 'male' | 'female' | 'both'; // 省略または 'both' で男女共通
 }
 
 // LLM 追加質問（フロント側）

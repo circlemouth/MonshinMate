@@ -431,6 +431,7 @@ class QuestionnaireItem(BaseModel):
     allow_freetext: bool = False
     description: str | None = None
     when: WhenCondition | None = None
+    gender: str | None = None
 
 
 class Questionnaire(BaseModel):
@@ -476,7 +477,9 @@ class QuestionnaireDuplicate(BaseModel):
 
 
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
-def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questionnaire:
+def get_questionnaire_template(
+    questionnaire_id: str, visit_type: str, gender: str | None = None
+) -> Questionnaire:
     """DB から問診テンプレートを取得する。無い場合は既定テンプレを返す。
 
     注意: テスト環境などで FastAPI の startup イベントが実行されない場合、
@@ -517,15 +520,21 @@ def get_questionnaire_template(questionnaire_id: str, visit_type: str) -> Questi
             "llm_followup_max_questions": 5,
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
+        items = [QuestionnaireItem(**it) for it in default_tpl["items"]]
+        if gender:
+            items = [it for it in items if not it.gender or it.gender == "both" or it.gender == gender]
         return Questionnaire(
             id=questionnaire_id,
-            items=[QuestionnaireItem(**it) for it in default_tpl["items"]],
+            items=items,
             llm_followup_enabled=bool(default_tpl.get("llm_followup_enabled", True)),
             llm_followup_max_questions=int(default_tpl.get("llm_followup_max_questions", 5)),
         )
+    items = [QuestionnaireItem(**it) for it in tpl["items"]]
+    if gender:
+        items = [it for it in items if not it.gender or it.gender == "both" or it.gender == gender]
     return Questionnaire(
         id=tpl["id"],
-        items=[QuestionnaireItem(**it) for it in tpl["items"]],
+        items=items,
         llm_followup_enabled=bool(tpl.get("llm_followup_enabled", True)),
         llm_followup_max_questions=int(tpl.get("llm_followup_max_questions", 5)),
     )
@@ -1527,6 +1536,7 @@ class SessionCreateRequest(BaseModel):
 
     patient_name: str
     dob: str
+    gender: str
     visit_type: str
     answers: dict[str, Any]
     questionnaire_id: str | None = None
@@ -1541,6 +1551,7 @@ class Session(BaseModel):
     id: str
     patient_name: str
     dob: str
+    gender: str
     visit_type: str
     questionnaire_id: str
     template_items: list[QuestionnaireItem]
@@ -1566,6 +1577,7 @@ class SessionCreateResponse(BaseModel):
     id: str
     patient_name: str
     dob: str
+    gender: str
     visit_type: str
     answers: dict[str, Any]
     remaining_items: list[str]
@@ -1589,6 +1601,7 @@ class SessionDetail(BaseModel):
     id: str
     patient_name: str
     dob: str
+    gender: str
     visit_type: str
     questionnaire_id: str
     answers: dict[str, Any]
@@ -1643,6 +1656,8 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
             ],
         }
     items = [QuestionnaireItem(**it) for it in tpl["items"]]
+    if req.gender:
+        items = [it for it in items if not it.gender or it.gender == "both" or it.gender == req.gender]
     Validator.validate_partial(items, req.answers)
     for k, v in list(req.answers.items()):
         # 空欄の回答は「該当なし」に統一
@@ -1657,6 +1672,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         id=session_id,
         patient_name=req.patient_name,
         dob=req.dob,
+        gender=req.gender,
         visit_type=req.visit_type,
         questionnaire_id=questionnaire_id,
         template_items=items,
@@ -1679,6 +1695,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         id=session.id,
         patient_name=session.patient_name,
         dob=session.dob,
+        gender=session.gender,
         visit_type=session.visit_type,
         answers=session.answers,
         remaining_items=session.remaining_items,
@@ -1837,6 +1854,7 @@ def admin_get_session(session_id: str) -> SessionDetail:
         id=s["id"],
         patient_name=s["patient_name"],
         dob=s["dob"],
+        gender=s["gender"],
         visit_type=s["visit_type"],
         questionnaire_id=s["questionnaire_id"],
         answers=s.get("answers", {}),

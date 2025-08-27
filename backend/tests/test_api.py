@@ -74,6 +74,7 @@ def test_create_session() -> None:
     payload = {
         "patient_name": "山田太郎",
         "dob": "1990-01-01",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "頭痛"},
     }
@@ -111,6 +112,7 @@ def test_add_answers() -> None:
     create_payload = {
         "patient_name": "佐藤花子",
         "dob": "1985-05-05",
+        "gender": "female",
         "visit_type": "initial",
         "answers": {},
     }
@@ -144,6 +146,7 @@ def test_finalize_with_summary_enabled() -> None:
     payload = {
         "patient_name": "佐藤健",
         "dob": "1992-03-03",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "発熱"},
     }
@@ -162,6 +165,7 @@ def test_blank_answer_saved_as_not_applicable() -> None:
     payload = {
         "patient_name": "空欄太郎",
         "dob": "1999-09-09",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": ""},
     }
@@ -182,6 +186,7 @@ def test_llm_question_loop() -> None:
     create_payload = {
         "patient_name": "テスト太郎",
         "dob": "2000-01-01",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "咳"},
     }
@@ -207,6 +212,7 @@ def test_followup_session_flow() -> None:
     payload = {
         "patient_name": "再診太郎",
         "dob": "1995-12-12",
+        "gender": "male",
         "visit_type": "followup",
         "answers": {"chief_complaint": "咳"},
     }
@@ -234,6 +240,7 @@ def test_llm_disabled() -> None:
     payload = {
         "patient_name": "無効太郎",
         "dob": "1990-01-01",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "咳"},
     }
@@ -252,6 +259,7 @@ def test_admin_session_list_and_detail() -> None:
     payload = {
         "patient_name": "一覧太郎",
         "dob": "1980-01-01",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "発熱"},
     }
@@ -279,6 +287,7 @@ def test_admin_session_search_filters() -> None:
     payload = {
         "patient_name": "検索花子",
         "dob": "1990-12-31",
+        "gender": "female",
         "visit_type": "followup",
         "answers": {"chief_complaint": "咳"},
     }
@@ -384,6 +393,34 @@ def test_questionnaire_when() -> None:
     assert del_res.status_code == 200
 
 
+def test_questionnaire_gender_filter() -> None:
+    """性別指定の問診項目がフィルタされることを確認する。"""
+    on_startup()
+    payload = {
+        "id": "gender_tpl",
+        "visit_type": "initial",
+        "items": [
+            {"id": "common", "label": "共通", "type": "string", "required": True},
+            {"id": "male_only", "label": "男性のみ", "type": "string", "required": False, "gender": "male"},
+            {"id": "female_only", "label": "女性のみ", "type": "string", "required": False, "gender": "female"},
+            {"id": "both_item", "label": "両方", "type": "string", "required": False, "gender": "both"},
+        ],
+    }
+    res = client.post("/questionnaires", json=payload)
+    assert res.status_code == 200
+    male_res = client.get("/questionnaires/gender_tpl/template?visit_type=initial&gender=male")
+    female_res = client.get("/questionnaires/gender_tpl/template?visit_type=initial&gender=female")
+    assert male_res.status_code == 200 and female_res.status_code == 200
+    male_items = [it["id"] for it in male_res.json()["items"]]
+    female_items = [it["id"] for it in female_res.json()["items"]]
+    assert "male_only" in male_items and "female_only" not in male_items
+    assert "female_only" in female_items and "male_only" not in female_items
+    # gender 未指定および "both" はどちらにも表示される
+    assert "common" in male_items and "common" in female_items
+    assert "both_item" in male_items and "both_item" in female_items
+    client.delete("/questionnaires/gender_tpl?visit_type=initial")
+
+
 def test_duplicate_questionnaire() -> None:
     """テンプレート複製APIが内容を引き継ぐことを確認する。"""
     on_startup()
@@ -441,6 +478,7 @@ def test_session_persisted() -> None:
     create_payload = {
         "patient_name": "保存太郎",
         "dob": "1999-09-09",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"chief_complaint": "めまい"},
     }
@@ -471,6 +509,7 @@ def test_llm_followup_disabled_by_template() -> None:
     create_payload = {
         "patient_name": "テスト",
         "dob": "2000-01-01",
+        "gender": "male",
         "visit_type": "initial",
         "answers": {"symptom": "痛み"},
         "questionnaire_id": "nofup",
@@ -502,6 +541,7 @@ def test_llm_followup_max_questions() -> None:
         json={
             "patient_name": "上限太郎",
             "dob": "2000-01-01",
+            "gender": "male",
             "visit_type": "initial",
             "answers": {"symptom": "痛み"},
             "questionnaire_id": "maxq",
@@ -547,6 +587,7 @@ def test_followup_prompt_api() -> None:
         json={
             "patient_name": "太郎",
             "dob": "2000-01-01",
+            "gender": "male",
             "visit_type": "initial",
             "answers": {},
             "questionnaire_id": "adv",
@@ -568,6 +609,7 @@ def test_followup_prompt_api() -> None:
         json={
             "patient_name": "次郎",
             "dob": "2000-01-01",
+            "gender": "male",
             "visit_type": "initial",
             "answers": {},
             "questionnaire_id": "adv",
