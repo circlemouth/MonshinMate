@@ -568,3 +568,11 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
 - [x] テスト追加: `backend/tests/test_api.py`
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/plannedSystem.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 71. 管理画面からのパスワード変更とTOTP無効化（2025-11-24）
+- [x] セキュリティ画面に現在のパスワードを入力して更新するモーダルを追加。
+- [x] パスワード変更時に二段階認証を自動的に無効化するようにした。
+- [x] 変更（バックエンド）: `backend/app/main.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`
+- [x] テスト追加: `backend/tests/test_admin.py`
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
