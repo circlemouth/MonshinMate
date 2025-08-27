@@ -11,6 +11,7 @@ export default function LlmWait() {
   const finalize = async () => {
     if (!sessionId) return;
     const err = sessionStorage.getItem('llm_error');
+    sessionStorage.removeItem('pending_llm_questions');
     try {
       const res = await fetch(`/sessions/${sessionId}/finalize`, {
         method: 'POST',
@@ -38,6 +39,7 @@ export default function LlmWait() {
         if (!res.ok) throw new Error('http error');
         const data = await res.json();
         if (data.questions && data.questions.length > 0) {
+          sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
           navigate('/questions');
         } else {
           await finalize();

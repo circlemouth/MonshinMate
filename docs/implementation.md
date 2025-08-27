@@ -576,3 +576,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminSecurity.tsx`
 - [x] テスト追加: `backend/tests/test_admin.py`
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 72. LLM追質問のセッションストレージ再利用（2025-11-25）
+- [x] `LlmWait` で取得した追加質問を `pending_llm_questions` として保存し、`Questions` ページで再利用するようにした。
+- [x] 質問を消費した際は `pending_llm_questions` を更新し、空になった場合のみ `/llm-questions` を再呼び出すよう変更。
+- [x] ドキュメント更新: `docs/session_api.md`。

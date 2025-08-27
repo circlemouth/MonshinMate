@@ -14,6 +14,7 @@ export default function Questions() {
   const sessionId = sessionStorage.getItem('session_id');
   const [current, setCurrent] = useState<LlmQuestion | null>(null);
   const [answer, setAnswer] = useState('');
+  const [pending, setPending] = useState<LlmQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, any>>(
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
@@ -21,6 +22,7 @@ export default function Questions() {
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
     const err = sessionStorage.getItem('llm_error');
+    sessionStorage.removeItem('pending_llm_questions');
     try {
       const res = await fetch(`/sessions/${sessionId}/finalize`, {
         method: 'POST',
@@ -45,8 +47,11 @@ export default function Questions() {
       if (!res.ok) throw new Error('http error');
       const data = await res.json();
       if (data.questions && data.questions.length > 0) {
+        sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
+        setPending(data.questions);
         setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
       } else {
+        sessionStorage.removeItem('pending_llm_questions');
         await finalize(answers);
       }
     } catch (e) {
@@ -55,6 +60,7 @@ export default function Questions() {
         const msg = e instanceof Error ? e.message : String(e);
         sessionStorage.setItem('llm_error', msg);
       } catch {}
+      sessionStorage.removeItem('pending_llm_questions');
       await finalize(answers);
     }
   };
@@ -67,6 +73,19 @@ export default function Questions() {
     if (!sessionStorage.getItem('answers')) {
       navigate('/questionnaire');
       return;
+    }
+    const raw = sessionStorage.getItem('pending_llm_questions');
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr) && arr.length > 0) {
+          setPending(arr);
+          setCurrent(arr[0]);
+          return;
+        }
+      } catch {
+        sessionStorage.removeItem('pending_llm_questions');
+      }
     }
     fetchQuestion();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -82,14 +101,23 @@ export default function Questions() {
       const newAnswers = { ...answers, [current.id]: answer };
       setAnswers(newAnswers);
       setAnswer('');
-      setCurrent(null);
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      if (!res.ok) throw new Error('http error');
-      const data = await res.json();
-      if (data.questions && data.questions.length > 0) {
-        setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
+      const rest = pending.slice(1);
+      if (rest.length > 0) {
+        setPending(rest);
+        sessionStorage.setItem('pending_llm_questions', JSON.stringify(rest));
+        setCurrent(rest[0]);
       } else {
-        await finalize(newAnswers);
+        sessionStorage.removeItem('pending_llm_questions');
+        const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+        if (!res.ok) throw new Error('http error');
+        const data = await res.json();
+        if (data.questions && data.questions.length > 0) {
+          sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
+          setPending(data.questions);
+          setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
+        } else {
+          await finalize(newAnswers);
+        }
       }
     } catch (e) {
       const newAnswers = { ...answers, [current.id]: answer };
@@ -97,6 +125,7 @@ export default function Questions() {
         const msg = e instanceof Error ? e.message : String(e);
         sessionStorage.setItem('llm_error', msg);
       } catch {}
+      sessionStorage.removeItem('pending_llm_questions');
       await finalize(newAnswers);
     }
   };
