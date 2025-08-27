@@ -57,7 +57,7 @@ export default function AdminInitialPassword() {
       });
 
       // 状態を更新したうえでAuthenticatorの有効化を促す
-      await checkAuthStatus();
+      await checkAuthStatus(true);
       const enableTotp = window.confirm(
         'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
       );

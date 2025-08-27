@@ -15,7 +15,9 @@ export default function AdminPasswordReset() {
   const { checkAuthStatus, isTotpEnabled, setShowTotpSetup } = useAuth();
 
   useEffect(() => {
-    checkAuthStatus();
+    // 認証状態の確認で全画面ローディングが発生すると本画面が再マウントされ
+    // 無限ループになるため、ローディングを抑制した形で確認する
+    checkAuthStatus(true);
   }, [checkAuthStatus]);
 
   if (!isTotpEnabled) {
@@ -87,7 +89,7 @@ export default function AdminPasswordReset() {
         duration: 5000,
         isClosable: true,
       });
-      await checkAuthStatus();
+      await checkAuthStatus(true);
       if (!isTotpEnabled) {
         const enableTotp = window.confirm(
           'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
