@@ -324,6 +324,7 @@ def test_questionnaire_options() -> None:
                 "type": "single",
                 "required": True,
                 "options": ["red", "blue"],
+                "description": "説明",
             },
             {
                 "id": "fruits",
@@ -341,6 +342,7 @@ def test_questionnaire_options() -> None:
     assert get_res.status_code == 200
     data = get_res.json()
     assert data["items"][0]["options"] == ["red", "blue"]
+    assert data["items"][0]["description"] == "説明"
     assert data["items"][1]["type"] == "multi"
     assert data["items"][1]["allow_freetext"] is True
     # 後片付け

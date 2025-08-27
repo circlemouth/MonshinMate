@@ -133,7 +133,7 @@
   - `id` (str): テンプレートID
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
-    - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when? }`
+    - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description? }`
   - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
   - `llm_followup_max_questions` (int): 生成する追加質問の最大個数
 - **レスポンス**:
