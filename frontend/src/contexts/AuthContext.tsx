@@ -16,7 +16,9 @@ interface AuthContextType {
   setShowTotpSetup: (show: boolean) => void;
   login: (password: string, totpCode?: string) => Promise<boolean>;
   logout: () => void;
-  checkAuthStatus: () => Promise<void>;
+  // ローディング表示を抑制したまま認証状態を確認したい場合は
+  // suppressLoading を true に指定する
+  checkAuthStatus: (suppressLoading?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -30,8 +32,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   // NOTE: checkAuthStatus が再生成されると依存コンポーネントの useEffect が連続発火し、
   // 画面がローディング↔入力の高速切替（フリッカー）を起こすため、useCallbackで安定化する。
-  const checkAuthStatus = useCallback(async () => {
-    setIsLoading(true);
+  const checkAuthStatus = useCallback(async (suppressLoading = false) => {
+    if (!suppressLoading) setIsLoading(true);
     try {
       const loggedIn = sessionStorage.getItem('adminLoggedIn') === '1';
       setIsAuthenticated(loggedIn);
@@ -48,7 +50,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error('Failed to fetch auth status:', error);
       setIsAuthenticated(false);
     } finally {
-      setIsLoading(false);
+      if (!suppressLoading) setIsLoading(false);
     }
   }, []);
 

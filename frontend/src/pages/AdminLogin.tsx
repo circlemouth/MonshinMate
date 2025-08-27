@@ -47,7 +47,7 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
       }
 
       sessionStorage.setItem('adminLoggedIn', '1');
-      await checkAuthStatus(); // AuthContextの状態を更新
+      await checkAuthStatus(true); // AuthContextの状態を更新
       onSuccess?.();
       navigate('/admin/templates');
 
@@ -76,7 +76,7 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
         throw new Error(data.detail || 'TOTPコードが正しくありません');
       }
       sessionStorage.setItem('adminLoggedIn', '1');
-      await checkAuthStatus(); // AuthContextの状態を更新
+      await checkAuthStatus(true); // AuthContextの状態を更新
       onSuccess?.();
       navigate('/admin/templates');
     } catch (e: any) {

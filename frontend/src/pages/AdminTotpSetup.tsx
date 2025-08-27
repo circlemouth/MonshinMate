@@ -67,7 +67,7 @@ export default function AdminTotpSetup() {
         duration: 3000,
         isClosable: true,
       });
-      await checkAuthStatus();
+      await checkAuthStatus(true);
       setShowTotpSetup(false);
       navigate('/admin/login');
     } catch (e: any) {
@@ -78,7 +78,7 @@ export default function AdminTotpSetup() {
   };
 
   const handleSkip = async () => {
-    await checkAuthStatus();
+    await checkAuthStatus(true);
     setShowTotpSetup(false);
     navigate('/admin/login');
      toast({
