@@ -603,3 +603,7 @@
 - [x] 変更（バックエンド）: `backend/app/main.py`, `backend/build/lib/app/main.py`
 - [x] テスト更新: `backend/tests/test_api.py`
 - [x] ドキュメント更新: `docs/implementation.md`
+
+## 76. ラッパーGUI録音エラーの修正（2025-12-09）
+- [x] 例外変数がガーベジコレクトされてしまいエラーメッセージが表示できなかった不具合を修正。
+- [x] 変更: `wrapper/app/gui.py`
