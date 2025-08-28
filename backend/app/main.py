@@ -113,7 +113,6 @@ def on_startup() -> None:
     # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
     initial_items = [
         # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
-        {"id": "sex", "label": "性別を選んでください。", "type": "single", "options": ["男性", "女性", "その他"], "required": True},
         {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
         {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
         {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
@@ -265,6 +264,7 @@ def on_startup() -> None:
             "label": "タバコは吸いますか？",
             "type": "single",
             "options": ["吸わない", "時々吸う", "毎日吸う"],
+            "allow_freetext": True,
             "required": False,
         },
         {
@@ -272,10 +272,11 @@ def on_startup() -> None:
             "label": "お酒はのみますか？",
             "type": "single",
             "options": ["のまない", "ときどき", "よく飲む"],
+            "allow_freetext": True,
             "required": False,
         },
-        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False},
-        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
     ]
     followup_items = [
         {
@@ -599,7 +600,6 @@ def reset_default_template() -> dict:
     # on_startup と同じロジックで初期テンプレートを上書き
     initial_items = [
         # 氏名・生年月日はセッション作成時に別途入力するためテンプレートから除外
-        {"id": "sex", "label": "性別を選んでください。", "type": "single", "options": ["男性", "女性", "その他"], "required": True},
         {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
         {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
         {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
@@ -751,6 +751,7 @@ def reset_default_template() -> dict:
             "label": "タバコは吸いますか？",
             "type": "single",
             "options": ["吸わない", "時々吸う", "毎日吸う"],
+            "allow_freetext": True,
             "required": False,
         },
         {
@@ -758,10 +759,11 @@ def reset_default_template() -> dict:
             "label": "お酒はのみますか？",
             "type": "single",
             "options": ["のまない", "ときどき", "よく飲む"],
+            "allow_freetext": True,
             "required": False,
         },
-        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False},
-        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False},
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
     ]
     followup_items = [
         {

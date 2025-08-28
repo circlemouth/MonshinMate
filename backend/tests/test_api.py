@@ -29,7 +29,16 @@ def test_default_template_contains_items() -> None:
     assert res.status_code == 200
     ids = {item["id"] for item in res.json()["items"]}
     # 氏名(name)・生年月日(dob)はセッション作成時に別途入力するためテンプレートから除外
-    expected = {"sex", "postal_code", "address", "phone", "chief_complaint", "symptom_location", "onset"}
+    expected = {
+        "postal_code",
+        "address",
+        "phone",
+        "chief_complaint",
+        "symptom_location",
+        "onset",
+        "pregnancy",
+        "breastfeeding",
+    }
     assert expected.issubset(ids)
 
 
