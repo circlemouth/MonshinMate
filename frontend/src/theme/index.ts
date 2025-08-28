@@ -105,6 +105,12 @@ const styles = {
   global: {
     'html, body, #root': {
       height: '100%',
+      minHeight: '100vh',
+      width: '100%',
+      // dvh 対応ブラウザでは動的高さを使用
+      '@supports (height: 100dvh)': {
+        minHeight: '100dvh',
+      },
     },
     body: {
       bg: 'bg.canvas',
@@ -117,6 +123,20 @@ const styles = {
     },
     'a': {
       color: 'link.default',
+    },
+    '::-webkit-scrollbar': {
+      width: '8px',
+      height: '8px',
+    },
+    '::-webkit-scrollbar-track': {
+      background: 'neutral.200',
+    },
+    '::-webkit-scrollbar-thumb': {
+      background: 'neutral.400',
+      borderRadius: '8px',
+    },
+    '::-webkit-scrollbar-thumb:hover': {
+      background: 'neutral.500',
     },
     // 印刷最適化
     '@media print': {

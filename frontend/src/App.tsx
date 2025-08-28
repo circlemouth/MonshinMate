@@ -100,7 +100,8 @@ export default function App() {
   // --- 強制表示ロジック（患者対話画面に限定） ---
   if (isLoading) {
     return (
-      <Center h="100vh">
+      {/* dvh を用いてウィンドウリサイズに追従 */}
+      <Center h="100vh" style={{ height: '100dvh' }}>
         <Spinner size="xl" />
       </Center>
     );
@@ -117,11 +118,21 @@ export default function App() {
 
   return (
     <Container
-      maxW={isChatPage || isAdminPage ? '100%' : 'container.md'}
-      py={isChatPage ? 0 : 10}
-      px={isChatPage || isAdminPage ? 2 : 4}
+      maxW={
+        isChatPage || isAdminPage
+          ? '100%'
+          : { base: '100%', md: 'container.md', lg: 'container.lg' }
+      }
+      py={isChatPage ? 0 : { base: 6, md: 10 }}
+      px={
+        isChatPage || isAdminPage
+          ? { base: 2, md: 4 }
+          : { base: 4, md: 6 }
+      }
       h={isChatPage ? '100vh' : 'auto'}
       minH="100vh"
+      // dvh を併用し、ラッパーGUI内での動的リサイズに対応
+      style={isChatPage ? { height: '100dvh', minHeight: '100dvh' } : { minHeight: '100dvh' }}
       display="flex"
       flexDirection="column"
     >

@@ -100,7 +100,8 @@ export default function AdminTotpSetup() {
       zIndex={2000}
       overflowY="auto"
     >
-      <Container centerContent py={10} px={4} minH="100vh">
+      {/* dvh を使用してリサイズに追従 */}
+      <Container centerContent py={10} px={4} minH="100vh" style={{ minHeight: '100dvh' }}>
         <VStack spacing={5} p={6} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
           <Heading size="lg">2要素認証の設定</Heading>
           

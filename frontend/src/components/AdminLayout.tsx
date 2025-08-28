@@ -52,7 +52,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <Flex direction="column" height="100vh">
+    {/* dvh を併用してウィンドウサイズ変化に追従 */}
+    <Flex direction="column" height="100vh" style={{ height: '100dvh' }}>
       {/* LLM 接続状態の表示は App.tsx のヘッダーに小さく配置する運用に変更 */}
       <Flex align="stretch" gap={4} flex="1" px={{ base: 2, md: 3 }}>
         <Box
@@ -62,6 +63,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           top={0}
           alignSelf="flex-start"
           maxH="100vh"
+          // ナビゲーションも dvh でリサイズ
+          style={{ maxHeight: '100dvh' }}
           overflowY="auto"
         >
           <VStack align="stretch" spacing={2} height="100%">

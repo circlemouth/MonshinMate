@@ -603,3 +603,9 @@
 - [x] 変更（バックエンド）: `backend/app/main.py`, `backend/build/lib/app/main.py`
 - [x] テスト更新: `backend/tests/test_api.py`
 - [x] ドキュメント更新: `docs/implementation.md`
+
+## 76. GUI リサイズ追従とスタイル改善（2025-12-09）
+- [x] `vh` 依存の高さ指定を `dvh` フォールバック付きに変更し、ウィンドウサイズ変更時にレイアウトが追従するよう修正。
+- [x] スクロールバーにニュートラルトーンのカスタムスタイルを適用し、デザインを洗練。
+- [x] 変更（フロントエンド）: `frontend/src/App.tsx`, `frontend/src/components/AdminLayout.tsx`, `frontend/src/pages/AdminTotpSetup.tsx`, `frontend/src/pages/AdminInitialPassword.tsx`, `frontend/src/theme/index.ts`
+- [x] ドキュメント更新: `docs/UI_Redesign_Plan.md`, `docs/implementation.md`

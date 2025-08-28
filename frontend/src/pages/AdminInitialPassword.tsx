@@ -91,7 +91,8 @@ export default function AdminInitialPassword() {
       zIndex={2000}
       overflowY="auto"
     >
-      <Container centerContent py={10} px={4} minH="100vh">
+      {/* dvh を使用してラッパーGUIのリサイズに対応 */}
+      <Container centerContent py={10} px={4} minH="100vh" style={{ minHeight: '100dvh' }}>
         <VStack spacing={6} p={6} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
           <Heading size="lg">初回パスワード設定</Heading>
           <Text>セキュリティのため、最初に管理用パスワードを設定してください。</Text>
