@@ -595,3 +595,11 @@
 - [x] 変更（バックエンド）: `backend/app/llm_gateway.py`, `backend/app/main.py`, `backend/tests/test_api.py`
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/LLMcommunication.md`, `docs/session_api.md`, `docs/implementation.md`
+
+## 75. デフォルトテンプレートの性別関連項目整理（2025-12-08）
+- [x] 初診デフォルトテンプレートから性別質問を削除し、重複入力を解消。
+- [x] 妊娠・授乳の質問に対象性別を設定し、女性のみ表示されるよう変更。
+- [x] 喫煙・飲酒の質問に自由記述欄を追加し、選択肢以外の回答を許容。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/build/lib/app/main.py`
+- [x] テスト更新: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/implementation.md`
