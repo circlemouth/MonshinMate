@@ -960,10 +960,14 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
                 except Exception:
                     finalized_at_val = None
 
+                # save_session() が参照する必須フィールド（gender, followup_prompt など）が
+                # 欠けていると AttributeError になるため、DBの値とデフォルトから補完して作成する
                 session_obj = SimpleNamespace(
                     id=srow.get("id"),
                     patient_name=srow.get("patient_name"),
                     dob=srow.get("dob"),
+                    # 保存には gender が必須
+                    gender=srow.get("gender"),
                     visit_type=srow.get("visit_type"),
                     questionnaire_id=srow.get("questionnaire_id"),
                     answers=srow.get("answers", {}),
@@ -973,6 +977,8 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
                     attempt_counts=srow.get("attempt_counts", {}),
                     additional_questions_used=srow.get("additional_questions_used", 0),
                     max_additional_questions=srow.get("max_additional_questions", 5),
+                    # 追問プロンプトは空の可能性があるため、デフォルトを補う
+                    followup_prompt=srow.get("followup_prompt") or DEFAULT_FOLLOWUP_PROMPT,
                     finalized_at=finalized_at_val,
                 )
                 save_session(session_obj)

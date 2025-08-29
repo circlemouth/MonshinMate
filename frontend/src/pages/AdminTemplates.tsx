@@ -41,7 +41,7 @@ import {
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
-import { LlmStatus } from '../utils/llmStatus';
+import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
 interface Item {
   id: string;
@@ -173,7 +173,18 @@ export default function AdminTemplates() {
         const base = !!s?.base_url;
         setLlmEnabledSetting(enabled);
         setHasBaseUrl(base);
-        setLlmAvailable(enabled && base && llmStatus === 'ok');
+        // 疎通テスト結果のみで可否を判定する（スタブ運用では base_url なしでも可）
+        setLlmAvailable(llmStatus === 'ok');
+        // ヘッダーのイベントを受け取れていないケースに備え、初回に現在の疎通状態を取得
+        checkLlmStatus()
+          .then((st) => {
+            if (!mounted) return;
+            setLlmStatus(st);
+            setLlmAvailable(st === 'ok');
+          })
+          .catch(() => {
+            /* noop: 取得失敗時は既存ロジックに委ねる */
+          });
       })
       .catch(() => {
         if (!mounted) return;
@@ -185,7 +196,8 @@ export default function AdminTemplates() {
       if (!mounted) return;
       const st = (e?.detail as LlmStatus) ?? 'ng';
       setLlmStatus(st);
-      setLlmAvailable(llmEnabledSetting && hasBaseUrl && st === 'ok');
+      // 疎通イベントの結果のみで判定
+      setLlmAvailable(st === 'ok');
     };
     window.addEventListener('llmStatusUpdated' as any, onUpdated);
     return () => {

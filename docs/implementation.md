@@ -198,6 +198,13 @@
 ## 8. リリース手順
 1) DBマイグレーション（テンプレ・セッション関連）
 2) 管理画面で `llm_settings` と初診/再診テンプレ投入
+
+---
+
+## 変更履歴（運用メモ）
+- [fix] 管理画面テンプレ設定のLLM有効判定を調整（疎通OKのみで有効化）。
+  - これまで base_url が未設定だと UI のトグルが無効化されていたが、スタブ（ローカル）運用では base_url なしでも `/llm/settings/test` が OK を返すため、UI 側の可否判定を疎通テスト結果のみに変更。
+  - 対象: `frontend/src/pages/AdminTemplates.tsx` の `llmAvailable` 判定。
 3) ステージングでUAT→本番ロールアウト
 
 ---
