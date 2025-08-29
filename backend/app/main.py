@@ -382,14 +382,14 @@ def readyz() -> dict:
     """依存疎通確認用のエンドポイント。"""
     db_ok = False
     llm_ok = not llm_gateway.settings.enabled
-    llm_detail = "disabled"
+    llm_detail = "disabled" if not llm_gateway.settings.enabled else "not_checked"
     try:
         _ = list_templates()
         db_ok = True
     except Exception:
         pass
 
-    if llm_gateway.settings.enabled:
+    if llm_gateway.settings.enabled and llm_gateway.settings.base_url:
         try:
             res = llm_gateway.test_connection()
             if res.get("status") == "ok":
@@ -397,6 +397,10 @@ def readyz() -> dict:
             llm_detail = res.get("detail", "ng")
         except Exception as e:
             llm_detail = str(e)
+    elif llm_gateway.settings.enabled and not llm_gateway.settings.base_url:
+        # ベースURL未指定時は LLM を必須依存とみなさず ready を優先
+        llm_ok = True
+        llm_detail = "base_url_missing_skipped"
 
     if db_ok and llm_ok:
         return {"status": "ready"}
@@ -909,6 +913,9 @@ def get_llm_settings() -> LLMSettings:
 @app.put("/llm/settings", response_model=LLMSettings)
 def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> LLMSettings:
     """LLM 設定を更新する。必要条件を満たす場合は既存セッションのサマリーをBG再生成。"""
+    # バリデーション: LLM を使用する場合はモデル名が必須
+    if settings.enabled and (not settings.model or not str(settings.model).strip()):
+        raise HTTPException(status_code=400, detail="LLM有効時はモデル名が必須です")
 
     llm_gateway.update_settings(settings)
     try:
@@ -986,9 +993,10 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
         except Exception:
             logger.exception("bg_regen_summaries_failed")
 
-    # 保存後に疎通テストを実施し、成功時のみバックグラウンドで再生成を起動
+    # 保存後に疎通テストを実施（base_url 指定時のみ）。
+    # 成功時のみバックグラウンドで再生成を起動
     try:
-        if settings.enabled:
+        if settings.enabled and settings.base_url:
             res = llm_gateway.test_connection()
             if res.get("status") != "ok":
                 raise HTTPException(status_code=400, detail=res.get("detail") or "LLM接続に失敗しました")

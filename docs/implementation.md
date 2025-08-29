@@ -621,3 +621,30 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`
 - [x] テスト更新: `backend/tests/test_api.py`
 - [x] ドキュメント更新: `docs/PlannedDesign.md`, `docs/implementation.md`
+
+## 78. LLMステータス表示の明確化（2025-12-10）
+- [x] ステータスバッジの表示文言を調整し、`status === 'ok'` でも `base_url` が未設定の場合は「LLM有効(ローカル)」と表示するように変更（従来は「LLM接続済」と表示され紛らわしかった）。
+- [x] 変更（フロントエンド）: `frontend/src/components/LlmStatusBadge.tsx`
+
+## 79. LLM設定保存後にステータス更新（2025-12-10）
+- [x] LLM設定画面で保存成功時に `refreshLlmStatus()` を呼び出し、右上のステータスバッジへ最新状態を即時反映。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`
+
+## 80. LLM疎通テストの厳格化（2025-12-10）
+- [x] `/llm/settings/test` で、`enabled` かつ `base_url` と `model` が指定されていない場合は `ng` を返すように変更。
+- [x] `test_connection()` はまずモデル一覧の取得を行い、選択モデルが含まれる場合に `ok` と判定（Ollama: `/api/tags`、LM Studio: `/v1/models`）。
+- [x] チャットによる疎通確認は廃止し、タイムアウトの影響を避けた。
+- [x] `/llm/settings` 保存時の疎通テストは `base_url` 指定時のみ実行（空の場合は保存可能だが、ステータスは `ng`）。
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py`, `backend/app/main.py`
+
+## 81. LLM設定の必須項目とUI制御（2025-12-10）
+- [x] LLM有効時はモデル名が必須（未入力で保存不可、400）。
+- [x] 管理画面に「LLMを使用する」チェックボックスを追加し、オフ時は各設定を一括で非活性化。
+- [x] 変更（バックエンド）: `backend/app/main.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`
+
+## 82. LLM未使用時のUIとバッジ文言（2025-12-10）
+- [x] 「LLMを使用する」チェックボックスをフォーム最上部へ移動。
+- [x] LLM未使用時はプロバイダ選択欄（Ollama/LM Studio）を非表示。
+- [x] 右上のステータスバッジの無効ラベルを「LLM未使用」に変更。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`, `frontend/src/components/LlmStatusBadge.tsx`

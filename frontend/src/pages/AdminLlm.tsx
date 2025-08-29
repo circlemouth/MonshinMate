@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   VStack,
   FormControl,
@@ -12,13 +12,12 @@ import {
   Textarea,
   Button,
   HStack,
-  Switch,
+  Checkbox,
   Text,
   Spinner,
   useToast,
 } from '@chakra-ui/react';
-// 疎通チェックは初期画面に戻った場合のみ行う方針のため、
-// 本画面ではチェックの発火を行わない。
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 interface Settings {
   provider: string;
@@ -51,6 +50,9 @@ export default function AdminLlm() {
   const toast = useToast();
   const [models, setModels] = useState<string[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const canSave = !settings.enabled || !!(settings.model && settings.model.trim());
+  const initialLoad = useRef(true);
+  const saveTimer = useRef<any>(null);
 
   useEffect(() => {
     fetch('/llm/settings')
@@ -72,6 +74,38 @@ export default function AdminLlm() {
         }
       });
   }, []);
+
+  // 入力変更を自動保存（500ms デバウンス、初期ロード直後はスキップ）
+  useEffect(() => {
+    if (initialLoad.current) {
+      initialLoad.current = false;
+      return;
+    }
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      // 有効時はモデル名必須。未入力なら保存しない。
+      if (settings.enabled && !canSave) return;
+      try {
+        const res = await fetch('/llm/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(settings),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || 'auto_save_failed');
+        }
+        setMessage('自動保存しました');
+      } catch (e: any) {
+        // 自動保存の失敗はトーストを抑制し、画面下のメッセージのみ
+        setMessage('自動保存に失敗しました');
+      }
+    }, 500);
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settings]);
 
   const fetchModels = async () => {
     setIsLoadingModels(true);
@@ -111,25 +145,26 @@ export default function AdminLlm() {
   return (
     <VStack spacing={4} align="stretch">
       <FormControl>
-        <FormLabel>LLM プロバイダ</FormLabel>
-        <Select
-          value={settings.provider}
-          onChange={(e) => setSettings({ ...settings, provider: e.target.value, model: '' })}
+        <Checkbox
+          isChecked={settings.enabled}
+          onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
         >
-          <option value="ollama">Ollama</option>
-          <option value="lm_studio">LM Studio</option>
-        </Select>
+          LLMを使用する
+        </Checkbox>
       </FormControl>
-      <FormControl>
-        <HStack>
-          <Switch
-            isChecked={settings.enabled}
-            onChange={(e) => setSettings({ ...settings, enabled: e.target.checked })}
-          />
-          <Text>LLM を有効化</Text>
-        </HStack>
-      </FormControl>
-      <FormControl>
+      {settings.enabled && (
+        <FormControl>
+          <FormLabel>LLM プロバイダ</FormLabel>
+          <Select
+            value={settings.provider}
+            onChange={(e) => setSettings({ ...settings, provider: e.target.value, model: '' })}
+          >
+            <option value="ollama">Ollama</option>
+            <option value="lm_studio">LM Studio</option>
+          </Select>
+        </FormControl>
+      )}
+      <FormControl isDisabled={!settings.enabled}>
         <FormLabel>ベースURL（任意・リモート接続時）</FormLabel>
         <Input
           placeholder="例: http://server:11434"
@@ -137,7 +172,7 @@ export default function AdminLlm() {
           onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
         />
       </FormControl>
-      <FormControl>
+      <FormControl isDisabled={!settings.enabled}>
         <FormLabel>APIキー（任意）</FormLabel>
         <Input
           type="password"
@@ -147,13 +182,13 @@ export default function AdminLlm() {
       </FormControl>
 
       <HStack>
-        <Button onClick={fetchModels} isLoading={isLoadingModels}>
+        <Button onClick={fetchModels} isLoading={isLoadingModels} isDisabled={!settings.enabled}>
           使用可能なモデル一覧を取得
         </Button>
         {isLoadingModels && <Spinner size="sm" />}
       </HStack>
 
-      <FormControl>
+      <FormControl isDisabled={!settings.enabled} isInvalid={settings.enabled && !canSave}>
         <FormLabel>モデル名</FormLabel>
         <Select
           value={settings.model}
@@ -166,9 +201,12 @@ export default function AdminLlm() {
             </option>
           ))}
         </Select>
+        {settings.enabled && !canSave && (
+          <Text color="red.500" fontSize="sm" mt={1}>LLM有効時はモデル名が必須です</Text>
+        )}
       </FormControl>
 
-      <FormControl>
+      <FormControl isDisabled={!settings.enabled}>
         <FormLabel>temperature</FormLabel>
         {/* スライダー形式（0.0〜2.0 を 0.1 刻み） */}
         <HStack>
@@ -188,7 +226,7 @@ export default function AdminLlm() {
           <Text width="48px" textAlign="right">{(Number.isFinite(settings.temperature) ? settings.temperature : 0.2).toFixed(1)}</Text>
         </HStack>
       </FormControl>
-      <FormControl>
+      <FormControl isDisabled={!settings.enabled}>
         <FormLabel>システムプロンプト</FormLabel>
         <Textarea
           value={settings.system_prompt}
@@ -197,49 +235,46 @@ export default function AdminLlm() {
       </FormControl>
       <HStack>
         <Button
+          colorScheme="primary"
+          isDisabled={!settings.enabled}
           onClick={async () => {
             setMessage('');
             try {
-              const res = await fetch('/llm/settings', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(settings),
-              });
-              if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || 'save_failed');
+              // 手動で疎通テスト
+              const r = await fetch('/llm/settings/test', { method: 'POST' });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok || d?.status !== 'ok') {
+                throw new Error(d?.detail || 'test_failed');
               }
-              // 保存後に再取得してUIへ確実に反映
-              const re = await fetch('/llm/settings');
-              if (re.ok) {
-                const data = await re.json();
-                setSettings({
-                  provider: data.provider ?? 'ollama',
-                  model: data.model ?? '',
-                  temperature: normalizeTemp(data.temperature ?? 0.2),
-                  system_prompt: data.system_prompt ?? '',
-                  enabled: data.enabled ?? true,
-                  base_url: data.base_url ?? '',
-                  api_key: data.api_key ?? '',
-                });
-                if (data.model) {
-                  setModels((prev) => (prev.includes(data.model) ? prev : [data.model, ...prev]));
-                }
-              }
-              setMessage('保存しました');
-              // ステータス更新は初期画面遷移時のみに限定
+              toast({ title: '疎通テスト成功', status: 'success' });
             } catch (e: any) {
-              toast({ title: '疎通テストに失敗しました', description: e.message, status: 'error' });
-              setMessage('保存に失敗しました');
-              // ここでは疎通チェックを行わない
+              toast({ title: '疎通テストに失敗しました', description: e?.message || '', status: 'error' });
+            } finally {
+              // ヘッダのバッジ更新
+              try { await refreshLlmStatus(); } catch {}
             }
           }}
-          colorScheme="primary"
         >
-          LLM設定を保存
+          疎通テストを実行
         </Button>
         <Text>{message}</Text>
       </HStack>
+
+      {/* 画面離脱時に疎通テスト＋ステータス更新を実施 */}
+      <AutoTestOnUnmount />
     </VStack>
   );
+}
+
+// 画面離脱時に疎通テストを実行し、ヘッダのLLM状態を更新する
+function AutoTestOnUnmount() {
+  useEffect(() => {
+    return () => {
+      // 非同期で発火（結果はバッジ更新に反映）
+      fetch('/llm/settings/test', { method: 'POST' }).finally(() => {
+        refreshLlmStatus().catch(() => {});
+      });
+    };
+  }, []);
+  return null;
 }

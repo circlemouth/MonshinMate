@@ -53,33 +53,22 @@ class LLMGateway:
         Returns:
             dict[str, str]: ステータスを示す辞書。
         """
-        # base_url が指定されていなければ常に OK（ローカル/スタブ運用）。
         s = self.settings
         if not s.enabled:
-            # フロントエンドは有効な場合のみこの関数を呼ぶことを想定しているが、
-            # 直接APIが呼ばれるケースも考慮し、無効時は疎通NGとする。
+            # 無効時は疎通NGを返す
             return {"status": "ng", "detail": "llm is disabled"}
-        if not s.base_url:
-            return {"status": "ok"}
+        if not s.base_url or not s.model:
+            # ベースURLやモデル未指定での自動OKは行わない
+            return {"status": "ng", "detail": "base_url or model is missing"}
 
+        # まずモデル一覧を取得し、選択モデルが含まれているかで判定する
         try:
-            # プロバイダ毎に最小の疎通確認を行う
-            timeout = httpx.Timeout(3.0)
-            if s.provider == "ollama":
-                # /api/tags は軽量で認証不要
-                url = s.base_url.rstrip("/") + "/api/tags"
-                r = httpx.get(url, timeout=timeout)
-                r.raise_for_status()
+            models = self.list_models()
+            if not models:
+                return {"status": "ng", "detail": "no models returned"}
+            if s.model in models:
                 return {"status": "ok"}
-            else:
-                # LM Studio（OpenAI 互換）: /v1/models
-                url = s.base_url.rstrip("/") + "/v1/models"
-                headers = {}
-                if s.api_key:
-                    headers["Authorization"] = f"Bearer {s.api_key}"
-                r = httpx.get(url, headers=headers, timeout=timeout)
-                r.raise_for_status()
-                return {"status": "ok"}
+            return {"status": "ng", "detail": f"model '{s.model}' not found"}
         except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
             return {"status": "ng", "detail": str(e)}
 
