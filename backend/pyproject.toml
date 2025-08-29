@@ -12,6 +12,7 @@ dependencies = [
     "qrcode[pil]",
     "python-jose[cryptography]",
     "cryptography",
+    "reportlab",
 ]
 
 [tool.pytest.ini_options]
