@@ -648,3 +648,10 @@
 - [x] LLM未使用時はプロバイダ選択欄（Ollama/LM Studio）を非表示。
 - [x] 右上のステータスバッジの無効ラベルを「LLM未使用」に変更。
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`, `frontend/src/components/LlmStatusBadge.tsx`
+
+## 83. 問診結果ダウンロード機能追加（2025-12-11）
+- [x] 管理画面の問診結果一覧にPDF/Markdown/CSVダウンロード用アイコンを追加。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/pyproject.toml`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx`
+- [x] テスト追加: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`, `docs/implementation.md`

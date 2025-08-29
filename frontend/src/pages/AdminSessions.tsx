@@ -23,7 +23,9 @@ import {
   Input,
   Button,
   HStack,
+  IconButton,
 } from '@chakra-ui/react';
+import { FiFile, FiFileText, FiTable } from 'react-icons/fi';
 
 interface SessionSummary {
   id: string;
@@ -146,6 +148,7 @@ export default function AdminSessions() {
             <Th>生年月日</Th>
             <Th>受診種別</Th>
             <Th>確定日時</Th>
+            <Th>出力</Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -155,6 +158,34 @@ export default function AdminSessions() {
               <Td>{s.dob}</Td>
               <Td>{visitTypeLabel(s.visit_type)}</Td>
               <Td>{s.finalized_at || '-'}</Td>
+              <Td onClick={(e) => e.stopPropagation()}>
+                <HStack spacing={1}>
+                  <IconButton
+                    as="a"
+                    href={`/admin/sessions/${s.id}/download/pdf`}
+                    aria-label="PDFをダウンロード"
+                    icon={<FiFile />}
+                    size="sm"
+                    variant="ghost"
+                  />
+                  <IconButton
+                    as="a"
+                    href={`/admin/sessions/${s.id}/download/md`}
+                    aria-label="Markdownをダウンロード"
+                    icon={<FiFileText />}
+                    size="sm"
+                    variant="ghost"
+                  />
+                  <IconButton
+                    as="a"
+                    href={`/admin/sessions/${s.id}/download/csv`}
+                    aria-label="CSVをダウンロード"
+                    icon={<FiTable />}
+                    size="sm"
+                    variant="ghost"
+                  />
+                </HStack>
+              </Td>
             </Tr>
           ))}
         </Tbody>

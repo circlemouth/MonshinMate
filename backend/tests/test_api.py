@@ -329,6 +329,29 @@ def test_admin_session_search_filters() -> None:
     assert all(s["id"] != session_id for s in nohit_res.json())
 
 
+def test_admin_session_download() -> None:
+    """問診結果を各形式でダウンロードできることを確認する。"""
+    on_startup()
+    payload = {
+        "patient_name": "出力太郎",
+        "dob": "1985-05-05",
+        "gender": "male",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "頭痛"},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    sid = res.json()["id"]
+    fin = client.post(f"/sessions/{sid}/finalize")
+    assert fin.status_code == 200
+
+    for fmt, ctype in [("md", "text/markdown"), ("csv", "text/csv"), ("pdf", "application/pdf")]:
+        r = client.get(f"/admin/sessions/{sid}/download/{fmt}")
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith(ctype)
+        assert len(r.content) > 0
+
+
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
     on_startup()

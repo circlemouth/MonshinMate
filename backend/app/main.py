@@ -8,9 +8,15 @@ import time
 from datetime import datetime, timedelta, UTC
 import os
 import io
+import csv
+import json
 
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.lib.pagesizes import A4
 import sqlite3
 from pydantic import BaseModel, Field
 import pyotp
@@ -1878,6 +1884,110 @@ def admin_get_session(session_id: str) -> SessionDetail:
         summary=s.get("summary"),
         finalized_at=s.get("finalized_at"),
     )
+
+
+@app.get("/admin/sessions/{session_id}/download/{fmt}")
+def admin_download_session(session_id: str, fmt: str) -> Response:
+    """指定セッションを指定形式でダウンロードする。"""
+    s = db_get_session(session_id)
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
+    labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
+    answers = s.get("answers", {})
+
+    def fmt_answer(ans: Any) -> str:
+        if ans is None or ans == "":
+            return ""
+        if isinstance(ans, list):
+            return ", ".join(map(str, ans))
+        if isinstance(ans, dict):
+            return json.dumps(ans, ensure_ascii=False)
+        return str(ans)
+
+    rows: list[tuple[str, str]] = []
+    for iid, label in labels.items():
+        rows.append((label, fmt_answer(answers.get(iid))))
+    for iid, qtext in (s.get("llm_question_texts") or {}).items():
+        rows.append((qtext, fmt_answer(answers.get(iid))))
+
+    vt = s.get("visit_type")
+    vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
+
+    if fmt == "md":
+        lines = [
+            "# 問診結果",
+            "",
+            "## 患者情報",
+            f"- 患者名: {s['patient_name']}",
+            f"- 生年月日: {s['dob']}",
+            f"- 受診種別: {vt_label}",
+            f"- テンプレートID: {s['questionnaire_id']}",
+            "",
+            "## 回答",
+        ]
+        for label, ans in rows:
+            lines.append(f"- {label}: {ans or '未回答'}")
+        if s.get("summary"):
+            lines.extend(["", "## 自動生成サマリー", s["summary"]])
+        content = "\n".join(lines)
+        return Response(
+            content,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.md"},
+        )
+    if fmt == "csv":
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["項目", "回答"])
+        for label, ans in rows:
+            writer.writerow([label, ans])
+        content = buf.getvalue()
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.csv"},
+        )
+    if fmt == "pdf":
+        buf = io.BytesIO()
+        pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
+        c = canvas.Canvas(buf, pagesize=A4)
+        c.setFont("HeiseiMin-W3", 12)
+        y = 800
+
+        def write_line(text: str) -> None:
+            nonlocal y
+            c.drawString(40, y, text)
+            y -= 14
+            if y < 40:
+                c.showPage()
+                c.setFont("HeiseiMin-W3", 12)
+                y = 800
+
+        write_line("問診結果")
+        write_line("")
+        write_line("患者情報")
+        write_line(f"患者名: {s['patient_name']}")
+        write_line(f"生年月日: {s['dob']}")
+        write_line(f"受診種別: {vt_label}")
+        write_line(f"テンプレートID: {s['questionnaire_id']}")
+        write_line("")
+        write_line("回答")
+        for label, ans in rows:
+            write_line(f"{label}: {ans or '未回答'}")
+        if s.get("summary"):
+            write_line("")
+            write_line("自動生成サマリー")
+            for line in str(s["summary"]).splitlines():
+                write_line(line)
+        c.save()
+        buf.seek(0)
+        return StreamingResponse(
+            buf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.pdf"},
+        )
+    raise HTTPException(status_code=400, detail="unsupported format")
 
 
 # --- 観測用メトリクス（最小実装） ---
