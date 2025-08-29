@@ -655,3 +655,9 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx`
 - [x] テスト追加: `backend/tests/test_api.py`
 - [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`, `docs/implementation.md`
+
+## 84. 管理画面使い方ドキュメントの差し替え（2025-12-12）
+- [x] 日常操作向けの `docs/admin_user_manual.md` を追加し、管理メニューの「使い方」ページで表示するよう変更。
+- [x] `docs/admin_system_setup.md` から「使い方ページ」に関する記述を修正。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminManual.tsx`
+- [x] ドキュメント追加: `frontend/public/docs/admin_user_manual.md`
