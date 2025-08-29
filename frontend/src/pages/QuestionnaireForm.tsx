@@ -212,20 +212,6 @@ export default function QuestionnaireForm() {
                     <Radio value="no" size="lg">いいえ</Radio>
                   </VStack>
                 </RadioGroup>
-              ) : item.type === 'single' && item.options ? (
-                <RadioGroup
-                  value={answers[item.id] || ''}
-                  onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
-                  aria-describedby={helperText ? `help-item-${item.id}` : undefined}
-                >
-                  <VStack align="start" spacing={3}>
-                    {item.options.map((opt) => (
-                      <Radio key={opt} value={opt} size="lg">
-                        {opt}
-                      </Radio>
-                    ))}
-                  </VStack>
-                </RadioGroup>
               ) : item.type === 'multi' && item.options ? (
                 <>
                   <CheckboxGroup

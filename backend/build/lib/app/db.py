@@ -382,7 +382,10 @@ def upsert_template(
 ) -> None:
     conn = get_conn(db_path)
     try:
-        items_json = json.dumps(list(items), ensure_ascii=False)
+        normalized_items = [
+            {**it, "type": "multi"} if it.get("type") == "single" else it for it in items
+        ]
+        items_json = json.dumps(list(normalized_items), ensure_ascii=False)
         conn.execute(
             """
             INSERT INTO questionnaire_templates (id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions)
@@ -413,12 +416,18 @@ def get_template(
         ).fetchone()
         if not row:
             return None
+        items = json.loads(row["items_json"]) or []
+        for it in items:
+            if it.get("type") == "single":
+                it["type"] = "multi"
         return {
             "id": row["id"],
             "visit_type": row["visit_type"],
-            "items": json.loads(row["items_json"]) or [],
+            "items": items,
             "llm_followup_enabled": bool(row.get("llm_followup_enabled", 1)),
-            "llm_followup_max_questions": int(row.get("llm_followup_max_questions", 5)),
+            "llm_followup_max_questions": int(
+                row.get("llm_followup_max_questions", 5)
+            ),
         }
     finally:
         conn.close()

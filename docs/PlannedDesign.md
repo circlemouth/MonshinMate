@@ -69,7 +69,7 @@
 
 ### 3.3 Questionnaire（/questionnaire）
 - **表示**：選択した種別に紐づくテンプレートの項目
-  - 入力型：単一選択、複数選択、数値、日付、テキスト（複数行）
+  - 入力型：複数選択、数値、日付、テキスト（複数行）
   - 任意の軽い条件分岐は即時反映（例：施術希望=あり → 施術関連項目を表示）
 - **アクション**：
   - 一時保存（ローカル：sessionStorage）
@@ -107,7 +107,7 @@
 - **タブ**：初診 / 再診
 - **項目リスト**：
   - 各項目：`項目ID`、`表示名`、`入力型`、`必須`、`説明文`、`条件表示（任意）`
-  - 入力型：単一選択 / 複数選択 / 数値 / 日付 / テキスト
+  - 入力型：複数選択 / 数値 / 日付 / テキスト
   - 選択肢（入力型が選択のとき）
 - **操作**：項目の追加/並替/削除、プレビュー（右パネル）
 - **検証**：重複IDの禁止、必須項目の不足チェック
@@ -271,7 +271,7 @@ interface QuestionItem {
   inputType: 'text' | 'multi' | 'yesno' | 'date';
   required?: boolean;
   description?: string;
-  options?: { value: string; label: string }[]; // single/multi
+  options?: { value: string; label: string }[]; // multi
   allowFreeText?: boolean; // multi のときに自由記述欄をチェックボックスで有効化
   when?: { itemId: string; operator: 'eq' | 'ne' | 'in' | 'nin'; value: any }[];
   gender?: 'male' | 'female' | 'both'; // 省略または 'both' で男女共通
