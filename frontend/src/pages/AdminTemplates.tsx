@@ -346,8 +346,8 @@ export default function AdminTemplates() {
   const changeItemType = (index: number, newType: string) => {
     const target = items[index];
     const next: Item = { ...target, type: newType } as Item;
-    if (newType === 'multi' || newType === 'single') {
-      // 複数/単一選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
+    if (newType === 'multi') {
+      // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
       next.allow_freetext = true;
       next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
     } else {
@@ -503,7 +503,7 @@ export default function AdminTemplates() {
     setTemplates([...templates, { id: newId }]);
     setTemplateId(newId);
     // 新規テンプレート作成時のデフォルト問診項目は「質問文形式」をベースに、
-    // 発症時期は単一選択＋自由記述をあらかじめ用意する
+    // 発症時期は複数選択＋自由記述をあらかじめ用意する
     setItems([
       {
         id: crypto.randomUUID(),
@@ -516,7 +516,7 @@ export default function AdminTemplates() {
       {
         id: crypto.randomUUID(),
         label: '発症時期はいつからですか？',
-        type: 'single',
+        type: 'multi',
         required: false,
         options: ['昨日から', '1週間前から', '1ヶ月前から'],
         allow_freetext: true,
@@ -955,7 +955,6 @@ export default function AdminTemplates() {
                                         <FormLabel m={0}>入力方法</FormLabel>
                                         <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
                                           <option value="string">テキスト</option>
-                                          <option value="single">単一選択</option>
                                           <option value="multi">複数選択</option>
                                           <option value="yesno">はい/いいえ</option>
                                           <option value="date">日付</option>
@@ -970,7 +969,7 @@ export default function AdminTemplates() {
                                         onClick={() => removeItem(idx)}
                                       />
                                     </HStack>
-                                    {['multi', 'single'].includes(item.type) && (
+                                    {item.type === 'multi' && (
                                       <Box>
                                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
                                         <VStack align="stretch">
@@ -1068,7 +1067,7 @@ export default function AdminTemplates() {
                     value={newItem.type}
                     onChange={(e) => {
                       const t = e.target.value;
-                      if (t === 'multi' || t === 'single') {
+                      if (t === 'multi') {
                         setNewItem({
                           ...newItem,
                           type: t,
@@ -1081,7 +1080,6 @@ export default function AdminTemplates() {
                     }}
                   >
                     <option value="string">テキスト</option>
-                    <option value="single">単一選択</option>
                     <option value="multi">複数選択</option>
                     <option value="yesno">はい/いいえ</option>
                     <option value="date">日付</option>

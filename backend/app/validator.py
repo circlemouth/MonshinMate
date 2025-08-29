@@ -42,11 +42,6 @@ class Validator:
                     datetime.fromisoformat(str(value))
                 except Exception as exc:  # noqa: BLE001
                     raise HTTPException(status_code=400, detail=f"{key} は日付(YYYY-MM-DD)で入力してください") from exc
-            elif item_type == "single":
-                if not isinstance(value, str):
-                    raise HTTPException(status_code=400, detail=f"{key} は単一選択です")
-                if options and value not in list(options):
-                    raise HTTPException(status_code=400, detail=f"{key} の値が不正です")
             elif item_type == "yesno":
                 if not isinstance(value, str):
                     raise HTTPException(status_code=400, detail=f"{key} は YES/NO を選択してください")

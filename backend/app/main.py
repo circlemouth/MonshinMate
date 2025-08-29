@@ -134,7 +134,7 @@ def on_startup() -> None:
         {
             "id": "onset",
             "label": "いつから症状がありますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
@@ -262,7 +262,7 @@ def on_startup() -> None:
         {
             "id": "smoking",
             "label": "タバコは吸いますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["吸わない", "時々吸う", "毎日吸う"],
             "allow_freetext": True,
             "required": False,
@@ -270,7 +270,7 @@ def on_startup() -> None:
         {
             "id": "alcohol",
             "label": "お酒はのみますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["のまない", "ときどき", "よく飲む"],
             "allow_freetext": True,
             "required": False,
@@ -297,7 +297,7 @@ def on_startup() -> None:
         {
             "id": "onset",
             "label": "いつからの症状ですか？",
-            "type": "single",
+            "type": "multi",
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
@@ -621,7 +621,7 @@ def reset_default_template() -> dict:
         {
             "id": "onset",
             "label": "いつから症状がありますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,
@@ -749,7 +749,7 @@ def reset_default_template() -> dict:
         {
             "id": "smoking",
             "label": "タバコは吸いますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["吸わない", "時々吸う", "毎日吸う"],
             "allow_freetext": True,
             "required": False,
@@ -757,7 +757,7 @@ def reset_default_template() -> dict:
         {
             "id": "alcohol",
             "label": "お酒はのみますか？",
-            "type": "single",
+            "type": "multi",
             "options": ["のまない", "ときどき", "よく飲む"],
             "allow_freetext": True,
             "required": False,
@@ -784,7 +784,7 @@ def reset_default_template() -> dict:
         {
             "id": "onset",
             "label": "いつからの症状ですか？",
-            "type": "single",
+            "type": "multi",
             "options": ["昨日から", "1週間前から", "1ヶ月前から"],
             "allow_freetext": True,
             "required": True,

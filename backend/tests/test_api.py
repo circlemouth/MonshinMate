@@ -339,7 +339,7 @@ def test_questionnaire_options() -> None:
             {
                 "id": "color",
                 "label": "色",
-                "type": "single",
+                "type": "multi",
                 "required": True,
                 "options": ["red", "blue"],
                 "description": "説明",
@@ -378,7 +378,7 @@ def test_questionnaire_when() -> None:
             {
                 "id": "symptom",
                 "label": "症状の有無",
-                "type": "single",
+                "type": "multi",
                 "required": True,
                 "options": ["あり", "なし"],
             },

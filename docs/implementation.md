@@ -614,3 +614,10 @@
 ## 76. ラッパーGUI録音エラーの修正（2025-12-09）
 - [x] 例外変数がガーベジコレクトされてしまいエラーメッセージが表示できなかった不具合を修正。
 - [x] 変更: `wrapper/app/gui.py`
+
+## 77. 単一選択入力の廃止（2025-12-10）
+- [x] 単一選択入力方式を廃止し、既存の単一選択項目を複数選択に統一。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/app/db.py`, `backend/app/validator.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`
+- [x] テスト更新: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/PlannedDesign.md`, `docs/implementation.md`
