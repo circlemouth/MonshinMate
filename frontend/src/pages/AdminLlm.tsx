@@ -42,7 +42,7 @@ export default function AdminLlm() {
     model: '',
     temperature: 0.2,
     system_prompt: '',
-    enabled: true,
+    enabled: false, // 既定は「LLMを使用しない」
     base_url: '',
     api_key: '',
   });
@@ -63,7 +63,7 @@ export default function AdminLlm() {
           model: data.model ?? '',
           temperature: normalizeTemp(data.temperature ?? 0.2),
           system_prompt: data.system_prompt ?? '',
-          enabled: data.enabled ?? true,
+          enabled: data.enabled ?? false, // 値が無い場合も未使用を既定に
           base_url: data.base_url ?? '',
           api_key: data.api_key ?? '',
         } as Settings;

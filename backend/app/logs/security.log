@@ -3306,3 +3306,111 @@
 2025-08-29 15:02:21,040 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
 2025-08-29 15:02:23,610 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
 2025-08-29 15:02:23,892 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:46:41,068 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:47:43,267 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:47:43,469 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:47:48,892 INFO admin_login_failed
+2025-08-30 08:48:10,493 INFO admin_login_failed
+2025-08-30 08:48:13,428 INFO admin_login_success
+2025-08-30 08:48:13,627 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:48:30,717 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:48:30,921 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:48:34,974 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:48:35,183 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 08:51:39,285 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:39,488 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:39,702 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:39,907 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:40,142 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:40,381 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:40,608 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:40,839 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:41,065 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:41,306 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:41,551 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:41,805 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:42,037 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:42,276 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:42,543 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:42,763 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:42,985 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:43,211 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:43,508 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:43,740 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:43,976 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:44,217 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 08:51:44,480 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:38,229 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:38,439 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:38,644 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:38,851 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:39,086 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:39,333 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:39,574 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:39,810 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:40,043 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:40,285 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:40,528 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:40,771 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:41,007 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:41,242 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:41,504 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:41,724 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:41,952 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:42,188 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:42,501 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:42,737 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:42,978 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:43,221 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 09:23:43,486 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:05,636 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:05,840 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:06,049 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:06,252 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:06,476 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:06,723 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:06,957 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:07,185 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:07,406 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:07,640 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:07,876 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:08,109 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:08,340 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:08,568 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:08,829 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:09,050 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:09,269 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:09,493 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:09,814 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:10,045 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:10,276 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:10,530 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 11:48:10,796 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:01:55,569 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:01:59,685 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 12:01:59,886 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 12:02:09,174 INFO admin_login_failed
+2025-08-30 12:02:10,274 INFO admin_login_failed
+2025-08-30 12:06:12,900 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:13,119 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:13,332 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:13,548 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:13,798 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:14,062 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:14,316 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:14,549 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:14,797 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:15,054 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:15,297 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:15,548 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:15,800 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:16,055 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:16,340 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:16,576 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:16,811 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:17,053 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:17,381 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:17,626 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:17,876 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:18,143 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-08-30 12:06:18,421 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3

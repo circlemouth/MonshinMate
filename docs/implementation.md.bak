@@ -1,0 +1,663 @@
+# 実裁E��頁E���E�Einimal 牁E/ v1�E�E
+
+> 重要な注意（更新�E�：既定ではローカルLLMのみを使用しますが、管琁E��面の設定で任意に「リモート�E Ollama / LM Studio サーバ�E」を持E��可能です。リモート設定を有効にした場合�E当該サーバ�Eへプロンプト・入力が送信されます。院冁E��用ポリシーに従い、忁E��な場合�Eみ有効化してください。フチE��ーの注意書き�E「既定�Eローカル運用で外部送信なし。リモートを有効にした場合�E送信あり」に読み替えてください、E
+
+本書は、これまで合意した **「実裁E��画書�E�Einimal 版）、E* と **「フロントエンドUI構築設計書、E* に整合する形で、段取り�E��Eイルスト�Eン・WBS�E�と実施手頁E��示します。禁忁E赤旗�E辞書正規化・緊急刁E���E同意画面・重褁E�E吁EID発行�Eハ�Eドガード追質問�Eスコープ外です、E
+
+---
+
+## 0. 目皁E/ スコーチE
+- 目皁E��E
+  - 患老E��・生年月日の入劁EↁE初診/再診刁E��EↁEチE��プレートに基づく�Eース問診 ↁELLMによる最小追加質啁EↁE完亁E��までめE**細ぁE��緁E* で実裁E��る、E
+- スコープ！E
+  - 患老E��けフローと管琁E��面�E�テンプレート管琁E��LLM接続設定！E
+  - バックエンドAPI�E�セチE��ョン、テンプレーチERUD、LLM質問生成、最終化�E�E
+- 非スコープ！E
+  - 禁忁E赤旗、辞書・正規化、緊急時�E岐、ルールベ�Eス追質問、同意画面、E��褁E�E吁EID発衁E
+
+---
+
+## 1. マイルスト�Eン�E�ES�E�と完亁E��件
+
+### MS1�E�管琁EI/チE��プレ整傁E
+- 目皁E���E診/再診チE��プレート�ECRUDとプレビューを提侁E
+- **完亁E��件**
+  - [x] チE��プレート一覧/新要E編雁E削除が動佁E
+  - [x] 新規テンプレート�E既定問診頁E��ラベルを「質問文形式」に統一�E�例！E主訴は何ですか�E�E、E発痁E��期�EぁE��からですか�E�E�E�E
+- [x] 頁E��ごとに「�E診」「�E診」への適用可否をチェチE��ボックスで設宁E
+  - [x] 条件表示�E�軽釁Ewhen�E��E保孁E反映
+  - [x] プレビューで患老E�E画面の疑似レンダリング
+    - `when` は `{ "item_id": 参�E頁E��ID, "equals": 値 }` 形式で、条件が満たされた場合にのみ対象頁E��を表示する、E
+
+### MS2�E�セチE��ョン基盤
+- 目皁E��セチE��ョン生�Eと状態�E移�E�Entry→種別→問診→追加質問�E確認�E完亁E��E
+- **完亁E��件**
+  - [x] `POST /sessions` でセチE��ョン作�E
+  - [x] 進行状態！Eemaining_items / completion_status / attempt_counts�E��E保持
+  - [x] 画面遷移ガード（未入力時の差し戻し！E
+
+### MS3�E�LLM追加質問ルーチE
+- 目皁E��不足頁E��のみめE*上限N件**で質問し、ターン制御で補宁E
+- **完亁E��件**
+  - [x] `POST /sessions/{id}/llm-questions` ぁE`questions[]` を返す
+  - [x] 優先度頁E��提示し、回答送信→�E計算�E終亁E��件�E�E件/上限/手動終亁E��E
+  - [x] 頁E��ごとの再質問�E最大3回、セチE��ョン合計�E上限NはチE��プレートで設定可能
+  - [x] 回答をまとめてLLMへ送信し、追加質問を一括生�Eする
+
+### MS4�E�要紁E��保孁E
+- 目皁E���E回答�E一覧確認�E確定�E保孁E要紁E�E劁E
+- **完亁E��件**
+  - [x] 追加質問終亁E��、�E動的にセチE��ョンを確定して要紁E��生�E
+  - [x] `POST /sessions/{id}/finalize` ぁE`summaryText` と `allAnswers` を返す
+  - [x] 完亁E��チE�Eタスとタイムスタンプ保孁E
+  - [x] LLM 設定が有効かつ疎通OKの場合、バチE��グラウンドでカスタムプロンプトを用ぁE��サマリー生�Eを実行！EIは非ブロチE��ング�E�E
+  - [x] サマリープロンプトはチE��プレート管琁E��面から「�E診」「�E診」それぞれ編雁E保存可能
+
+### MS5�E�フロント実裁E��患老E管琁E��E
+- 目皁E��UI導線と状態管琁E�E実裁E
+- **完亁E��件**
+  - [x] **患老E*�E�Entry�E�氏名/生年月日�E�受診種別�E��E Questionnaire ↁEQuestions ↁEDone
+    - [x] Entry で氏名・生年月日を�E劁E
+    - [x] Entry で「当院の受診は初めてですか�E�」を選択（「�Eめて、E initial / 「受診したことがある、E followup�E�しセチE��ョン作�E
+    - [x] Questionnaire で text/multi/yesno/date に応じた�E力フォームを表示
+    - [x] Questions で追加質問を頁E��表示
+    - [x] 追加質問終亁E���E自動的に完亁E��面へ遷移
+  - [x] Done で要紁E��表示
+  - [x] **共送E*�E��EチE��ー右上「管琁E��面」�Eタン、フチE��ー注意文の常時表示
+- [x] **管琁E*�E�ログイン→テンプレート�E問診結果→LLM設宁E
+  - [x] 問診結果一覧と詳細表示
+
+### MS6�E�ログ/観測性�E�最小！E
+- 目皁E��障害時�E原因追跡と操作把握
+- **完亁E��件**
+  - [x] セチE��ョン遷移、APIエラー、LLM I/Oメタ�E�所要時間）�E記録
+- [x] /readyz, /health の簡易エンド�EインチE
+
+### MS7�E�リモーチELM接続（任意！E
+- 目皁E��Ollama / LM Studio の遠隔サーバ�Eへ接続可能にする
+- 完亁E��件
+  - [x] `LLMSettings` に `base_url`/`api_key` を追加�E�任意頁E���E�E
+  - [x] `provider=ollama` 時�E `POST {base_url}/api/chat` を使用
+  - [x] `provider=lm_studio` 時�E OpenAI互換 `POST {base_url}/v1/chat/completions` を使用
+  - [x] `/llm/settings/test` は `base_url` 未設定時は常に OK、設定時は疎通を確誁E
+  - [x] 失敗時はログ出力�E上、スタブ応答にフォールバック
+  - [x] 追加質問生成で構造化�E力を強制�E�ELMcommunication.md 準拠�E�E
+    - Ollama: `/api/chat` の `format` に JSON Schema�E�Earray<string>`、maxItems=上限�E�を持E��E
+    - LM Studio: `/v1/chat/completions` の `response_format.json_schema` に同スキーマを持E��E
+    - 返却は斁E���EJSONのため受信後に `json.loads()` でパ�Eスして配�Eに変換
+    - プロンプト側でも「JSON配�Eで返答」を明記（�E長対策！E
+
+> 実裁E��モ�E�E025-08-27�E�：`backend/app/llm_gateway.py::generate_followups` を更新し、E
+> LM Studio / Ollama 双方に対して JSON Schema による構造化�E力を強制するよう変更、E
+> これにより不正な斁E���E混入を防ぎ、E�E列パースの安定性を向上、E
+
+### MS7�E�UAT / 受け入めE
+- 目皁E��エンドツーエンド検証
+- **完亁E��件**
+  - [x] 初診/再診の代表チE��プレで入力�E追加質問�E確定が成功
+  - [x] LLM無効時でも�Eース問診のみで完亁E
+  - [x] 受け入れ基準（§10�E�を満たす
+
+---
+
+## 2. 作業手頁E��EBS�E�E
+
+### 2.1 バックエンチE
+1) **モチE��/スキーチE*
+   - [x] `questionnaires`�E�テンプレメタ + items[]�E�E
+   - [x] `sessions`�E�進行状態�E完亁E��ラグ・timestamps�E�E
+   - [x] `session_responses`�E��E回答�E追加質問�E履歴�E�E
+   - [x] 問診頁E��に対象性別を追加し、テンプレート取得時にフィルタできるようにした�E�未設定時は男女ともに表示�E�E
+2) **サービス**
+   - [x] `SessionFSM`�E�`step("answer")`、`_finalize_item`、attempt/turn/questions 上限管琁E
+   - [x] `LLMGateway`�E�`generate_question`、`decide_or_ask`、`summarize`�E�タイムアウチE再試行！E
+   - [x] `Validator`�E�忁E���E型�E篁E��のみ
+   - [x] `StructuredContextManager`�E�`update_structured_context`
+3) **API**
+   - [x] `POST /sessions`�E�患老E��・生年月日・visitType・questionnaireId�E�E
+   - [x] `POST /sessions/{id}/answers`�E��Eース問診保存！E
+  - [x] `POST /sessions/{id}/llm-questions`�E�不足の抽出�E�E
+   - [x] `POST /sessions/{id}/llm-answers`�E�追加質問への回答�E保存！E
+   - [x] `POST /sessions/{id}/finalize`�E�要紁E��成と確定！E
+   - [x] 管琁E���E�`GET/POST /questionnaires`, `GET /questionnaires/{id}/template`, `DELETE /questionnaires/{id}`
+   - [x] 管琁E���E�サマリープロンプト�E�：`GET /questionnaires/{id}/summary-prompt?visit_type=...`, `POST /questionnaires/{id}/summary-prompt`
+4) **観測性**
+   - [x] /readyz, /health, /metrics�E�簡易！E
+
+### 2.2 フロントエンチE
+1) **共送E*
+   - [x] ルーチE��ング骨格、�EチE��ー/フッター�E�注意文常時表示�E�E
+   - [x] 管琁E��面ルートではヘッダー右上�Eタンを「戻る」に刁E���E��Eの画面へ戻れるよう改喁E��E
+2) **患老E��ぁE*
+   - [x] `/`�E�氏名・生年月日�E�受診種別の入力（選択後にセチE��ョン作�E→`/questionnaire` へ�E�E
+   - [x] `/questionnaire`�E�テンプレに基づくフォーム�E�軽量条件表示、ドラフト保存！E
+   - [x] 性別に応じた問診頁E��の出し�EぁE
+   - [x] `/questions`�E�LLM追加質問（モーダル or カード�E�E�と進行インジケータ
+   - [x] `/done`�E�完亁E��チE��ージと要紁E��印刷/コピ�E任意！E
+3) **管琁E��ぁE*
+   - [x] `/admin/login`�E�管琁E��E��グイン
+   - [ ] `/admin`�E�ダチE��ュボ�Eド（廁E���E�E
+ - [x] `/admin/templates`�E�一覧/新要E編雁E褁E��/削除
+  - [x] `/admin/templates/:id`�E�頁E��ごとに初診/再診の使用可否めE��象性別を設定する表とプレビュー
+  - [x] `/admin/sessions`�E�問診結果の一覧
+  - [x] `/admin/sessions/:id`�E�質問と回答�E詳細表示
+  - [x] `/admin/llm`�E�接続設定（エンド�EインチEモチE��/上限N/ターン/タイムアウト）と保存時の自動疎通テスチE
+4) **状態管琁E永続化**
+ - [x] sessionStorageドラフト、画面遷移ガーチE
+  - [x] 再試行キュー�E�ネチE��ワークエラー時に未送信の回答をsessionStorageに蓁E��し再送E��E
+
+---
+
+## 3. フロント—バチE��エンチEI/F�E�契紁E��E
+- `GET /questionnaires?visitType=initial|followup` ↁE`QuestionItem[]`
+- `POST /sessions` ↁE`{ sessionId }`
+- `POST /sessions/:id/answers` ↁE`{ ok }`
+- `POST /sessions/:id/llm-questions` ↁE`LlmQuestion[]`
+- `POST /sessions/:id/llm-answers` ↁE`{ ok, remaining }`
+- `POST /sessions/:id/finalize` ↁE`{ summaryText, allAnswers, finalizedAt, status }`
+- 管琁E���E�`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `POST /admin/login`
+- 管琁E��結果閲覧�E�`GET /admin/sessions`, `GET /admin/sessions/{id}`
+
+> API 名称は最終的にバックエンド設計に合わせて微調整して良ぁE��E
+
+---
+
+## 4. 画面/ルーチE��ング仕様（要点�E�E
+- **ヘッダー**�E�左ロゴ、右上「管琁E��面」�Eタン�E�常時）、E
+- **フッター**�E�`本シスチE��はローカルLLMを使用しており、外部へ惁E��が送信されることはありません。`
+- **Entry**�E�氏名�E�忁E��）�E生年月日�E�忁E��、E��去日付�Eみ�E�E
+- **管琁E��グイン**�E�Eadmin/login でID/メール + パスワード。�E功で /admin/templates へ、E
+- **管琁E*�E�テンプレCRUD、LLM接続設定（テスト�Eタン�E�、E
+
+---
+
+## 5. バリチE�Eション / エラー�E�最小！E
+- 忁E��：未入力�Eフィールド直下にエラー、E
+- 垁E篁E���E�数値/日付�E基本チェチE��のみ、E
+- API失敗：トースト表示�E��E試行�Eタン、ELM応答なし時は追加質問スチE��プをスキチE�E、E
+
+---
+
+## 6. チE�Eタ保孁E/ 状慁E
+- `session`�E�id、questionnaireId、visitType、E��捗、作�E/更新、完亁E��ラグ、E
+- `collected_data`�E��Eース問診 `{頁E��ID: 値}` と追加質啁E`[{id, text, answer, ts}]`、E
+- `SessionResponse`�E�表示斁E�E回答�E履歴、E
+
+---
+
+## 7. チE��ト手頁E
+- **ユニッチE*�E�`LLMGateway`�E�モチE���E�、`Validator.is_complete`、`SessionFSM`、E
+- **結合/E2E**�E��E診/再診チE��プレで入力�E追加質問�E確定、E
+- **UI**�E�モバイル操作、未入力�E型エラー、ネチE��断�E�ドラフト復帰�E�、E
+- 実行例！E
+  - バックエンド：`cd backend && pytest`�E�Epytest-asyncio` が忁E��な場合�E追加�E�E
+  - フロント：E2E は Playwright/Cypress ぁE��れかで用愁E
+
+---
+
+## 8. リリース手頁E
+1) DBマイグレーション�E�テンプレ・セチE��ョン関連�E�E
+2) 管琁E��面で `llm_settings` と初診/再診チE��プレ投�E
+
+---
+
+## 変更履歴�E�運用メモ�E�E
+- [fix] 管琁E��面チE��プレ設定�ELLM有効判定を調整�E�疎通OKのみで有効化）、E
+  - これまで base_url が未設定だと UI のトグルが無効化されてぁE��が、スタブ（ローカル�E�運用では base_url なしでめE`/llm/settings/test` ぁEOK を返すため、UI 側の可否判定を疎通テスト結果のみに変更、E
+  - 対象: `frontend/src/pages/AdminTemplates.tsx` の `llmAvailable` 判定、E
+3) スチE�EジングでUAT→本番ロールアウチE
+
+---
+
+## 9. 受け入れ基準（抜粋！E
+- ベ�Eス問診のみでもセチE��ョンを完亁E��きる
+- 追加質問�E上限N件を趁E��なぁE/ 頁E��ごとの再質問�E最大3囁E
+- 完亁E��面では回答一覧の編雁E�E行わなぁE
+- スタチE��向け要紁E��生�Eされ、印刷/EMR貼付に足る簡潔さ
+- UI上に **「ローカルLLM利用・外部送信なし、E* が恒常表示
+
+---
+
+## 10. 運用メモ�E�最小！E
+- LLM障害時�E追加質問フェーズを�E動スキチE�E�E��Eース問診で完亁E��E
+- チE��プレ変更はドラフト→�E開で反映。�E開中のセチE��ョンには影響しなぁE��新規�Eみ�E�E
+
+---
+
+## 11. UIチE��イン改修�E�医療問診向け�E�チェチE��リスチE
+> 詳細方針�E `docs/UI_Redesign_Plan.md` を参照。plannedSystem.md と整合、E
+
+- [ ] チE��イン原則と惁E��設計�E合意�E�患老E管琁E��ロー�E�E
+- [x] チE��イント�Eクン定義�E�色・タイポ�E間隔・ブレークポイント！E
+- [x] カラーパレチE�� AA コントラスト検証�E�主要画面�E�E
+- [x] タイポグラフィ設定（日本誁E英数孁E等幁E��字！E
+- [ ] コンポ�Eネント実裁E��Eutton/Input/Radio/Checkbox/Select/DatePicker�E�E
+- [x] 進行表示�E�Etepper/Progress�E�、E��知�E�Elert/Toast�E�、確認！Eodal�E�E
+- [x] フォームUX�E�バリチE�Eション、エラー表示、�E力補助�E�E
+- [ ] レイアウチEレスポンシブ最適化！EPad/1080p/チE��クトップ！E
+- [x] アクセシビリチE��対応（フォーカス・aria・キーボ�Eド操作！E
+- [x] フッター安忁E��示の統一�E�ローカルLLM/外部送信なし！E
+- [x] 印刷スタイル�E�医師向け要紁E�E体裁E��E
+- [x] UIイベント計測�E�匿名メトリクス、E��脱/滞留�E�E
+- [ ] 受け入れテスト（看護/事務レビュー、UAT 合格�E�E
+
+---
+
+## 12. バグ修正履歴�E�フロントエンド！E
+- [x] Entry.tsx の重褁Eimport を解消！EuseState` が二重宣言�E�。ビルド時の `Identifier 'useState' has already been declared` エラーを修正。！E025-08-20�E�E
+- [x] 管琁E��面の問診結果詳細で受診種別が英語表記となる問題を修正し「�E診/再診」と表示。テンプレート管琁E��面の頁E��タイプ「YES/NO」も「�EぁEぁE��え」に変更し、削除ボタンの aria-label を日本語化。！E025-08-22�E�E
+- [x] 問診結果詳細のサマリー表示に改行を挿入し、各頁E��が見やすくなるよぁE��喁E��！E025-08-22�E�E
+- [x] 管琁E��面のパスワードリセチE��で、ローチE��ングダイアログと二段階認証コード�E力が高速で刁E��替わり操作不�Eになる不�E合を修正。原因は `AuthContext` の `checkAuthStatus` が毎レンダで再生成され、依存してぁE��画面の `useEffect` が連続発火してぁE��こと。`useCallback` により参�Eを安定化し、`App.tsx` の全画面ローチE��ングとの競合を解消。！E025-08-27�E�E
+- [x] `checkAuthStatus` にローチE��ング抑制フラグを追加し、パスワードリセチE��画面などで無限リクエストが再発しなぁE��ぁE��正。コンチE��スト更新時�E全画面ローチE��ングを回避。！E025-08-29�E�E
+
+---
+
+## 13. 管琁E��面ナビゲーション改喁E��E025-08-22�E�E
+- [x] 管琁E��面に左サイドバー�E�EAdminLayout`�E�を追加し、テンプレーチE問診結果/LLM設定へワンクリチE��移動を実裁E��E
+- [x] 右上�EチE��ーボタンの斁E��を「戻る」�E「問診画面に戻る」に変更�E�EApp.tsx`�E�、E
+
+## 14. ダチE��ュボ�Eド廁E���E�E025-08-30�E�E
+- [x] `/admin` を廁E��ぁE`/admin/templates` へリダイレクト、E
+- [x] ログイン後�E遷移先を `/admin/templates` に変更、E
+
+## 15. チE��プレート管琁EIの可読性改喁E��E025-08-22�E�E
+- [x] チE��プレート管琁E��面の表めE`TableContainer` でラチE�Eし、横スクロールを許可、E
+- [x] 問診冁E��・入力方法�E選択肢の吁E�Eに最小幁E��設定し、`tableLayout="fixed"` と `minWidth` により冁E��が見�EれなぁE��ぁE��整、E
+- [x] 既存テンプレート一覧チE�EブルにめE`minWidth` を設定し、小画面での可視性を改喁E��E
+
+## 16. チE��プレート管琁EIのカード表示�E�レスポンシブ）！E025-08-22�E�E
+- [x] 画面幁E`lg` 未満では、問診頁E��一覧をカード形式で表示�E�ECard`/`CardHeader`/`CardBody`�E�、E
+- [x] カード上段に「問診冁E��」、中段に「�E力方法＋削除ボタン」、下段に「選択肢�E�Eulti時�Eみ�E�」と「忁E��E初診/再診」�EチェチE��を�E置、E
+- [x] `useBreakpointValue({ base: true, lg: false })` でカーチEチE�Eブルを�E動�E替。`lg` 以上�E画面では従来の表�E�幁E��喁E���E�を保持、E
+
+## 17. チE��プレ頁E��一覧の常時カード化�E�E025-08-22�E�E
+- [x] レスポンシブ�E替を廁E��し、常にカード表示へ統一�E�一覧性より可読性を優先）、E
+- [x] 不要となったテーブル牁EIと関連インポ�Eトを整琁E��既存テンプレ一覧チE�Eブルは維持E��、E
+
+## 18. チE��プレ一覧の表記とプレビューの挙動変更�E�E025-08-22�E�E
+- [x] 見�Eし「既存テンプレート一覧」�E「保存済みチE��プレート一覧」に改称、E
+- [x] チE�Eブル列名「ID」�E「テンプレート名」に変更。`default` の表示は「デフォルト」に置換、E
+- [x] 画面下部の常設プレビューを廁E��し、「�Eレビュー」�Eタンからモーダル表示に変更、E
+- [x] プレースホルダー「新しいチE��プレート�EID」�E「新しいチE��プレート名」に変更、E
+- [x] 問診結果一覧は行クリチE��で詳細�E�問診冁E���E�をモーダル表示するよう変更�E�画面遷移を置換）、E
+
+## 19. 褁E��選択頁E��の自由記述対応！E025-08-22�E�E
+- [x] 管琁E��面で褁E��選択頁E��に「�E由記述を許可」設定を追加、E
+- [x] 設定有効時、患老E��面とプレビューで自由入力欁E��表示し回答に含める、E
+- [x] バリチE�Eションで選択肢外�E斁E���Eを許可、E
+
+## 20. チE��ォルト問診頁E��の拡允E��E025-08-22�E�E
+- [x] 初診チE��プレートに氏名・生年月日・性別・住所などの基本惁E��と痁E��関連頁E��を追加、E
+- [x] 再診チE��プレートを主訴・痁E��部位�E発痁E��期に限定した�E容で初期化、E
+
+## 21. Windows 向け一括起動スクリプト追加�E�E025-09-27�E�E
+- [x] PowerShell スクリプト `dev.ps1` を追加し、バチE��エンドとフロントエンドを同時起動できるようにした、E
+- [x] README に `dev.ps1` の使ぁE��を追記、E
+
+## 22. LLM フォローアチE�E質問�EチE��プレート設定！E025-10-30�E�E
+- [x] 固定フォーム終亁E��に LLM による追加質問を行うかどぁE��をテンプレートで設定可能にした、E
+- [x] 設定値は DB に保存され、セチE��ョン作�E時に反映される、E
+- [x] LLM 設定が無効また�E疎通テストに失敗してぁE��場合�E、管琁E��面で追質問�E設定をオンにできなぁE��ぁE��した、E
+
+## 23. LLM フォローアチE�E判定征E��画面の追加�E�E025-10-31�E�E
+ - [x] 固定フォーム回答後、追質問�E有無を判定する間に征E��画面を表示するようにした、E
+ - [x] 判定結果に応じて追加質問画面また�E完亁E��面へ自動�E移する、E
+
+## 24. 管琁EチャチE��画面の左右余白を削減！E025-08-23�E�E
+- [x] 管琁E��面のコンチE��を�E幁E��し、左右パディングを縮小、E
+  - 変更: `frontend/src/App.tsx`�E�EisAdminPage` 時�E `Container` めE`maxW="100%"`, `px={2}`�E�E
+  - 変更: `frontend/src/components/AdminLayout.tsx`�E�Egap` めE`6ↁE`、ナビ幁E�� `180/220pxↁE60/200px`、�E体に `px` 追加�E�E
+- [x] チャチE��画面の冁E�Eパディングを縮小、E
+  - 変更: `frontend/src/pages/LLMChat.tsx`�E�Ep={4}` めE`px={{ base: 2, md: 3 }}` に変更。�E力バーも同様！E
+- [x] 回帰確認としてバックエンチE`pytest` 実行！E3 passed, warnings のみ�E�、E
+
+## 25. 管琁E��ンプレ画面の初期ロード時の自動保存抑止�E�E025-08-23�E�E
+- [x] 初回ローチEチE��プレ刁E��直後に保存UIが動作せず、実保存もしなぁE��ぁE��御、E
+  - 変更: `frontend/src/pages/AdminTemplates.tsx` に `isDirtyRef` を追加し、ユーザー操作時のみ自動保存を起動、E
+  - ユーザー操作（頁E��追加・編雁E�E削除、�Eロンプト/フラグ変更�E�時に `markDirty()` を呼ぶようイベントハンドラを調整、E
+  - ロード完亁E��/保存完亁E��に dirty をリセチE��、E
+
+## 26. LLM 設定が保存されなぁE��題�E修正�E�E025-08-23�E�E
+- [x] 取得APIをDB優先に変更し、保存後�E再取得でUIへ反映、E
+  - 変更: `backend/app/main.py` の `GET /llm/settings` は DB を読み、あれ�Eメモリへ反映して返す、E
+  - 変更: `frontend/src/pages/AdminLlm.tsx` は `PUT` 後に `GET /llm/settings` を�E実行して設定を再描画、E
+
+## 27. チE��ォルトテンプレートから氏名・生年月日を削除�E�E025-08-23�E�E
+- [x] 初診・再診の「デフォルト問診頁E��」かめE`name`/`dob` を除外（それらはセチE��ョン作�E時に別途�E力！E
+  - 変更: `backend/app/main.py` の `on_startup()` 冁E`initial_items` から `name`/`dob` を削除、E
+  - チE��ト更新: `backend/tests/test_api.py` の既定頁E��アサーションから `name`/`dob` を除外、E
+
+## 28. 管琁E��グアウトフローの簡素化！E025-08-23�E�E
+- [x] 管琁E��面の「ログアウト」�Eタンを削除、E
+- [x] 管琁E��ート以外へ遷移したタイミングで自動ログアウト！EsessionStorage.adminLoggedIn` を削除�E�、E
+  - 変更: `frontend/src/components/AdminLayout.tsx`�E�ログアウト�Eタン削除�E�E
+  - 変更: `frontend/src/App.tsx`�E�非管琁E��ート�E移で自動ログアウト＋「問診画面に戻る」クリチE��時にも�E示削除�E�E
+
+## 29. 管琁E��ビをスクロール固定！Eticky�E�に変更�E�E025-08-23�E�E
+- [x] 左側メニューめE`position: sticky; top: 0` とし、常にウィンドウ冁E��表示、E
+  - 変更: `frontend/src/components/AdminLayout.tsx`�E�Eposition="sticky"`, `top={0}`, `maxH="100vh"`, `overflowY="auto"` をナビに付与！E
+  - 変更: `frontend/src/App.tsx`�E�管琁E��ートでは `overflowY` を親ボックスで作らず、ウィンドウスクロールに刁E���E�E
+
+## 30. 管琁E��面からフッター注意文を非表示�E�E025-08-23�E�E
+- [x] 管琁E��面では「本シスチE��はローカルLLMを使用しており…」�E注意文を非表示、E
+  - 変更: `frontend/src/App.tsx` のフッター表示条件めE`!isChatPage && !isAdminPage` に変更、E
+
+## 31. 管琁E��グインをモーダル化！E025-08-23�E�E
+- [x] 患老E��面から管琁E��面へ遷移する際、画面冁E��ーダルでパスワード�E力、E
+  - 変更: `frontend/src/App.tsx` にログイン用モーダルを実裁E���EチE��ーの「管琁E��面」クリチE��でモーダルを開き、�E功後に `/admin/templates` へ遷移、E
+  - 直接URLでのアクセス時�E従来通り `/admin/login` へ誘導（ガード継続）、E
+
+## 33. LLM 追加質問�E質問文と回答�Eアの永続化�E�E025-08-27�E�E
+- [x] DB スキーマ拡張�E�`session_responses` に `question_text` 列を追加し、LLM 生�Eの追加質問に限り提示した質問文を保存、E
+- [x] 保存ロジチE���E�`SessionFSM` ぁE`pending_llm_questions` 生�E時に `session.llm_question_texts` にマッピングを保持し、`save_session` ぁE`llm_*` 回答と紐付けて保存するよぁE��更、E
+- [x] 取得ロジチE���E�`db.get_session` で `llm_question_texts` を復允E��、管琁E��細 `GET /admin/sessions/{id}` のレスポンスに含める、E
+- [x] ドキュメント更新�E�`docs/session_api.md` に保存仕様とレスポンス頁E��を追記、E
+
+## 32. アプリのロゴ斁E��を変更�E�E025-08-23�E�E
+- [x] ロゴ表示を「MonshinMate」�E「問診メイト」に変更、E
+  - 変更: `frontend/src/App.tsx` のヘッダーロゴ斁E��、E
+  - 変更: `frontend/index.html` の `<title>`、E
+
+## 33. シスチE��表示名�E設定機�E�E�E025-08-23�E�E
+- [x] 管琁E��面から「シスチE��表示名」を編雁E��能にし、患老E��面のヘッダーに反映�E�管琁E��面のヘッダーは固定文言「管琁E��面」とし設定�E影響を受けなぁE��、E
+  - 変更�E�バチE��エンド！E `backend/app/db.py` に `app_settings` チE�Eブルと `save_app_settings` / `load_app_settings` を追加、E
+  - 変更�E�バチE��エンド！E `backend/app/main.py` に `GET/PUT /system/display-name` を追加�E�既定値は「Monshinクリニック」）、E
+  - 変更�E�フロント！E `frontend/src/pages/AdminSystemName.tsx` を追加�E��E劁E保存UI�E�、E
+  - 変更�E�フロント！E `frontend/src/components/AdminLayout.tsx` のメニューに「シスチE��表示名」を追加、E
+  - 変更�E�フロント！E `frontend/src/App.tsx` で表示名を取得�E購読し、患老E��面のヘッダーに表示。設定保存時はカスタムイベントで即時反映、E
+  - 変更�E�開発プロキシ�E�E `frontend/vite.config.ts` に `/system` を追加し、E��発時�EAPI疎送E04を解消、E
+
+## 34. フッターに小さく「問診メイト」を表示�E�E025-08-23�E�E
+- [x] 管琁E��面含め、フチE��ー左に小さくブランド名「問診メイト」を表示。患老E��面のみ従来の注意文も併記、E
+  - 変更: `frontend/src/App.tsx` フッター構造を調整�E�EText fontSize="xs"` で表示�E�、E
+
+## 35. 管琁E��面に使ぁE��ペ�Eジを追加�E�E025-10-31�E�E
+- [x] 管琁E��ニューに「使ぁE��」を追加し、基本皁E��利用方法を画面上で確認できるようにした、E
+
+## 36. 管琁E��面セチE��アチE�E手頁E��の追加�E�E025-11-01�E�E
+- [x] 管琁E��面でのシスチE��全体�EセチE��アチE�E方法を説明するドキュメンチE`docs/admin_system_setup.md` を追加、E
+- [x] 管琁E��ニューの「使ぁE��」�EージぁE`docs/admin_system_setup.md` を参照するように変更、E
+
+## 37. 初回アクセス時�Eパスワード設定UI�E�E025-11-02�E�E
+- [x] 管琁E��スワードが初期値のままの場合、ログイン前に新規パスワード設定モーダルを表示するようにした、E
+- [x] フロンチE `frontend/src/App.tsx` に初回パスワード設定ロジチE��とUIを追加、E
+- [x] バックエンチE `GET /admin/password/status` と `POST /admin/password` を追加し、DB にパスワードを保存するよぁE��更、E
+
+## 38. チャチE��画面での初期パスワード強制と TOTP 対応！E025-11-02�E�E
+- [x] 患老E��の対話画面�E�E/chat`�E�アクセス時、管琁E��スワードが初期設定�Eままなら�E画面でパスワード設定モーダルを強制表示�E�Efrontend/src/App.tsx`�E�、E
+- [x] パスワード設定直後に Google Authenticator による TOTP 秘寁E��作�Eを推奨�E�ER 表示ↁE桁コード�E力�E有効化）、E
+- [x] 管琁E��グイン�E�TOTP 忁E��時の二段階目認証UIを追加�E�E/admin/login`→`/admin/login/totp`�E�、E
+- [x] 「パスワードをお忘れですか�E�」かめETOTP を用ぁE��リセチE���E�トークン発行�E新PW確定）を実裁E��E
+- [x] 参�Eエンド�Eイントを `/admin/auth/status` に統一�E�旧 `/admin/password/status` は廁E���E�、E
+
+## 39. パスワード設定後�E Authenticator 有効化確認！E025-11-02�E�E
+- [x] パスワード�E設定また�E変更直後に、Authenticator を有効にするかどぁE��確認するダイアログを追加、E
+- [x] Authenticator を有効化しなぁE��合�Eパスワード�EリセチE��ができなぁE��を警告、E
+
+## 40. 管琁E患老E�EチE��ーでの LLM 接続状態表示�E�E025-11-03�E�E
+- [x] 管琁E��面ヘッダーの「問診画面に戻る」�Eタンの左側に小さなバッジで LLM 接続状態を表示�E�接続OK=緑、エラー=赤、無効=灰�E�、E
+- [x] 患老E�Eヘッダーでも「管琁E��面」�Eタンの左側に同バチE��を表示、E
+- [x] 疎通チェチE��は「患老E��名等�E初期入力画面�E�Entry�E�」に戻ったとき�Eみ実施し、結果は `llmStatusUpdated` イベントで吁E��面へ伝播�E�不要な頻度の疎通を抑制�E�、E
+- [x] 実裁E `frontend/src/utils/llmStatus.ts` 追加、`Entry.tsx` で `refreshLlmStatus()` を発火、`LlmStatusBadge`/`AdminLayout`/`AdminTemplates` はイベント購読に統一、E
+
+## 41. LLM通信エラー時�E自動フォールバック�E�E025-11-03�E�E
+- [x] サマリ作�EめE��加質問生成で LLM 通信に失敗した場合、LLM を使わなぁE�E琁E��自動的に刁E��替えるようにした、E
+- [x] 追加質問生成中に通信エラーが発生した場合�E追質問スチE��プをスキチE�Eする、E
+
+## 42. 管琁E��E��オフラインリセチE��スクリプトの整備！E025-08-24�E�E
+- [x] `backend/tools/reset_admin_password.py` を改修し、以下を確実に実施するよう統一:
+  - [x] 管琁E��E��スワード�E上書き！Ecryptでハッシュ保存！E
+  - [x] `is_initial_password=1` の設宁E
+  - [x] 二段階認証の完�E無効化！Eis_totp_enabled=0`, `totp_mode='off'`, `totp_secret=NULL`�E�E
+  - [x] 既存DBに不足するカラム�E�Eis_initial_password`, `totp_mode`�E�を自動追加�E�存在時�E無視！E
+  - [x] 管琁E��E��存在しなぁE��合�E自動作�E
+- [x] 運用ドキュメント！Edocs/admin_system_setup.md`�E�にオフライン復旧手頁E��追記、E
+
+## 43. 監査ログ整備と確認手段�E�E025-08-24�E�E
+- [x] `security` ロガーでの主要イベント�E力！Ebackend/app/logs/security.log`、ローチE�Eションあり�E�E
+- [x] `audit_logs` チE�Eブルと SQLite トリガで、`users` チE�Eブルの重要�E更新時に自動記録
+- [x] パスワード更新・TOTP 状慁Eモード変更・初期admin作�E・強制リセチE��を監査対象に追加
+- [x] 監査ダンプツール `backend/tools/audit_dump.py` を追加�E�直近N件の表示�E�E
+- [x] 手頁E�E `docs/admin_system_setup.md` に記載（開発向け�E�E
+
+## 44. チE��ォルトテンプレのフリー入力�E一部を「選択肢�E��E由記述」に変更�E�E025-08-24�E�E
+- [x] チE��ォルトテンプレート（�E診・再診�E��EぁE��、E��刁E��自由記述頁E��を褁E��選択＋�E由記述に差し替え（主訴は自由記述のまま�E�、E
+  - 変更: `prior_treatments` を褁E��選択（なぁE外用薬/冁E��薬/注封E手衁Eリハビリ/そ�E他＋�E由入力）、E
+  - 変更: `past_diseases` を褁E��選択（なぁE高血圧/糖尿痁E脂質異常痁E喘�E/アトピー性皮膚炎/花粉症/蕁E��疹/そ�E他＋�E由入力）、E
+  - 変更: `surgeries` を褁E��選択（なぁE皮膚科関連手衁E整形外科手衁E腹部手衁E忁E��手衁Eそ�E他＋�E由入力）、E
+  - 変更: `current_medications` を褁E��選択（なぁEスチE��イド外用/抗菌薬/抗ヒスタミン薬/NSAIDs/免疫抑制薬/そ�E他＋�E由入力）、E
+  - 変更: `supplements_otc` を褁E��選択（なぁEビタミン剤/漢方/鎮痛解熱薬/かゆみ止めE保湿剤/そ�E他＋�E由入力）、E
+  - 変更: `drug_allergies` を褁E��選択（なぁEペニシリン系/セフェム系/マクロライド系/ニューキノロン系/NSAIDs/局所麻酁Eそ�E仁E不�E�E��E由入力）、E
+  - 変更: `food_metal_allergies` を褁E��選択（なぁE卵/乳/小麦/そ�E/落花甁Eえ�E/かに/金属（ニチE��ル等！Eそ�E仁E不�E�E��E由入力）、E
+  - 備老E 郵便番号/住所/電話番号は引き続き自由記述のまま、E
+  - 実裁E `backend/app/main.py` の `on_startup()` で投�Eする既定テンプレの頁E��定義を更新、E
+
+## 45. 問診チE��プレ編雁E��面の「問診頁E��を追加」�Eタンを一覧下部へ移動！E025-11-03�E�E
+- [x] 「問診頁E��を追加」�Eタンを頁E��一覧表の直下に配置し、最終行�E下から新規頁E��を追加しやすくした、E
+  - 変更: `frontend/src/pages/AdminTemplates.tsx` のボタン位置と斁E��を調整、E
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 46. TOTPシークレチE��欠如時の自動無効化！E025-11-04�E�E
+- [x] シークレチE��が存在しなぁE�Eに `is_totp_enabled=1` の場合、ログイン時に自動的に二段階認証を無効化するよぁE��した、E
+  - 変更: `backend/app/db.py` の `get_totp_mode` はシークレチE��未設定時に常に `'off'` を返すよう修正、E
+  - 変更: `backend/app/main.py` の `admin_login` で不整合状態を検知ぁE`set_totp_status` により無効化、E
+  - チE��チE `backend/tests/test_admin.py` に再現チE��トを追加、E
+  - ドキュメント更新: `docs/admin_system_setup.md` に自動無効化�E注意書きを追加、E
+
+## 47. 二段階認証無効時�EパスワードリセチE��案�E�E�E025-11-05�E�E
+- [x] TOTP が無効の状態でパスワードリセチE��ペ�Eジにアクセスすると、二段階認証入力ではなくシスチE��初期化スクリプトの実行を案�EするメチE��ージを表示、E
+  - 変更: `frontend/src/pages/AdminPasswordReset.tsx`
+  - 変更: `frontend/src/pages/AdminLogin.tsx`
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 48. オフラインリセチE��スクリプトでのユーザーチE�Eブル列保証�E�E025-11-06�E�E
+- [x] `backend/tools/reset_admin_password.py` の `ensure_users_table` ぁE`password_updated_at` と `totp_changed_at` カラムを既存DBに追加するよう修正、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`
+
+## 49. TOTPシークレチE��暗号化！E025-08-24�E�E
+- [x] 共通キーによる暗号化を導�Eし、`update_totp_secret` で暗号化保存、E
+- [x] `get_user_by_username` で復号処琁E��追加、E
+- [x] 既存レコード暗号化スクリプト `backend/tools/encrypt_totp_secrets.py` を追加、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`.
+- [x] チE��チE `backend/tests/test_admin.py` で暗号化後�E動作を確認、E
+
+## 50. 管琁E��E��スワード�E期化処琁E�E安�E性向上！E025-11-07�E�E
+- [x] 旧 `app_settings.admin_password` を起動時に無視し削除するよう変更、E
+- [x] `POST /admin/password` は現パスワードが環墁E��定値と一致する場合�Eみ受け付けるよぁE��正、E
+- [x] チE��チE `backend/tests/test_admin.py` にレガシー設定無視とフラグ不整合時の拒否を追加、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 51. 問診結果一覧の検索機�E追加�E�E025-11-08�E�E
+- [x] 管琁E��面の問診結果一覧で患老E��・生年月日・問診日篁E��による検索を可能にした、E
+- [x] 変更�E�バチE��エンド！E `/admin/sessions` に検索用クエリパラメータを追加し、DBアクセス関数を拡張、E
+- [x] 変更�E�フロント！E `frontend/src/pages/AdminSessions.tsx` に検索フォームを追加、E
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 52. 空欁E��答�E「該当なし」保存！E025-11-09�E�E
+- [x] 空欁E��送信された回答を「該当なし」として保存するよぁE��変更、E
+  - 変更�E�バチE��エンド！E `backend/app/structured_context.py` に回答正規化ロジチE��を追加、E
+  - 変更�E�バチE��エンド！E `backend/app/main.py` でセチE��ョン作�E時にも正規化を適用、E
+  - チE��チE `backend/tests/test_api.py` に空欁E��答保存�E確認テストを追加、E
+  - ドキュメント更新: `docs/session_api.md`、E
+
+## 53. 追加質問�Eロンプトのアドバンスト編雁E���E�E�E025-11-10�E�E
+- [x] 管琁E��面チE��プレート設定にアドバンストモードを追加し、追加質問�Eロンプトを編雁E��能にした、E
+- [x] プロンプトは `{max_questions}` プレースホルダを含み、LLMはJSON配�Eで質問を返す仕様を説明、E
+- [x] 初期値に戻す�Eタンを設置し、既存テンプレートにはチE��ォルト�Eロンプトを適用済み、E
+- [x] エンド�Eイント追加: `GET/POST /questionnaires/{id}/followup-prompt`、E
+- [x] チE��チE `backend/tests/test_api.py` に設定反映の確認テストを追加、E
+
+## 54. サマリー自動作�E設定�Eプロンプト位置調整�E�E025-11-11�E�E
+- [x] 管琁E��面チE��プレート設定で、�E診・再診それぞれのサマリープロンプト編雁E��E��該当チェチE��ボックスの直下に表示されるよぁE��喁E��E
+
+## 55. サマリー生�Eの有効設定反映�E�E025-11-12�E�E
+- [x] サマリー作�Eモードが無効な場合�E `POST /sessions/{id}/finalize` が空斁E���E要紁E��返すよう修正、E
+- [x] サマリー作�Eモード有効時�E要紁E��成を確認するテストを追加、E
+- [x] ドキュメント更新: `docs/session_api.md`、E
+
+## 56. 追加質問判定時のフェチE��エラー処琁E��喁E��E025-11-13�E�E
+- [x] LLM 追質問�E要否判定およ�E質問取得�E際、HTTP エラーめE��チE��ワーク例外が発生した場合にレビュー画面へフォールバックするようにした、E
+- [x] 変更: `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`、E
+
+## 57. チE�Eマカラー設定機�E�E�E025-11-14�E�E
+- [x] 管琁E��面でUIのチE�Eマカラーを変更できるようにし、パスチE��カラー10種のサンプルと任意�Eカラーコード�E力に対応、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py` に `GET/PUT /system/theme-color` を追加、E
+- [x] 変更�E�フロント！E `frontend/src/contexts/ThemeColorContext.tsx`, `frontend/src/theme/index.ts`, `frontend/src/pages/AdminTheme.tsx`, `frontend/src/components/AdminLayout.tsx`, `frontend/src/main.tsx`, `frontend/src/App.tsx`、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`、E
+
+## 58. 管琁E��グイン失敗時のメチE��ージ簡略化！E025-11-15�E�E
+- [x] 管琁E��面へのログインでパスワードが誤ってぁE��場合�E応答を「パスワードが間違ってぁE��す」に変更、E
+- [x] 不要なパスワードリセチE��案�Eをログイン画面から削除、E
+- [x] 変更: `backend/app/main.py`, `frontend/src/pages/AdminLogin.tsx`、E
+- [x] チE��ト更新: `backend/tests/test_admin.py`、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 59. 管琁E��グインを画面冁E��ーダル化！E025-11-16�E�E
+- [x] 患老E��面の「管琁E��面」�Eタン押下時に、別ウィンドウではなくモーダルでログインフォームを表示し、�E功後に `/admin/templates` へ遷移、E
+- [x] 変更: `frontend/src/App.tsx`、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 60. 二段階認証画面を同モーダル冁E��表示�E�E025-11-16�E�E
+- [x] パスワード送信後�E二段階認証コード�E力も同じモーダル冁E��行えるよぁE��した、E
+- [x] 変更: `frontend/src/pages/AdminLogin.tsx`、E
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`、E
+
+## 61. 問診完亁E���E確認画面を廁E���E�E025-11-17�E�E
+- [x] Review 画面を削除し、質問終亁E���E直接完亁E��面へ遷移するよう変更、E
+- [x] フロントエンドおよ�Eドキュメントを更新、E
+
+## 62. LLM通信失敗時のエラーモーダル表示�E�E025-11-18�E�E
+- [x] LLMとの通信エラー冁E��を画面上部のモーダルで表示しつつ既存�Eフォールバックを継続するよぁE��更、E
+- [x] 変更: `frontend/src/components/TopErrorModal.tsx`, `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`, `frontend/src/pages/Done.tsx`、E
+
+## 63. LLM通信エラー惁E��の自動表示とサマリー追記！E025-11-19�E�E
+- [x] エラーモーダルは10秒後に自動的に閉じるよぁE��し、ユーザー操作が不要に、E
+- [x] LLM通信エラー冁E��をサマリー末尾に追記し、問診結果DBから参�Eできるようにした、E
+- [x] 変更: `frontend/src/components/TopErrorModal.tsx`, `frontend/src/pages/LlmWait.tsx`, `frontend/src/pages/Questions.tsx`, `backend/app/main.py`、E
+
+## 64. セキュリチE��タブに「二段階認証を有効化」�Eタンを追加�E�E025-08-27�E�E
+- [x] 管琁E��面のセキュリチE��タブで、未有効時に明示皁E��「二段階認証を有効化する」�Eタンを表示、E
+- [x] ボタン直下に「パスワードをリセチE��するには二段階認証の有効化が忁E��であり推奨する」旨のメチE��ージを表示、E
+- [x] 二段階認証が有効になって初めて「QRコードを表示」�EタンめE��パスワードをリセチE��」�Eタンが表示されるよぁE��件刁E��を整琁E��E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminSecurity.tsx`、E
+
+## 65. セチE��ョン開始時の旧チE�Eタ初期化と自動�E力抑止�E�E025-11-20�E�E
+- [x] Entry ペ�Eジ表示時に旧セチE��ョン惁E��めE`sessionStorage` から削除し、常に新しいセチE��ョンIDで問診を開始できるようにした、E
+- [x] 患老E��け�E力フォームの `autoComplete` めE`off` に設定し、ブラウザの自動�E力によるチE�Eタ混同を防止、E
+- 変更: `frontend/src/pages/Entry.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/Questions.tsx`, `frontend/src/components/DateSelect.tsx`、E
+
+## 66. TOTP有効化タイミングの修正�E�E025-11-21�E�E
+- [x] `set_totp_mode` で `is_totp_enabled` を�E動的に更新しなぁE��ぁE��し、QRコード発行後にコードを検証して初めて有効化されるよう変更、E
+- [x] モード変更のみでは有効化されなぁE��とを確認するテストを追加、E
+- [x] 変更: `backend/app/db.py`, `backend/tests/test_admin.py`, `docs/admin_system_setup.md`、E
+
+## 67. 二段階認証無効化時のシークレチE��削除�E�E025-11-22�E�E
+- [x] 無効化すると登録済みのTOTPシークレチE��を削除し、�E有効化時に旧コードが利用されなぁE��ぁE��した、E
+  - 変更: `backend/app/db.py`, `backend/app/main.py`
+  - チE��チE `backend/tests/test_admin.py`
+  - ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 68. 追加質問�E一括返却�E�E025-08-27�E�E
+- [x] LLM への問い合わせを1度だけ行い、生成された追加質問をまとめて返す `next_questions` を追加、E
+- [x] エンド�EインチE`/sessions/{id}/llm-questions` は全ての質問を一括で返却するよう変更、E
+- [x] ドキュメント更新: `docs/session_api.md`、E
+- [x] チE��ト更新: `backend/tests/test_api.py`、E
+
+## 69. セキュリチE��タブ�ETOTP無効化フロー見直し！E025-08-26�E�E
+- [x] 二段階認証が有効な状態では、QRコード�E再表示および再設定（�E生�E�E��Eタンを非表示にした、E
+- [x] 「二段階認証を無効化する」実行時に画面冁E��ーダルで6桁コード�E入力を忁E��化。正しいコード�E力時のみ無効化、E
+- [x] バックエンチE`/admin/totp/disable` めETOTPコード忁E��に変更�E�検証ウィンドウ±1スチE��プ）、E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminSecurity.tsx`
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`
+- [x] チE��ト更新: `backend/tests/test_admin.py`
+
+## 70. 問診頁E��の補足説明�E力機�E追加�E�E025-11-23�E�E
+- [x] 吁E��診頁E��に任意�E補足説明を設定できるようにした、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
+- [x] チE��ト追加: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/plannedSystem.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 71. 管琁E��面からのパスワード変更とTOTP無効化！E025-11-24�E�E
+- [x] セキュリチE��画面に現在のパスワードを入力して更新するモーダルを追加、E
+- [x] パスワード変更時に二段階認証を�E動的に無効化するよぁE��した、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminSecurity.tsx`
+- [x] チE��ト追加: `backend/tests/test_admin.py`
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`
+
+## 72. LLM追質問�EセチE��ョンストレージ再利用�E�E025-11-25�E�E
+- [x] `LlmWait` で取得した追加質問を `pending_llm_questions` として保存し、`Questions` ペ�Eジで再利用するようにした、E
+- [x] 質問を消費した際�E `pending_llm_questions` を更新し、空になった場合�Eみ `/llm-questions` を�E呼び出すよぁE��更、E
+- [x] ドキュメント更新: `docs/session_api.md`、E
+
+## 73. 褁E��選択頁E��の自由記述チェチE��ボックス追加�E�E025-12-06�E�E
+- [x] 褁E��選択肢で自由入力を行う際、専用チェチE��ボックスを新設し、チェチE��時�EみチE��スト�E力欁E��有効化されるよう変更、E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/QuestionnaireForm.tsx`
+- [x] ドキュメント更新: `docs/PlannedDesign.md`
+
+## 74. プロンプト斁E��の改良�E�E025-12-07�E�E
+- [x] 追加質問とサマリー生�Eの既定�Eロンプトを医療向けに詳細化、E
+- [x] LLM 設定�EシスチE��プロンプトに医療問診支援向け斁E��を追加、E
+- [x] 変更�E�バチE��エンド！E `backend/app/llm_gateway.py`, `backend/app/main.py`, `backend/tests/test_api.py`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/LLMcommunication.md`, `docs/session_api.md`, `docs/implementation.md`
+
+## 75. チE��ォルトテンプレート�E性別関連頁E��整琁E��E025-12-08�E�E
+- [x] 初診チE��ォルトテンプレートから性別質問を削除し、E��褁E�E力を解消、E
+- [x] 妊娠・授乳の質問に対象性別を設定し、女性のみ表示されるよぁE��更、E
+- [x] 喫煙�E飲酒�E質問に自由記述欁E��追加し、E��択肢以外�E回答を許容、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`, `backend/build/lib/app/main.py`
+- [x] チE��ト更新: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/implementation.md`
+
+## 76. ラチE��ーGUI録音エラーの修正�E�E025-12-09�E�E
+- [x] 例外変数がガーベジコレクトされてしまぁE��ラーメチE��ージが表示できなかった不�E合を修正、E
+- [x] 変更: `wrapper/app/gui.py`
+
+## 77. 単一選択�E力�E廁E���E�E025-12-10�E�E
+- [x] 単一選択�E力方式を廁E��し、既存�E単一選択頁E��を褁E��選択に統一、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`, `backend/app/db.py`, `backend/app/validator.py`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminTemplates.tsx`, `frontend/src/pages/QuestionnaireForm.tsx`
+- [x] チE��ト更新: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/PlannedDesign.md`, `docs/implementation.md`
+
+## 78. LLMスチE�Eタス表示の明確化！E025-12-10�E�E
+- [x] スチE�Eタスバッジの表示斁E��を調整し、`status === 'ok'` でめE`base_url` が未設定�E場合�E「LLM有効(ローカル)」と表示するように変更�E�従来は「LLM接続済」と表示され紛らわしかった）、E
+- [x] 変更�E�フロントエンド！E `frontend/src/components/LlmStatusBadge.tsx`
+
+## 79. LLM設定保存後にスチE�Eタス更新�E�E025-12-10�E�E
+- [x] LLM設定画面で保存�E功時に `refreshLlmStatus()` を呼び出し、右上�EスチE�Eタスバッジへ最新状態を即時反映、E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminLlm.tsx`
+
+## 80. LLM疎通テスト�E厳格化！E025-12-10�E�E
+- [x] `/llm/settings/test` で、`enabled` かつ `base_url` と `model` が指定されてぁE��ぁE��合�E `ng` を返すように変更、E
+- [x] `test_connection()` はまずモチE��一覧の取得を行い、E��択モチE��が含まれる場合に `ok` と判定！Ellama: `/api/tags`、LM Studio: `/v1/models`�E�、E
+- [x] チャチE��による疎通確認�E廁E��し、タイムアウト�E影響を避けた、E
+- [x] `/llm/settings` 保存時の疎通テスト�E `base_url` 持E��時のみ実行（空の場合�E保存可能だが、スチE�Eタスは `ng`�E�、E
+- [x] 変更�E�バチE��エンド！E `backend/app/llm_gateway.py`, `backend/app/main.py`
+
+## 81. LLM設定�E忁E��頁E��とUI制御�E�E025-12-10�E�E
+- [x] LLM有効時�EモチE��名が忁E��（未入力で保存不可、E00�E�、E
+- [x] 管琁E��面に「LLMを使用する」チェチE��ボックスを追加し、オフ時は吁E��定を一括で非活性化、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminLlm.tsx`
+
+## 82. LLM未使用時�EUIとバッジ斁E���E�E025-12-10�E�E
+- [x] 「LLMを使用する」チェチE��ボックスをフォーム最上部へ移動、E
+- [x] LLM未使用時�Eプロバイダ選択欁E��Ellama/LM Studio�E�を非表示、E
+- [x] 右上�EスチE�Eタスバッジの無効ラベルを「LLM未使用」に変更、E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminLlm.tsx`, `frontend/src/components/LlmStatusBadge.tsx`
+
+## 83. 問診結果ダウンロード機�E追加�E�E025-12-11�E�E
+- [x] 管琁E��面の問診結果一覧にPDF/Markdown/CSVダウンロード用アイコンを追加、E
+- [x] 変更�E�バチE��エンド！E `backend/app/main.py`, `backend/pyproject.toml`
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminSessions.tsx`
+- [x] チE��ト追加: `backend/tests/test_api.py`
+- [x] ドキュメント更新: `docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`, `docs/implementation.md`
+
+## 84. 管琁E��面使ぁE��ドキュメント�E差し替え！E025-12-12�E�E
+- [x] 日常操作向け�E `docs/admin_user_manual.md` を追加し、管琁E��ニューの「使ぁE��」�Eージで表示するよう変更、E
+- [x] `docs/admin_system_setup.md` から「使ぁE��ペ�Eジ」に関する記述を修正、E
+- [x] 変更�E�フロントエンド！E `frontend/src/pages/AdminManual.tsx`
+- [x] ドキュメント追加: `frontend/public/docs/admin_user_manual.md`

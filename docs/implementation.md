@@ -661,3 +661,21 @@
 - [x] `docs/admin_system_setup.md` から「使い方ページ」に関する記述を修正。
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminManual.tsx`
 - [x] ドキュメント追加: `frontend/public/docs/admin_user_manual.md`
+
+## 85. 問診結果一覧の出力ボタンにホバー説明を追加（2025-12-12）
+- [x] PDF/Markdown/CSV 各アイコンにツールチップを追加し、ホバー時に出力形式が小さく表示されるように改善。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx`
+- [x] バックエンド自動テスト実行: `cd backend && .venv/Scripts/pytest -q`（36件成功）
+
+## 86. 問診結果の一括出力（複数選択/表示全件）対応（2025-12-12）
+- [x] 一覧にチェックボックスを追加し、複数選択をサポート。選択が無い場合は表示中の全件を対象として一括出力。
+- [x] 一括出力ボタン（PDF/Markdown/CSV）を検索フォーム下に追加。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx`
+- [x] 変更（バックエンド）: `GET /admin/sessions/bulk/download/{fmt}` を追加。`ids` クエリで複数 ID を受け取り、`md/pdf` は ZIP で返却、`csv` は「全件を1枚の集計CSV」で返却（共通列＋「回答一覧」列に個別問診をまとめる）。
+- [x] バックエンド自動テスト実行: `cd backend && .venv/Scripts/pytest -q`（36件成功）
+
+## 87. 管理画面のLLM既定値を「未使用」に変更（2025-12-12）
+- [x] 管理UIの初期状態で「LLMを使用しない」を既定とするよう変更。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` の初期ステートおよびロード時の既定（null時）を `enabled: false` に変更。
+- [x] バックエンドのデフォルトは既に `enabled: false`（`default_llm_settings`）のため整合。
+- [x] バックエンド自動テスト実行: `cd backend && .venv/Scripts/pytest -q`（36件成功）

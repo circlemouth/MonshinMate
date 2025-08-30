@@ -24,6 +24,8 @@ import {
   Button,
   HStack,
   IconButton,
+  Tooltip,
+  Checkbox,
 } from '@chakra-ui/react';
 import { FiFile, FiFileText, FiTable } from 'react-icons/fi';
 
@@ -62,7 +64,11 @@ export default function AdminSessions() {
     const qs = params.toString();
     fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
       .then((r) => r.json())
-      .then(setSessions);
+      .then((data) => {
+        setSessions(data);
+        // 一覧が更新されたら選択状態をクリア
+        setSelectedSessionIds([]);
+      });
   };
 
   const handleSearch = () => {
@@ -82,6 +88,22 @@ export default function AdminSessions() {
   }, []);
 
   const visitTypeLabel = (type: string) => (type === 'initial' ? '初診' : type === 'followup' ? '再診' : type);
+
+  // 一覧の複数選択（行）用
+  const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
+  const toggleSelect = (id: string, checked: boolean) => {
+    setSelectedSessionIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)));
+  };
+  const allSelected = sessions.length > 0 && selectedSessionIds.length === sessions.length;
+  const someSelected = selectedSessionIds.length > 0 && selectedSessionIds.length < sessions.length;
+  const getTargetIds = (): string[] => (selectedSessionIds.length > 0 ? selectedSessionIds : sessions.map((s) => s.id));
+  const handleBulkDownload = (fmt: 'pdf' | 'md' | 'csv') => {
+    const ids = getTargetIds();
+    if (ids.length === 0) return;
+    const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
+    const url = `/admin/sessions/bulk/download/${fmt}?${qs}`;
+    window.open(url, '_blank');
+  };
 
   const openPreview = async (id: string) => {
     try {
@@ -140,10 +162,36 @@ export default function AdminSessions() {
           <Button onClick={handleSearch}>検索</Button>
           <Button onClick={handleReset}>リセット</Button>
         </HStack>
+        <HStack spacing={2}>
+          <Text fontSize="sm" color="gray.600">一括出力（選択がなければ表示全件）</Text>
+          <Tooltip label="PDF一括ダウンロード" placement="top" hasArrow openDelay={150}>
+            <Button size="sm" leftIcon={<FiFile />} onClick={() => handleBulkDownload('pdf')}>PDF</Button>
+          </Tooltip>
+          <Tooltip label="Markdown一括ダウンロード" placement="top" hasArrow openDelay={150}>
+            <Button size="sm" leftIcon={<FiFileText />} onClick={() => handleBulkDownload('md')}>Markdown</Button>
+          </Tooltip>
+          <Tooltip label="CSV一括ダウンロード" placement="top" hasArrow openDelay={150}>
+            <Button size="sm" leftIcon={<FiTable />} onClick={() => handleBulkDownload('csv')}>CSV</Button>
+          </Tooltip>
+        </HStack>
       </VStack>
       <Table>
         <Thead>
           <Tr>
+            <Th width="1%">
+              <Checkbox
+                isChecked={allSelected}
+                isIndeterminate={someSelected}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  if ((e.target as HTMLInputElement).checked) {
+                    setSelectedSessionIds(sessions.map((s) => s.id));
+                  } else {
+                    setSelectedSessionIds([]);
+                  }
+                }}
+              />
+            </Th>
             <Th>患者名</Th>
             <Th>生年月日</Th>
             <Th>受診種別</Th>
@@ -154,36 +202,49 @@ export default function AdminSessions() {
         <Tbody>
           {sessions.map((s) => (
             <Tr key={s.id} _hover={{ bg: 'gray.50' }} onClick={() => openPreview(s.id)} sx={{ cursor: 'pointer' }}>
+              <Td onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  isChecked={selectedSessionIds.includes(s.id)}
+                  onChange={(e) => toggleSelect(s.id, (e.target as HTMLInputElement).checked)}
+                />
+              </Td>
               <Td>{s.patient_name}</Td>
               <Td>{s.dob}</Td>
               <Td>{visitTypeLabel(s.visit_type)}</Td>
               <Td>{s.finalized_at || '-'}</Td>
               <Td onClick={(e) => e.stopPropagation()}>
                 <HStack spacing={1}>
-                  <IconButton
-                    as="a"
-                    href={`/admin/sessions/${s.id}/download/pdf`}
-                    aria-label="PDFをダウンロード"
-                    icon={<FiFile />}
-                    size="sm"
-                    variant="ghost"
-                  />
-                  <IconButton
-                    as="a"
-                    href={`/admin/sessions/${s.id}/download/md`}
-                    aria-label="Markdownをダウンロード"
-                    icon={<FiFileText />}
-                    size="sm"
-                    variant="ghost"
-                  />
-                  <IconButton
-                    as="a"
-                    href={`/admin/sessions/${s.id}/download/csv`}
-                    aria-label="CSVをダウンロード"
-                    icon={<FiTable />}
-                    size="sm"
-                    variant="ghost"
-                  />
+                  {/* 出力形式のホバーツールチップを追加 */}
+                  <Tooltip label="PDF形式" placement="top" hasArrow openDelay={150}>
+                    <IconButton
+                      as="a"
+                      href={`/admin/sessions/${s.id}/download/pdf`}
+                      aria-label="PDFをダウンロード"
+                      icon={<FiFile />}
+                      size="sm"
+                      variant="ghost"
+                    />
+                  </Tooltip>
+                  <Tooltip label="Markdown形式" placement="top" hasArrow openDelay={150}>
+                    <IconButton
+                      as="a"
+                      href={`/admin/sessions/${s.id}/download/md`}
+                      aria-label="Markdownをダウンロード"
+                      icon={<FiFileText />}
+                      size="sm"
+                      variant="ghost"
+                    />
+                  </Tooltip>
+                  <Tooltip label="CSV形式" placement="top" hasArrow openDelay={150}>
+                    <IconButton
+                      as="a"
+                      href={`/admin/sessions/${s.id}/download/csv`}
+                      aria-label="CSVをダウンロード"
+                      icon={<FiTable />}
+                      size="sm"
+                      variant="ghost"
+                    />
+                  </Tooltip>
                 </HStack>
               </Td>
             </Tr>

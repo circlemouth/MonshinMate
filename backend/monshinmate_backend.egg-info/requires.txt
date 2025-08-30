@@ -6,3 +6,4 @@ pyotp
 qrcode[pil]
 python-jose[cryptography]
 cryptography
+reportlab

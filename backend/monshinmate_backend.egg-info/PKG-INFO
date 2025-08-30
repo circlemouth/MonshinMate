@@ -11,3 +11,4 @@ Requires-Dist: pyotp
 Requires-Dist: qrcode[pil]
 Requires-Dist: python-jose[cryptography]
 Requires-Dist: cryptography
+Requires-Dist: reportlab

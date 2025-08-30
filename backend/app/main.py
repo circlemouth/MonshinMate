@@ -8,6 +8,8 @@ import time
 from datetime import datetime, timedelta, UTC
 import os
 import io
+import zipfile
+import re
 import csv
 import json
 
@@ -1988,6 +1990,150 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.pdf"},
         )
     raise HTTPException(status_code=400, detail="unsupported format")
+
+
+@app.get("/admin/sessions/bulk/download/{fmt}")
+def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Response:
+    """複数セッションを指定形式で一括ダウンロードする。
+
+    - 返却形式は ZIP（`sessions-YYYYmmdd-HHMMSS.zip`）。
+    - `ids` クエリで対象セッションIDを複数指定する。
+    - `fmt` は `pdf|md|csv` のいずれか。
+    """
+    if fmt not in {"pdf", "md", "csv"}:
+        raise HTTPException(status_code=400, detail="unsupported format")
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids is required")
+
+    def sanitize_filename(name: str) -> str:
+        name = re.sub(r"[\\/:*?\"<>|]", "_", name)
+        name = name.strip().replace(" ", "_")
+        return name or "session"
+
+    def build_rows(s: dict) -> tuple[list[tuple[str, str]], str]:
+        tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
+        labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
+        answers = s.get("answers", {})
+
+        def fmt_answer(ans: Any) -> str:
+            if ans is None or ans == "":
+                return ""
+            if isinstance(ans, list):
+                return ", ".join(map(str, ans))
+            if isinstance(ans, dict):
+                return json.dumps(ans, ensure_ascii=False)
+            return str(ans)
+
+        rows: list[tuple[str, str]] = []
+        for iid, label in labels.items():
+            rows.append((label, fmt_answer(answers.get(iid))))
+        for iid, qtext in (s.get("llm_question_texts") or {}).items():
+            rows.append((qtext, fmt_answer(answers.get(iid))))
+        vt = s.get("visit_type")
+        vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
+        return rows, vt_label
+
+    # CSV は「全件を1枚の集計CSV」で返す
+    if fmt == "csv":
+        sbuf = io.StringIO()
+        writer = csv.writer(sbuf)
+        # 共通セクション列 + 回答一覧（まとめ） + サマリー
+        writer.writerow(["セッションID", "患者名", "生年月日", "受診種別", "テンプレートID", "確定日時", "回答一覧", "自動生成サマリー"])
+        for sid in ids:
+            s = db_get_session(sid)
+            if not s:
+                continue
+            rows, vt_label = build_rows(s)
+            answers_text_lines = [f"- {label}: {ans or '未回答'}" for label, ans in rows]
+            answers_text = "\n".join(answers_text_lines)
+            writer.writerow([
+                sid,
+                s.get("patient_name", ""),
+                s.get("dob", ""),
+                vt_label,
+                s.get("questionnaire_id", ""),
+                s.get("finalized_at", "") or "",
+                answers_text,
+                s.get("summary", "") or "",
+            ])
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        content = sbuf.getvalue()
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f"attachment; filename=sessions-{ts}.csv"},
+        )
+
+    # md / pdf は ZIP にまとめて返す
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for sid in ids:
+            s = db_get_session(sid)
+            if not s:
+                continue
+            rows, vt_label = build_rows(s)
+            base = sanitize_filename(f"{s.get('patient_name','')}_{s.get('dob','')}_{sid}")
+            if fmt == "md":
+                lines = [
+                    "# 問診結果",
+                    "",
+                    "## 患者情報",
+                    f"- 患者名: {s['patient_name']}",
+                    f"- 生年月日: {s['dob']}",
+                    f"- 受診種別: {vt_label}",
+                    f"- テンプレートID: {s['questionnaire_id']}",
+                    "",
+                    "## 回答",
+                ]
+                for label, ans in rows:
+                    lines.append(f"- {label}: {ans or '未回答'}")
+                if s.get("summary"):
+                    lines.extend(["", "## 自動生成サマリー", str(s["summary"])])
+                content = "\n".join(lines).encode("utf-8")
+                zf.writestr(f"{base}.md", content)
+            elif fmt == "pdf":
+                pbuf = io.BytesIO()
+                pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
+                c = canvas.Canvas(pbuf, pagesize=A4)
+                c.setFont("HeiseiMin-W3", 12)
+                y = 800
+
+                def write_line(text: str) -> None:
+                    nonlocal y
+                    c.drawString(40, y, text)
+                    y -= 14
+                    if y < 40:
+                        c.showPage()
+                        c.setFont("HeiseiMin-W3", 12)
+                        y = 800
+
+                write_line("問診結果")
+                write_line("")
+                write_line("患者情報")
+                write_line(f"患者名: {s['patient_name']}")
+                write_line(f"生年月日: {s['dob']}")
+                write_line(f"受診種別: {vt_label}")
+                write_line(f"テンプレートID: {s['questionnaire_id']}")
+                write_line("")
+                write_line("回答")
+                for label, ans in rows:
+                    write_line(f"{label}: {ans or '未回答'}")
+                if s.get("summary"):
+                    write_line("")
+                    write_line("自動生成サマリー")
+                    for line in str(s["summary"]).splitlines():
+                        write_line(line)
+                c.save()
+                pbuf.seek(0)
+                zf.writestr(f"{base}.pdf", pbuf.getvalue())
+
+    zip_buf.seek(0)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return StreamingResponse(
+        zip_buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=sessions-{ts}.zip"},
+    )
 
 
 # --- 観測用メトリクス（最小実装） ---
