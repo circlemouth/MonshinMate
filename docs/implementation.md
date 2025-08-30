@@ -680,3 +680,10 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` の初期ステートおよびロード時の既定（null時）を `enabled: false` に変更。
 - [x] バックエンドのデフォルトは既に `enabled: false`（`default_llm_settings`）のため整合。
 - [x] バックエンド自動テスト実行: `cd backend && .venv/Scripts/pytest -q`（36件成功）
+
+## 88. Docker による起動対応（2025-12-13）
+- [x] バックエンド用 `backend/Dockerfile` を追加。
+- [x] フロントエンド用 `frontend/Dockerfile` と `frontend/nginx.conf` を追加。
+- [x] `docker-compose.yml` で両コンテナを一括起動可能にした。
+- [x] ドキュメント追加: `docs/docker_setup.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`（36件成功）
