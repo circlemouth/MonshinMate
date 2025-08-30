@@ -218,7 +218,9 @@ export default function AdminSessions() {
                   <Tooltip label="PDF形式" placement="top" hasArrow openDelay={150}>
                     <IconButton
                       as="a"
-                      href={`/admin/sessions/${s.id}/download/pdf`}
+                      href={`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`}
+                      target="_blank"
+                      rel="noopener"
                       aria-label="PDFをダウンロード"
                       icon={<FiFile />}
                       size="sm"
@@ -228,7 +230,9 @@ export default function AdminSessions() {
                   <Tooltip label="Markdown形式" placement="top" hasArrow openDelay={150}>
                     <IconButton
                       as="a"
-                      href={`/admin/sessions/${s.id}/download/md`}
+                      href={`/admin/sessions/${encodeURIComponent(s.id)}/download/md`}
+                      target="_blank"
+                      rel="noopener"
                       aria-label="Markdownをダウンロード"
                       icon={<FiFileText />}
                       size="sm"
@@ -238,7 +242,9 @@ export default function AdminSessions() {
                   <Tooltip label="CSV形式" placement="top" hasArrow openDelay={150}>
                     <IconButton
                       as="a"
-                      href={`/admin/sessions/${s.id}/download/csv`}
+                      href={`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`}
+                      target="_blank"
+                      rel="noopener"
                       aria-label="CSVをダウンロード"
                       icon={<FiTable />}
                       size="sm"

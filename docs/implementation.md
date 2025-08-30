@@ -359,6 +359,54 @@
   - 変更: `frontend/src/App.tsx` のヘッダーロゴ文言。
   - 変更: `frontend/index.html` の `<title>`。
 
+## 34. 患者側のフォントサイズ調整フローティングを追加（2025-08-31）
+- [x] 画面右下に小さなホバーアイコンを常時表示（患者側のみ）。
+- [x] クリックでスライダーを展開し、連続的にフォントサイズを調整可能。
+- [x] スライダー以外の領域クリックで折りたたみ（アイコン表示へ戻る）。
+- [x] 設定は `localStorage` に保存し、次回以降も適用（既定16px、14–22px、0.5刻み）。
+  - 追加: `frontend/src/components/FontSizeControl.tsx`
+  - 変更: `frontend/src/App.tsx`（管理画面以外でコンポーネントを常時マウント）
+
+## 35. 住所・電話番号のブラウザ自動入力を抑止（2025-08-31）
+- [x] 患者フォームのテキスト入力でオートフィル/補正系を明示的に無効化。
+  - `autoComplete="off"`, `autoCorrect="off"`, `autoCapitalize="off"`, `spellCheck={false}` を付与。
+  - 既知のヒューリスティクス回避として、`name` 属性に意味を持たない値（`qi-<id>` 等）を付与。
+  - 対象: `frontend/src/pages/QuestionnaireForm.tsx`（通常入力・自由記述）, `frontend/src/pages/Questions.tsx`（LLM 追質問入力）, `frontend/src/pages/Entry.tsx`（氏名入力）。
+
+## 36. 管理セッション出力の404改善（2025-08-31）
+- [x] 管理の単一出力リンクで稀に `{"detail":"session not found"}` が表示される問題に対処。
+  - `href` の `id` を `encodeURIComponent` でエスケープし、`target="_blank"` を付与してルーター干渉を回避。
+  - Nginx 設定に `/admin` のバックエンドプロキシを追加（本番配信時に API がフロントへ吸われるのを防止）。
+  - 変更: `frontend/src/pages/AdminSessions.tsx`, `frontend/nginx.conf`
+
+## 37. テンプレート管理のUI配置調整（2025-08-31）
+- [x] 保存済みテンプレート一覧を上部へ、その下に「新規テンプレート作成」欄を配置。
+  - 変更: `frontend/src/pages/AdminTemplates.tsx`（セクションの順序入れ替え）
+
+## 38. 管理メニューとマニュアル表記の刷新（2025-08-31）
+- [x] 左ナビの「使い方」を「システム説明」に変更。
+  - 変更: `frontend/src/components/AdminLayout.tsx`
+- [x] マニュアルのタイトルを「システム説明」に変更し、最下部に GNU GPL v3 へのリンクを追加。
+  - 変更: `docs/admin_user_manual.md`
+
+## 39. GPLライセンス本文の同梱と表示（2025-08-31）
+- [x] GNU GPL v3 のライセンス本文をレポジトリに同梱し、フロント配信に含めた。
+  - 追加: `frontend/public/docs/LICENSE_GPL-3.0.md`
+- [x] 管理画面にライセンス表示ページを追加し、ナビに「ライセンス」を追加。
+  - 追加: `frontend/src/pages/AdminLicense.tsx`
+  - 変更: `frontend/src/App.tsx`（ルート追加）, `frontend/src/components/AdminLayout.tsx`（ナビ項目追加）
+- [x] システム説明ページ（マニュアル）から内部ライセンスページへの導線を追記。
+  - 変更: `docs/admin_user_manual.md`
+
+## 40. サブページ再読込時のトップリダイレクト（2025-08-31）
+- [x] `/admin/*` を含むサブパスでのブラウザ再読込時にトップへリダイレクト。
+  - 初回マウント時に NavigationTiming を確認し、`type=reload` か判定して `/` へ遷移。
+  - 変更: `frontend/src/App.tsx`
+  - 併せて開発/本番の配信設定を修正し、`/admin/*` のうち API を除くフロントルートは SPA の `index.html` を返すように調整。
+    - 変更: `frontend/vite.config.ts`（`/admin` の包括プロキシを廃止し、APIサブパスのみプロキシ）
+    - 変更: `frontend/nginx.conf`（`/admin/*` のAPIサブパスのみプロキシ＋それ以外は `try_files`）
+    - 変更: `frontend/vite.config.ts` に開発時専用のミドルウェア（`spa-admin-fallback`）を追加し、`/admin/*` リロード時にも `index.html` を返すようにした。
+
 ## 33. システム表示名の設定機能（2025-08-23）
 - [x] 管理画面から「システム表示名」を編集可能にし、患者画面のヘッダーに反映（管理画面のヘッダーは固定文言「管理画面」とし設定の影響を受けない）。
   - 変更（バックエンド）: `backend/app/db.py` に `app_settings` テーブルと `save_app_settings` / `load_app_settings` を追加。

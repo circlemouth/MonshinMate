@@ -599,21 +599,6 @@ export default function AdminTemplates() {
         </Heading>
         <VStack align="stretch" spacing={6}>
           <Box>
-            <Heading size="md" mb={2}>
-              新規テンプレート作成
-            </Heading>
-            <HStack>
-              <Input
-                placeholder="新しいテンプレート名"
-                value={newTemplateId}
-                onChange={(e) => setNewTemplateId(e.target.value)}
-              />
-              <Button onClick={handleCreateNewTemplate} colorScheme="green">
-                作成
-              </Button>
-            </HStack>
-          </Box>
-          <Box>
             <HStack justifyContent="space-between" alignItems="center" mb={2}>
               <Heading size="md">
                 保存済みテンプレート一覧
@@ -682,6 +667,21 @@ export default function AdminTemplates() {
                 </Table>
               </TableContainer>
             </RadioGroup>
+          </Box>
+          <Box>
+            <Heading size="md" mb={2}>
+              新規テンプレート作成
+            </Heading>
+            <HStack>
+              <Input
+                placeholder="新しいテンプレート名"
+                value={newTemplateId}
+                onChange={(e) => setNewTemplateId(e.target.value)}
+              />
+              <Button onClick={handleCreateNewTemplate} colorScheme="green">
+                作成
+              </Button>
+            </HStack>
           </Box>
         </VStack>
       </Box>

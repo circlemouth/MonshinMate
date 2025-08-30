@@ -20,6 +20,7 @@ import LLMChat from './pages/LLMChat';
 import LlmWait from './pages/LlmWait';
 import AdminAppearance from './pages/AdminAppearance';
 import AdminManual from './pages/AdminManual';
+import AdminLicense from './pages/AdminLicense';
 import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
@@ -29,6 +30,7 @@ import AdminSecurity from './pages/AdminSecurity';
 // Layouts
 import AdminLayout from './components/AdminLayout';
 import LlmStatusBadge from './components/LlmStatusBadge';
+import FontSizeControl from './components/FontSizeControl';
 import { refreshLlmStatus } from './utils/llmStatus';
 
 export default function App() {
@@ -44,6 +46,15 @@ export default function App() {
     if (location.pathname === '/') {
       refreshLlmStatus();
     }
+    // サブページをリロードした場合はトップページへリダイレクト
+    try {
+      const navs: any = (performance as any).getEntriesByType?.('navigation') || [];
+      const navType = navs[0]?.type ?? (performance as any).navigation?.type; // 1 = reload (deprecated API)
+      const isReload = navType === 'reload' || navType === 1;
+      if (isReload && location.pathname !== '/') {
+        navigate('/');
+      }
+    } catch {}
   }, []);
 
   useEffect(() => {
@@ -174,6 +185,7 @@ export default function App() {
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
+          <Route path="/admin/license" element={<AdminLayout><AdminLicense /></AdminLayout>} />
         </Routes>
       </Box>
 
@@ -195,6 +207,8 @@ export default function App() {
           </ModalBody>
         </ModalContent>
       </Modal>
+      {/* 患者側画面のみ、右下にフォントサイズ調整を常時表示 */}
+      {!isAdminPage && <FontSizeControl />}
     </Container>
   );
 }

@@ -139,7 +139,18 @@ export default function Entry() {
       />
       <FormControl isRequired isInvalid={attempted && !name}>
         <FormLabel htmlFor="patient_name">氏名</FormLabel>
-        <Input id="patient_name" placeholder="問診　太郎" autoFocus value={name} onChange={(e) => setName(e.target.value)} autoComplete="off" />
+        <Input
+          id="patient_name"
+          name="__noauto_patient_name"
+          placeholder="問診　太郎"
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
         <FormErrorMessage>氏名を入力してください</FormErrorMessage>
       </FormControl>
       <FormControl isRequired isInvalid={attempted && !gender}>

@@ -1,4 +1,4 @@
-# 管理画面の使い方
+# システム説明
 
 本書は、日常の運用で管理画面を利用するための基本的な操作方法を説明します。
 
@@ -33,3 +33,11 @@
 
 ## 7. さらに詳しい情報
 システム全体のセットアップ手順やトラブルシューティングは [admin_system_setup.md](/docs/admin_system_setup.md) を参照してください。
+
+---
+
+## ライセンス
+- 本システムは GNU General Public License v3 (GPL-3.0) の条件で提供されます。
+- ライセンス本文（システム内表示）: [/admin/license](/admin/license)
+- 公式テキスト（英語）: [https://www.gnu.org/licenses/gpl-3.0.txt](https://www.gnu.org/licenses/gpl-3.0.txt)
+- 参考訳（日本語）: [https://www.gnu.org/licenses/gpl-3.0.ja.html](https://www.gnu.org/licenses/gpl-3.0.ja.html)

@@ -248,21 +248,25 @@ export default function QuestionnaireForm() {
                       >
                         その他
                       </Checkbox>
-                      <Input
-                        mt={2}
-                        placeholder="自由記述"
-                        value={freeTexts[item.id] || ''}
-                        onChange={(e) => {
-                          const prev = freeTexts[item.id] || '';
-                          const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
-                          const val = e.target.value;
-                          const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
-                          setFreeTexts({ ...freeTexts, [item.id]: val });
-                          setAnswers({ ...answers, [item.id]: updated });
-                        }}
-                        autoComplete="off"
-                        isDisabled={!freeTextChecks[item.id]}
-                      />
+                  <Input
+                    mt={2}
+                    placeholder="自由記述"
+                    value={freeTexts[item.id] || ''}
+                    onChange={(e) => {
+                      const prev = freeTexts[item.id] || '';
+                      const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                      const val = e.target.value;
+                      const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
+                      setFreeTexts({ ...freeTexts, [item.id]: val });
+                      setAnswers({ ...answers, [item.id]: updated });
+                    }}
+                    autoComplete="off"
+                    name={`qi-free-${item.id}`}
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    isDisabled={!freeTextChecks[item.id]}
+                  />
                     </Box>
                   )}
                 </>
@@ -278,6 +282,10 @@ export default function QuestionnaireForm() {
                   value={answers[item.id] || ''}
                   onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
                   autoComplete="off"
+                  name={`qi-${item.id}`}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                 />
               )}
               <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>

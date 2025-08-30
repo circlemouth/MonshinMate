@@ -136,7 +136,15 @@ export default function Questions() {
       {current && (
         <>
           <Box>{current.text}</Box>
-          <Input value={answer} onChange={(e) => setAnswer(e.target.value)} autoComplete="off" />
+          <Input
+            value={answer}
+            onChange={(e) => setAnswer(e.target.value)}
+            autoComplete="off"
+            name="llm-answer"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+          />
           <Button onClick={submit} colorScheme="primary">
             送信
           </Button>

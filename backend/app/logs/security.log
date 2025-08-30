@@ -3494,3 +3494,297 @@
 2025-08-30 16:52:04,027 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-08-30 16:52:04,269 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-08-30 16:52:04,514 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-30 16:53:11,072 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-30 16:53:11,369 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 01:56:52,810 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:53,102 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:53,389 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:53,675 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:53,969 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:54,266 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:54,558 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:54,865 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:55,158 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:55,456 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:55,764 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:56,065 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:56,365 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:56,663 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:56,981 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:57,276 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:57,570 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:57,871 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:58,189 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:58,486 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:58,799 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:59,105 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 01:56:59,416 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:03:02,385 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:03:07,948 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:03:08,254 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:04:36,908 INFO admin_login_failed
+2025-08-31 02:04:41,775 INFO admin_login_failed
+2025-08-31 02:05:20,884 INFO admin_login_success
+2025-08-31 02:05:21,194 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:05:52,505 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-08-31 02:05:52,806 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:05:54,940 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:55,229 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:55,515 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:55,798 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:56,093 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:56,396 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:56,690 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:56,994 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:57,288 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:57,588 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:57,888 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:58,185 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:58,483 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:58,784 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:59,109 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:59,406 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:59,701 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:05:59,999 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:06:00,340 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:06:00,639 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:06:00,934 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:06:01,244 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:06:01,555 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:39,568 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:39,862 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:40,153 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:40,445 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:40,745 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:41,048 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:41,353 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:41,654 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:41,950 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:42,250 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:42,550 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:42,854 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:43,208 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:43,521 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:43,859 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:44,172 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:44,507 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:44,814 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:45,156 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:45,458 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:45,776 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:46,082 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:11:46,441 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:00,339 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:00,636 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:00,926 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:01,216 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:01,514 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:01,827 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:02,126 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:02,424 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:02,734 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:03,036 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:03,337 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:03,639 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:03,939 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:04,239 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:04,555 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:04,858 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:05,156 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:05,494 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:05,825 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:06,139 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:06,439 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:06,741 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:12:07,058 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:18:38,672 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:18:38,964 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:21:10,952 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:11,245 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:11,534 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:11,824 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:12,120 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:12,416 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:12,713 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:13,020 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:13,316 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:13,614 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:13,914 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:14,212 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:14,512 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:14,809 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:15,131 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:15,427 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:15,721 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:16,013 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:16,334 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:16,631 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:16,930 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:17,236 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:17,551 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:21:36,331 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:21:36,629 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:21:55,820 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:21:56,111 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:22:10,535 INFO admin_login_failed
+2025-08-31 02:23:33,737 INFO admin_login_success
+2025-08-31 02:23:34,026 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:23:36,933 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:23:37,221 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:27:15,375 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:15,664 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:15,951 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:16,237 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:16,531 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:16,837 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:17,138 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:17,434 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:17,729 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:18,028 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:18,329 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:18,627 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:18,926 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:19,232 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:19,548 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:19,843 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:20,135 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:20,430 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:20,751 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:21,053 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:21,358 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:21,662 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:27:21,973 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:51:26,455 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:51:26,753 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 02:56:52,464 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:52,764 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:53,055 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:53,346 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:53,642 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:53,941 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:54,237 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:54,536 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:54,836 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:55,137 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:55,437 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:55,737 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:56,037 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:56,341 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:56,666 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:56,971 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:57,269 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:57,567 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:57,898 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:58,208 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:58,558 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:58,870 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 02:56:59,199 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:04:46,068 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:04:48,403 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:04:48,707 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:04:53,492 INFO admin_login_failed
+2025-08-31 03:05:38,761 INFO admin_login_success
+2025-08-31 03:05:39,051 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:07:11,398 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:07:11,720 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:07:15,484 INFO admin_login_success
+2025-08-31 03:07:15,775 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:10:25,239 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:25,532 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:25,823 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:26,115 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:26,428 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:26,731 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:27,028 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:27,326 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:27,624 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:27,927 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:28,228 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:28,538 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:28,839 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:29,146 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:29,468 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:29,765 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:30,066 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:30,362 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:30,691 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:30,990 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:31,289 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:31,596 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:10:31,907 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:13:16,098 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:13:16,429 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:13:20,786 INFO admin_login_failed
+2025-08-31 03:13:24,689 INFO admin_login_failed
+2025-08-31 03:13:43,723 INFO admin_login_success
+2025-08-31 03:13:44,010 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:14:50,190 INFO startup_admin_status exists=True is_initial=True default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:14:55,387 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:14:55,695 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:14:59,779 INFO admin_login_success
+2025-08-31 03:15:00,069 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:16:57,571 INFO auth_status is_initial=True is_totp_enabled=True totp_mode=off
+2025-08-31 03:17:03,180 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:03,474 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:03,774 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:04,065 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:04,368 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:04,676 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:04,990 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:05,295 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:05,592 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:05,897 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:06,205 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:06,517 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:06,832 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:07,165 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:07,499 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:07,821 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:08,127 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:08,428 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:08,761 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:09,064 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:09,370 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:09,678 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:17:10,010 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:22:13,362 INFO admin_login_failed
+2025-08-31 03:22:17,161 INFO admin_login_failed
+2025-08-31 03:22:58,638 INFO admin_login_success
+2025-08-31 03:22:58,935 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:23:22,504 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:23:22,802 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:40,370 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:40,690 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:45,040 INFO admin_login_success
+2025-08-31 03:24:45,331 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:46,565 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:46,852 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:47,543 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:47,848 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:24:53,178 INFO admin_login_success
+2025-08-31 03:24:53,470 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:28:20,099 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:20,390 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:20,683 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:20,979 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:21,281 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:21,585 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:21,883 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:22,184 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:22,481 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:22,783 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:23,086 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:23,391 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:23,693 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:23,993 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:24,313 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:24,610 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:24,908 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:25,215 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:25,545 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:25,848 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:26,150 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:26,455 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:28:26,765 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-08-31 03:36:09,925 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-08-31 03:36:10,244 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
