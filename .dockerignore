@@ -1,0 +1,6 @@
+.git
+venv
+**/__pycache__
+backend/app/app.sqlite3
+frontend/node_modules
+frontend/dist
