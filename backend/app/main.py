@@ -76,6 +76,14 @@ app = FastAPI(title="MonshinMate API")
 
 logger = logging.getLogger("api")
 
+# サマリー生成用のデフォルトプロンプト
+DEFAULT_SUMMARY_PROMPT = (
+    "あなたは医療記録作成の専門家です。"
+    "以下の問診項目と回答をもとに、患者情報を正確かつ簡潔な日本語のサマリーにまとめてください。"
+    "主訴と発症時期などの重要事項を冒頭に記載し、その後に関連情報を読みやすく整理してください。"
+    "推測や不要な前置きは避け、医療従事者がすぐ理解できる表現を用いてください。"
+)
+
 
 @app.middleware("http")
 async def log_middleware(request: Request, call_next):
@@ -326,6 +334,9 @@ def on_startup() -> None:
         llm_followup_enabled=True,
         llm_followup_max_questions=5,
     )
+    # サマリープロンプト（初診・再診）を既定値で投入（存在すれば上書き）
+    upsert_summary_prompt("default", "initial", DEFAULT_SUMMARY_PROMPT, False)
+    upsert_summary_prompt("default", "followup", DEFAULT_SUMMARY_PROMPT, False)
     upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
     upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
     # 保存済みの LLM 設定があれば読み込む
@@ -606,6 +617,228 @@ def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplica
     return {"status": "ok"}
 
 
+@app.post("/questionnaires/{questionnaire_id}/reset")
+def reset_questionnaire(questionnaire_id: str) -> dict:
+    """指定テンプレートIDを初期状態に戻す。
+
+    - ID が "default" の場合は組込の既定項目・プロンプトで初期化
+    - それ以外は、現在の default テンプレートをソースとして項目・設定・プロンプトを複製
+    """
+    if questionnaire_id == "default":
+        # 既定のテンプレート内容を再投入
+        initial_items = [
+            {"id": "postal_code", "label": "郵便番号を記入してください。", "type": "string", "required": True},
+            {"id": "address", "label": "住所を記入してください。", "type": "string", "required": True},
+            {"id": "phone", "label": "電話番号を記入してください。", "type": "string", "required": True},
+            {
+                "id": "chief_complaint",
+                "label": "どういった症状で受診されましたか？",
+                "type": "string",
+                "required": True,
+                "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+            },
+            {
+                "id": "symptom_location",
+                "label": "症状があるのはどこですか？",
+                "type": "multi",
+                "options": ["顔", "首", "体", "手足"],
+                "allow_freetext": True,
+                "required": True,
+            },
+            {
+                "id": "onset",
+                "label": "いつから症状がありますか？",
+                "type": "multi",
+                "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+                "allow_freetext": True,
+                "required": True,
+                "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
+            },
+            {
+                "id": "prior_treatments",
+                "label": "その症状について、これまで治療を受けたことがあれば、受けた治療を選んでください。",
+                "type": "multi",
+                "options": ["なし", "外用薬", "内服薬", "注射", "手術", "リハビリ", "その他"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "past_diseases",
+                "label": "今までにかかったことのある病気を選んでください。",
+                "type": "multi",
+                "options": [
+                    "なし",
+                    "高血圧",
+                    "糖尿病",
+                    "脂質異常症",
+                    "喘息",
+                    "アトピー性皮膚炎",
+                    "花粉症",
+                    "蕁麻疹",
+                    "その他",
+                ],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "surgeries",
+                "label": "手術歴があれば選んでください。",
+                "type": "multi",
+                "options": ["なし", "皮膚科関連手術", "整形外科手術", "腹部手術", "心臓手術", "その他"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "current_medications",
+                "label": "現在服用している処方薬があれば選んでください。",
+                "type": "multi",
+                "options": ["なし", "ステロイド外用", "抗菌薬（内服/外用）", "抗ヒスタミン薬", "NSAIDs", "免疫抑制薬", "その他"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "supplements_otc",
+                "label": "現在使用しているサプリメント/市販薬があれば選んでください。",
+                "type": "multi",
+                "options": ["なし", "ビタミン剤", "漢方", "鎮痛解熱薬", "かゆみ止め", "保湿剤", "その他"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "drug_allergies",
+                "label": "薬剤アレルギーがあれば選んでください。",
+                "type": "multi",
+                "options": [
+                    "なし",
+                    "ペニシリン系",
+                    "セフェム系",
+                    "マクロライド系",
+                    "ニューキノロン系",
+                    "NSAIDs",
+                    "局所麻酔",
+                    "その他",
+                    "不明",
+                ],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "food_metal_allergies",
+                "label": "食物・金属などのアレルギーがあれば選んでください。",
+                "type": "multi",
+                "options": [
+                    "なし",
+                    "卵",
+                    "乳",
+                    "小麦",
+                    "そば",
+                    "落花生",
+                    "えび",
+                    "かに",
+                    "金属（ニッケル等）",
+                    "その他",
+                    "不明",
+                ],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "smoking",
+                "label": "タバコは吸いますか？",
+                "type": "multi",
+                "options": ["吸わない", "時々吸う", "毎日吸う"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {
+                "id": "alcohol",
+                "label": "お酒はのみますか？",
+                "type": "multi",
+                "options": ["のまない", "ときどき", "よく飲む"],
+                "allow_freetext": True,
+                "required": False,
+            },
+            {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
+            {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
+        ]
+        followup_items = [
+            {
+                "id": "chief_complaint",
+                "label": "どういった症状で受診されましたか？",
+                "type": "string",
+                "required": True,
+                "description": "できるだけ具体的にご記入ください（例：3日前から左ひざが痛い）。",
+            },
+            {
+                "id": "symptom_location",
+                "label": "症状があるのはどこですか？",
+                "type": "multi",
+                "options": ["顔", "首", "体", "手足"],
+                "allow_freetext": True,
+                "required": True,
+            },
+            {
+                "id": "onset",
+                "label": "いつからの症状ですか？",
+                "type": "multi",
+                "options": ["昨日から", "1週間前から", "1ヶ月前から"],
+                "allow_freetext": True,
+                "required": True,
+                "description": "わかる範囲で構いません（例：今朝から、1週間前から など）。",
+            },
+        ]
+        upsert_template(
+            "default",
+            "initial",
+            initial_items,
+            llm_followup_enabled=True,
+            llm_followup_max_questions=5,
+        )
+        upsert_template(
+            "default",
+            "followup",
+            followup_items,
+            llm_followup_enabled=True,
+            llm_followup_max_questions=5,
+        )
+        upsert_summary_prompt("default", "initial", DEFAULT_SUMMARY_PROMPT, False)
+        upsert_summary_prompt("default", "followup", DEFAULT_SUMMARY_PROMPT, False)
+        upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
+        upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
+        return {"status": "ok"}
+
+    # default 以外は、既存の default から複製（なければ既定値から）
+    def _src_items(vt: str) -> tuple[list[dict[str, Any]], bool, int]:
+        tpl = db_get_template("default", vt)
+        if tpl:
+            return tpl.get("items", []), bool(tpl.get("llm_followup_enabled", True)), int(
+                tpl.get("llm_followup_max_questions", 5)
+            )
+        # フォールバック（default が無い場合）: 上の既定項目を再利用
+        if vt == "initial":
+            return initial_items, True, 5  # type: ignore[name-defined]
+        return followup_items, True, 5  # type: ignore[name-defined]
+
+    for vt in ("initial", "followup"):
+        items, llm_enabled, llm_max = _src_items(vt)
+        upsert_template(
+            questionnaire_id,
+            vt,
+            items,
+            llm_followup_enabled=llm_enabled,
+            llm_followup_max_questions=llm_max,
+        )
+        # プロンプトは default の設定をコピー（無ければ既定文）
+        scfg = get_summary_config("default", vt) or {"prompt": DEFAULT_SUMMARY_PROMPT, "enabled": False}
+        fcfg = get_followup_config("default", vt) or {"prompt": DEFAULT_FOLLOWUP_PROMPT, "enabled": False}
+        upsert_summary_prompt(
+            questionnaire_id, vt, scfg.get("prompt", DEFAULT_SUMMARY_PROMPT), bool(scfg.get("enabled", False))
+        )
+        upsert_followup_prompt(
+            questionnaire_id, vt, fcfg.get("prompt", DEFAULT_FOLLOWUP_PROMPT), bool(fcfg.get("enabled", False))
+        )
+    return {"status": "ok"}
+
 @app.post("/questionnaires/default/reset")
 def reset_default_template() -> dict:
     """デフォルトテンプレートを初期状態に戻す。"""
@@ -817,9 +1050,9 @@ def reset_default_template() -> dict:
         llm_followup_enabled=True,
         llm_followup_max_questions=5,
     )
-    # 関連するサマリープロンプトも初期化
-    upsert_summary_prompt("default", "initial", "", False)
-    upsert_summary_prompt("default", "followup", "", False)
+    # 関連するサマリープロンプトも初期化（空欄ではなく既定文を設定）
+    upsert_summary_prompt("default", "initial", DEFAULT_SUMMARY_PROMPT, False)
+    upsert_summary_prompt("default", "followup", DEFAULT_SUMMARY_PROMPT, False)
     upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
     upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
     return {"status": "ok"}
@@ -831,12 +1064,7 @@ def get_summary_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
     cfg = get_summary_config(questionnaire_id, visit_type)
     if cfg is None:
         cfg = {
-            "prompt": (
-                "あなたは医療記録作成の専門家です。"
-                "以下の問診項目と回答をもとに、患者情報を正確かつ簡潔な日本語のサマリーにまとめてください。"
-                "主訴と発症時期などの重要事項を冒頭に記載し、その後に関連情報を読みやすく整理してください。"
-                "推測や不要な前置きは避け、医療従事者がすぐ理解できる表現を用いてください。"
-            ),
+            "prompt": DEFAULT_SUMMARY_PROMPT,
             "enabled": False,
         }
     return {

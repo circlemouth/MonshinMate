@@ -473,18 +473,16 @@ export default function AdminTemplates() {
     }
   };
 
-  const resetDefaultTemplate = async () => {
-    if (window.confirm('デフォルトテンプレートを初期状態に戻します。よろしいですか？')) {
+  const resetTemplateApi = async (id: string) => {
+    if (window.confirm(`テンプレート「${id}」を初期状態に戻します。よろしいですか？`)) {
       try {
-        await fetch('/questionnaires/default/reset', { method: 'POST' });
-        alert('デフォルトテンプレートをリセットしました。');
-        if (templateId === 'default') {
-          loadTemplates('default');
-        } else {
-          setTemplateId('default');
+        await fetch(`/questionnaires/${id}/reset`, { method: 'POST' });
+        alert(`テンプレート「${id}」をリセットしました。`);
+        if (templateId === id) {
+          loadTemplates(id);
         }
       } catch (error) {
-        console.error('Failed to reset default template:', error);
+        console.error('Failed to reset template:', error);
         alert('リセットに失敗しました。');
       }
     }
@@ -655,16 +653,15 @@ export default function AdminTemplates() {
                             >
                               複製
                             </Button>
-                            {t.id === 'default' ? (
-                              <Button
-                                size="xs"
-                                colorScheme="orange"
-                                variant="outline"
-                                onClick={() => resetDefaultTemplate()}
-                              >
-                                リセット
-                              </Button>
-                            ) : (
+                            <Button
+                              size="xs"
+                              colorScheme="orange"
+                              variant="outline"
+                              onClick={() => resetTemplateApi(t.id)}
+                            >
+                              リセット
+                            </Button>
+                            {t.id !== 'default' && (
                               <Button
                                 size="xs"
                                 colorScheme="red"
