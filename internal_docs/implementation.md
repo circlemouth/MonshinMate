@@ -758,3 +758,10 @@
 - [x] 対応: バルク用エンドポイント（`/admin/sessions/bulk/download/{fmt}`）を定義順で先に評価される位置へ移動（`backend/app/main.py`）。
 - [x] テスト追加: `tests/test_api.py::test_admin_bulk_download` を追加し、CSVは単一CSV、MD/PDFはZIP返却を検証。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`（37件成功）
+
+## 91. セッションデータの CouchDB 移行（2025-12-13）
+- [x] セッション保存・取得処理を CouchDB 対応にし、`COUCHDB_URL` と `COUCHDB_DB` で有効化可能にした（未設定時は SQLite を使用）。
+- [x] `docker-compose.yml` に CouchDB サービスを追加し、環境変数でバックエンドと連携。
+- [x] ドキュメント更新: `docs/session_api.md`, `internal_docs/docker_setup.md`, `backend/.env copy.example`。
+- [x] 認証情報を `COUCHDB_USER` / `COUCHDB_PASSWORD` で指定可能にし、URLから分離。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`（37件成功）。

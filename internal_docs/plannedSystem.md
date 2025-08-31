@@ -11,7 +11,7 @@
 #### 1.1 非機能要件 / 設計方針（最小）
 - **性能**：フォーム画面の操作反応 < 300ms、API基本処理 < 500ms、LLM 追加質問は 30s タイムアウト（再試行 1 回）。
 - **可用性**：単一ノード（オンプレ）を前提。診療時間中の停止は 5 分以内の手動復旧を許容。LLM 障害時はベース問診のみで完了できるフェイルセーフを既定（§7, §9 と整合）。
-- **保守性**：12-Factor 構成（設定は .env）。インフラ依存を Docker に集約。データ層は移行容易性を優先（SQLite→PostgreSQL への移行パスを用意）。
+- **保守性**：12-Factor 構成（設定は .env）。インフラ依存を Docker に集約。セッションは CouchDB に保存し、テンプレートなどのメタデータは SQLite を用いる（将来的に PostgreSQL への移行パスを保持）。
 - **セキュリティ**：院内 LAN 限定公開（ゼロトラスト境界は Tailscale 等で管理者のみ）。認証は管理 UI のみ必須（患者 UI は発番トークン／セッションID）。
 - **監査/保持**：アクセス/操作ログは 180 日以上を目安に保存。問診データの保存期間は院内規程（原則 5 年以上）に準拠。
 - **個人情報**：PII 最小化。保存時に一部フィールド（氏名・生年月日）をアプリケーション層で暗号化可能な設計（KMS 代替として OS 保護のキー保管）。
@@ -20,7 +20,7 @@
 - **クライアント**：SPA（React/Vite/TypeScript）。患者フロー/管理フローを分離したルーティング。
 - **API**：FastAPI（Python）。同期 REST（§3 の API）＋バックグラウンドジョブ（要約等）。
 - **LLM ゲートウェイ**：LiteLLM もしくは OpenAI 互換 API（LM Studio / Ollama）。`LLMGateway` は HTTP 経由で呼び出し、モデル切替は設定で可能。
-- **データベース**：PoC は SQLite、本番は PostgreSQL（バイナリバックアップとスナップショット運用が容易）。
+- **データベース**：セッションは CouchDB に保存し、その他メタ情報は SQLite（本番運用では必要に応じ PostgreSQL へ移行）。
 - **リバースプロキシ**：Caddy または Nginx（**静的配信＋API リバースプロキシを兼務／プロキシA案**、LAN 内運用、管理UIは OIDC 優先／Basic はフォールバック）。
 - **監視/ログ**：アプリ構造化ログ（JSON）→ファイル。必要に応じ Uptime-Kuma（死活）を併用。
 - **バックアップ**：DB ダンプ（毎夜）＋スナップショット（QNAP/NAS）。復元手順を §8.1 に定義。
@@ -91,7 +91,7 @@
 #### 3.5 実装スタック選定（推奨）
 - **フロント**：React + Vite + TypeScript、UI コンポーネント（Chakra/Mantine いずれか）。フォームは React Hook Form + Zod で型/バリデーション統一。
 - **バックエンド**：FastAPI + SQLAlchemy/SQLModel + Pydantic v2。非同期 I/O。プロセスマネージャは Gunicorn（Uvicorn workers）。
-- **DB**：PostgreSQL（開発は SQLite 互換層で代替可）。スキーマ管理は Alembic。
+- **DB**：セッションは CouchDB、メタ情報は SQLite。スキーマ管理は必要に応じて Alembic。
 - **LLM**：LiteLLM（OpenAI 互換）経由で LM Studio / Ollama を切替。**初期値**：timeout=30s、max_tokens=128、`temperature` は 0.2（設定化）。
 - **テスト**：pytest、Playwright（E2E）、schemathesis（OpenAPI プロパティベーステスト）。
 - **CI/CD**：GitHub Actions でビルド/テスト → Docker イメージ発行（`stg`/`prod` タグ）。本番反映は手動 `docker compose pull && up -d`。
@@ -189,7 +189,7 @@
 #### 8.1 ロールバック手順（最小）
 1) 直近バックアップの確認（タイムスタンプとサイズ）。
 2) 本番を `docker compose down`（DB は停止のみ）。
-3) DB をバックアップ時点に復元（PostgreSQL：`psql` でリストア／SQLite：ファイル差し替え）。
+3) DB をバックアップ時点に復元（CouchDB：レプリケーションやツールで復元／SQLite：ファイル差し替え）。
 4) 直前の安定版イメージへ `docker compose pull && up -d`。
 5) 死活確認と主要導線の動作確認（患者フロー、管理テンプレ CRUD、要約）。
 

@@ -1,5 +1,14 @@
 version: "3.9"
 services:
+  couchdb:
+    image: couchdb:3
+    ports:
+      - "5984:5984"
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=admin
+    volumes:
+      - couchdb_data:/opt/couchdb/data
   backend:
     build:
       context: .
@@ -8,6 +17,13 @@ services:
       - ./backend/app:/app/app
     ports:
       - "8001:8001"
+    environment:
+      - COUCHDB_URL=http://couchdb:5984/
+      - COUCHDB_DB=monshin_sessions
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=admin
+    depends_on:
+      - couchdb
   frontend:
     build:
       context: .
@@ -16,3 +32,5 @@ services:
       - backend
     ports:
       - "5173:80"
+volumes:
+  couchdb_data:
