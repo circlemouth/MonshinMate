@@ -1,182 +1,129 @@
-# 問診メイト
+# MonshinMate（問診メイト）
 
-問診メイト は、問診票のテンプレート管理・患者回答の収集・LLM を使った追質問と要約を行う、最小構成のローカル実行システムです。バックエンドは FastAPI、フロントエンドは React (Vite + Chakra UI) で構成されています。
+MonshinMate は、診療所やクリニックのための「問診テンプレート管理」「患者回答収集」「LLM による追加質問とサマリー生成」「各種エクスポート（PDF/CSV/Markdown）」を提供するフルスタックのローカル実行システムです。バックエンドは FastAPI、フロントエンドは React（Vite + Chakra UI）で構成されています。
 
-## できること
-- 問診テンプレートの CRUD（ID と受診種別ごとに管理）
-- 患者回答のセッション管理（追質問の提示、最終要約の生成）
-- LLM 設定の取得・更新・疎通テスト（現状はスタブ実装）
+本 README はシステム全体像、主要機能、セットアップ（Docker を含む）、必要な環境変数、二段階認証（Authenticator/TOTP）、CouchDB を用いたデータ管理の概要をまとめています。
 
-## 前提環境
-- Python 3.11 以上（バックエンド）
-- Node.js 18 以上（フロントエンド開発用）。パッケージマネージャは npm/yarn/pnpm いずれか
+## 機能概要
+- 問診テンプレート管理: 初診/再診など受診種別ごとにテンプレートを作成・編集・複製・削除。項目ごとに型・必須・選択肢・条件表示・性別条件などを詳細設定。
+- セッション管理: 患者情報（氏名/生年月日/性別/受診種別）と回答を保存。固定項目の回答に加え、LLM が提示した「追加質問の質問文と回答」も保存。
+- LLM 連携: 固定フォームの不足項目に応じた追加質問の生成、最終サマリー（Markdown テキスト）の生成。OpenAI 互換 API/LM Studio/ollama 等の接続を想定（UI から設定）。
+- エクスポート: 問診結果を PDF / CSV / Markdown でダウンロード（単体・一括ZIP/CSV 集計に対応）。
+- 管理画面: テンプレート、セッション一覧、LLM 接続設定、見た目設定、ライセンス表示、セキュリティ設定（パスワード/二段階認証）。
+- 二段階認証（Authenticator/TOTP）: 管理者ログインに TOTP 対応。非常時のリセット導線や暗号化キーによるシークレット保護に対応。
+- データ管理: メタデータ（テンプレートや設定）は SQLite、セッションデータは CouchDB（環境変数で有効化）に保存。Docker Compose で CouchDB を同時起動可能。
+- 運用補助: ヘルスチェック（/healthz, /readyz）、OpenMetrics（/metrics）、監査ログ、保守ツール同梱。
 
-## クイックスタート（バックエンド）
-1) 仮想環境を作成・有効化し依存をインストール
-- macOS/Linux: `python3 -m venv venv && source venv/bin/activate`
-- Windows (PowerShell): `py -3 -m venv venv; venv\Scripts\Activate.ps1`
-- 依存インストール: `pip install -r <(cd backend && python - <<'PY'\nimport tomllib,sys;print('\n'.join(tomllib.load(open('backend/pyproject.toml','rb'))['project']['dependencies']))\nPY)`
-  - もしくは単純に `pip install fastapi uvicorn httpx pytest` を実行
+## システム構成
+- バックエンド: FastAPI（`backend/app/main.py`）。Uvicorn で `:8001` を公開。
+- フロントエンド: React + Vite + Chakra UI（`frontend/`）。開発は Vite、コンテナ配信は Nginx。
+- データベース:
+  - SQLite: `backend/app/app.sqlite3`（テンプレート・設定・監査ログ・管理ユーザーなど）
+  - CouchDB: セッション/回答を保存（`COUCHDB_URL` を設定すると使用）。
+- LLM ゲートウェイ: OpenAI 互換 API または ollama/LM Studio へ接続可能なスタブ実装（`backend/app/llm_gateway.py`）。モデル一覧取得や接続テスト API を提供。
+- Docker: `docker-compose.yml` で `couchdb`/`backend`/`frontend` を定義。
 
-2) API を起動
-- `cd backend`
-- `uvicorn app.main:app --reload`（デフォルトで `http://localhost:8001`）
-  - 初回アクセス時に `backend/app/app.sqlite3` が作成されます（テンプレートテーブルを自動初期化）
-
-3) 動作確認
-- `curl http://localhost:8001/healthz` → `{ "status": "ok" }`
-- `curl 'http://localhost:8001/questionnaires/default/template?visit_type=initial'`
-
-4) テスト実行
-- `cd backend && pytest`
-- 非同期テストが必要な場合は `pip install pytest-asyncio` を追加してください
-
-## クイックスタート（フロントエンド）
-1) 依存インストール
-- `cd frontend && npm install`（または `pnpm install` / `yarn`）
-
-2) バックエンドへのプロキシ設定（推奨）
-- Dev サーバーから API を叩くため、以下のように `frontend/vite.config.ts` を調整します。
-
-```ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    proxy: {
-      '/questionnaires': 'http://localhost:8001',
-      '/sessions': 'http://localhost:8001',
-      '/llm': 'http://localhost:8001',
-      '/healthz': 'http://localhost:8001',
-      '/readyz': 'http://localhost:8001',
-      '/metrics': 'http://localhost:8001',
-    },
-  },
-});
+## クイックスタート（Docker 推奨）
+1) リポジトリ直下でビルド/起動
 ```
-
-3) 開発サーバー起動
-- 別ターミナルでバックエンドを起動した状態で、`cd frontend && npm run dev`
-- ブラウザで `http://localhost:5173` を開きます
-  - 「問診フォーム」「管理画面」「LLM チャット」から各機能を確認できます
-
-## セットアップスクリプト（バックエンド+フロントエンド一括起動）
-開発環境を素早く立ち上げるために、Unix 系向けの `dev.sh` と Windows 向けの `dev.ps1` の 2 種類のセットアップスクリプトを用意しています。これらを実行するとバックエンドとフロントエンドが同時に起動します。
-
-```bash
-# macOS/Linux
-chmod +x dev.sh
-./dev.sh
-
-# Windows (PowerShell)
-powershell -File dev.ps1
-
-# もしくは Make を使用 (Unix 系)
-make dev
-```
-
-- バックエンド: `http://localhost:8001`
-- フロントエンド: `http://localhost:5173`
-- 停止は Ctrl-C（両プロセスをまとめて終了）
-
-## Docker での起動
-Docker Compose を利用すると依存関係を手動で準備せずに起動できます。
-
-```bash
 docker compose build
 docker compose up -d
 ```
 
+2) アクセス
 - フロントエンド: `http://localhost:5173`
-- バックエンド: `http://localhost:8001`
+- バックエンド API: `http://localhost:8001`
+- CouchDB 管理画面: `http://localhost:5984/_utils`（compose 既定は user/pass 共に `admin`）
 
-停止する場合:
+3) 初期ログインと設定
+- 管理ユーザー名は `admin` です。初期パスワードは環境変数 `ADMIN_PASSWORD`（未設定時は `admin`）。ログイン後に必ず変更してください。
+- 管理画面の「セキュリティ」で二段階認証（Authenticator）を有効化できます（QR スキャン→6 桁コード）。
+- 「LLM 設定」からベース URL・モデル名・API キー等を登録し、接続テストを実行してください。
 
-```bash
+停止/削除
+```
 docker compose down
 ```
 
-SQLite データベースは `backend/app/app.sqlite3` がホスト側にボリュームとして保存されます。
+補足
+- compose では `backend` に `COUCHDB_URL=http://couchdb:5984/` を渡しており、セッションは CouchDB に保存されます。テンプレート等は引き続き SQLite に保存されます。
 
-## 管理者パスワードの強制初期化（保守用スクリプト）
-バックエンドの DB に保存されている管理者（admin）パスワードを、TOTP を無効化したうえで強制的に初期化するメンテスクリプトを同梱しています。障害対応などで UI からのリセットが難しい場合にのみ使用してください。実行前に必ず DB のバックアップ（`backend/app/app.sqlite3`）を取得してください。
+## ローカル開発
+前提: Python 3.11+ / Node.js 18+
 
-- スクリプト: `backend/tools/reset_admin_password.py`
-- 効果:
-  - `users.username='admin'` の `hashed_password` を新しいパスワードで上書き（bcrypt）
-  - `is_initial_password=1` に設定（初期パスワード扱い）
-  - `is_totp_enabled=0`、`totp_secret=NULL` に設定（TOTP無効化）
-  - admin ユーザーが存在しない場合は作成
-
-実行方法（macOS/Linux 例）
-
-```bash
-# 対話的に実行（推奨）
-python3 backend/tools/reset_admin_password.py
-
-# 非対話（CI等）
-python3 backend/tools/reset_admin_password.py --password "NewSecurePass123!"
-
-# DB パスを明示する場合（省略時は MONSHINMATE_DB または backend/app/app.sqlite3）
-python3 backend/tools/reset_admin_password.py --db /path/to/app.sqlite3 --password "NewSecurePass123!"
+バックエンド（API）
 ```
-
-実行後の手順
-- `/admin/initial-password` または `/chat` の初回設定導線から新しいパスワードを設定
-- `/admin/security` で Authenticator（TOTP）の QR を再登録し、6桁コードで有効化
-
-依存に関する注意
-- 実行時に `passlib`/`bcrypt` のバージョン不整合で警告が出る場合は、仮想環境を有効化し以下を実行してください。
-
-```bash
-source venv/bin/activate
-pip install -U "passlib[bcrypt]>=1.7.4" "bcrypt>=4.0.1"
-python backend/tools/reset_admin_password.py
-deactivate
+cd backend
+python -m venv venv
+venv\Scripts\activate  # Windows（PowerShell）
+# または source venv/bin/activate  # macOS/Linux
+pip install --upgrade pip
+pip install -e .
+uvicorn app.main:app --reload --port 8001
 ```
+動作確認: `curl http://localhost:8001/healthz` → `{"status":"ok"}`
 
-## 監査ログと確認方法（開発向け）
-パスワードやTOTPの変更を追跡するため、開発環境では監査ログを出力しています（平文/ハッシュは記録しません）。
+フロントエンド（開発サーバ）
+```
+cd frontend
+npm install
+npm run dev
+# http://localhost:5173 を開く
+```
+開発サーバから API へは `frontend/vite.config.ts` のプロキシ設定で `http://localhost:8001` に転送します（既定で設定済み）。
 
-- ファイル出力: `backend/app/logs/security.log`（ローテーションあり）
-- DBテーブル: `audit_logs`
-  - 直近100件をダンプ: `python backend/tools/audit_dump.py`
-  - 件数指定: `python backend/tools/audit_dump.py --limit 200`
-  - 別DB指定: `MONSHINMATE_DB=/path/to/app.sqlite3 python backend/tools/audit_dump.py`
+一括起動（開発用ユーティリティ）
+- macOS/Linux: `./dev.sh` または `make dev`
+- Windows: `powershell -File dev.ps1`
 
-より詳しい手順は `docs/admin_system_setup.md` の「付録：監査ログの確認方法（開発向け）」を参照してください。
+## 環境変数（主要）
+- `ADMIN_PASSWORD`: 初期管理者パスワード（既定: `admin`）。初回起動判定にも使用。
+- `ADMIN_EMERGENCY_RESET_PASSWORD`: 非常用リセットパスワード。TOTP 無効時のみ UI のパスワードリセットで利用可。
+- `SECRET_KEY`: パスワードリセット用トークンの署名鍵（JWT）。本番では十分に強いランダム値を設定してください。
+- `MONSHINMATE_DB`: SQLite ファイルパス（既定: `backend/app/app.sqlite3`）。
+- `TOTP_ENC_KEY`: TOTP シークレット暗号化用キー（Fernet/32byte を URL-safe Base64 化）。本番必須。
+- `COUCHDB_URL`: CouchDB のベース URL（設定するとセッション保存が CouchDB に切替）。
+- `COUCHDB_DB`: 使用 DB 名（既定: `monshin_sessions`）。
+- `COUCHDB_USER`, `COUCHDB_PASSWORD`: CouchDB の認証情報。
 
-## 主要エンドポイント（抜粋）
-- `GET /healthz`: 死活監視
-- `GET /readyz`: 依存疎通の簡易チェック（DB/LLM）
-- `GET /questionnaires/{id}/template?visit_type=initial|followup`: テンプレ取得（未登録時は既定テンプレを返却）
-- `POST /questionnaires` (body: `{ id, visit_type, items[] }`): テンプレ作成/更新
-- `GET /questionnaires`: テンプレ id と visit_type の一覧
-- `DELETE /questionnaires/{id}?visit_type=...`: テンプレ削除
-- `POST /sessions` (body: `{ patient_name, dob, visit_type, answers{} }`): セッション作成
-- `POST /sessions/{session_id}/answer` (body: `{ item_id, answer }`): 回答を保存し、追質問を返却
-- `POST /sessions/{session_id}/finalize`: 要約を生成して返却
-- `GET /llm/settings` / `PUT /llm/settings` / `POST /llm/settings/test`: LLM 設定の取得・更新・疎通
+Docker Compose での既定値は `docker-compose.yml` と `backend/.env`（例）を参照してください。
 
-## データベース
-- SQLite を使用（ファイル: `backend/app/app.sqlite3`）。環境変数 `MONSHINMATE_DB` でパス上書き可能
-- アプリ起動時（FastAPI startup）にテンプレート用テーブルを自動作成
-- テスト環境など startup が走らない場合でも、テンプレ取得時にフォールバックを実装済み
+## 認証と二段階認証（Authenticator/TOTP）
+- 管理ログインはパスワード必須。初回は `admin`/`ADMIN_PASSWORD` でログインし、パスワードを変更してください。
+- 二段階認証は管理画面「セキュリティ」で有効化。QR を Authenticator アプリで読み取り、6 桁コードを登録します。
+- 非常時の復旧:
+  - TOTP が無効のとき: `ADMIN_EMERGENCY_RESET_PASSWORD` を設定していれば、UI から非常用パスワードでリセット可能。
+  - どうしても UI 操作ができない場合: `backend/tools/reset_admin_password.py` を実行（TOTP を無効化し初期化）。実行前に必ず DB をバックアップしてください。
+- セキュリティ強化:
+  - `TOTP_ENC_KEY` を設定して TOTP シークレットを暗号化保存。
+  - 重要操作は監査ログとして `backend/app/logs/security.log` と SQLite の `audit_logs` に記録（平文 PW/ハッシュは記録しません）。
 
-## 開発の流れと参考資料
-- 設計や仕様の背景は `docs/` を参照
-  - 実装状況は `docs/implementation.md` のチェックリストを更新
-- 作業時の方針
-  - コードやドキュメントは原則日本語で記述
-  - 変更後は `cd backend && pytest` でテストを通す
+## データ管理（SQLite + CouchDB）
+- 既定: すべて SQLite（`backend/app/app.sqlite3`）。
+- CouchDB 有効時（`COUCHDB_URL` を設定）: セッション/回答のみ CouchDB に保存。テンプレートや設定は引き続き SQLite。
+- CouchDB は `docker-compose.yml` で自動起動・ボリューム永続化（`couchdb_data`）。管理画面は `/_utils` から利用可能。
 
-## よくある質問
-- フロントから API に届かない: Vite のプロキシ設定が未設定の可能性。上記の `vite.config.ts` を設定してください
-- 既定テンプレはどこから来る？: アプリ起動時に `default/initial` と `default/followup` を投入します（不足時は固定の最小テンプレでフォールバック）
-- LLM は本当に使われる？: 現状はスタブ実装で、固定応答・簡易な追質問/要約を返します
+## エクスポート（PDF / CSV / Markdown）
+- 管理画面のセッション一覧で、各行のアイコンから単体の PDF/Markdown/CSV をダウンロード可能。
+- 一括出力ボタンで複数選択の ZIP（PDF/MD）または集計 CSV をダウンロード可能。
+- バックエンド API:
+  - `GET /admin/sessions/{id}/download/{fmt}`（`fmt=md|pdf|csv`）
+  - `GET /admin/sessions/bulk/download/{fmt}`（`ids=...`、MD/PDF は ZIP、CSV は1枚の集計）
+
+## 主な API（抜粋）
+- ライフチェック: `GET /healthz`, `GET /readyz`, `GET /metrics`
+- テンプレート: `GET/POST/DELETE /questionnaires...`、各種プロンプト設定 `.../summary-prompt`, `.../followup-prompt`
+- セッション: `POST /sessions`, `POST /sessions/{id}/answers`, `POST /sessions/{id}/llm-questions`, `POST /sessions/{id}/llm-answers`, `POST /sessions/{id}/finalize`
+- LLM 設定/テスト: `GET/PUT /llm/settings`, `POST /llm/settings/test`, `POST /llm/list-models`
+- 管理/セキュリティ: `POST /admin/login`, `POST /admin/password(change|reset/*)`, `GET/PUT /admin/totp/*`, `GET /admin/sessions`
+
+詳細仕様は `docs/session_api.md` および管理画面の公開ドキュメント（`frontend/public/docs/*.md`）を参照してください。
+
+## 保守ツール
+- `backend/tools/reset_admin_password.py`: 管理者パスワード強制リセット（TOTP 無効化含む）。
+- `backend/tools/audit_dump.py`: 監査ログのダンプ（`--limit`/`--db` 指定可）。
+- `backend/tools/encrypt_totp_secrets.py`: 既存 DB の TOTP シークレットを暗号化に移行。
 
 ## ライセンス
-- 本プロジェクトは GNU General Public License v3.0 (GPL-3.0) に基づき配布されます。
-- ライセンス本文はリポジトリルートの `LICENSE` を参照してください。管理画面からは「設定 > ライセンス」または `/admin/license` で閲覧できます。
+- 本プロジェクトは GNU GPL v3.0 に基づき公開されています。詳細はリポジトリ直下の `LICENSE` を参照してください。
+
