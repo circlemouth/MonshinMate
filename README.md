@@ -62,22 +62,43 @@ export default defineConfig({
 - ブラウザで `http://localhost:5173` を開きます
   - 「問診フォーム」「管理画面」「LLM チャット」から各機能を確認できます
 
-## 一括起動（バックエンド+フロントエンド）
-- ルートの `dev.sh` (Unix系) または `dev.ps1` (Windows) で両方を同時起動できます
-- Unix系環境では `make dev` も利用できます
+## セットアップスクリプト（バックエンド+フロントエンド一括起動）
+開発環境を素早く立ち上げるために、Unix 系向けの `dev.sh` と Windows 向けの `dev.ps1` の 2 種類のセットアップスクリプトを用意しています。これらを実行するとバックエンドとフロントエンドが同時に起動します。
 
 ```bash
-# Unix系
-chmod +x dev.sh && ./dev.sh
-# Windows
+# macOS/Linux
+chmod +x dev.sh
+./dev.sh
+
+# Windows (PowerShell)
 powershell -File dev.ps1
-# もしくは Make を使用 (Unix系)
+
+# もしくは Make を使用 (Unix 系)
 make dev
 ```
 
 - バックエンド: `http://localhost:8001`
 - フロントエンド: `http://localhost:5173`
 - 停止は Ctrl-C（両プロセスをまとめて終了）
+
+## Docker での起動
+Docker Compose を利用すると依存関係を手動で準備せずに起動できます。
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+- フロントエンド: `http://localhost:5173`
+- バックエンド: `http://localhost:8001`
+
+停止する場合:
+
+```bash
+docker compose down
+```
+
+SQLite データベースは `backend/app/app.sqlite3` がホスト側にボリュームとして保存されます。
 
 ## 管理者パスワードの強制初期化（保守用スクリプト）
 バックエンドの DB に保存されている管理者（admin）パスワードを、TOTP を無効化したうえで強制的に初期化するメンテスクリプトを同梱しています。障害対応などで UI からのリセットが難しい場合にのみ使用してください。実行前に必ず DB のバックアップ（`backend/app/app.sqlite3`）を取得してください。
