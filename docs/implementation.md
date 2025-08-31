@@ -735,3 +735,10 @@
 - [x] `docker-compose.yml` で両コンテナを一括起動可能にした。
 - [x] ドキュメント追加: `docs/docker_setup.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`（36件成功）
+
+## 89. 非常用パスワードによる管理者パスワードリセット（2025-12-13）
+- [x] 環境変数 `ADMIN_EMERGENCY_RESET_PASSWORD` を導入（TOTP 無効時のみ有効）。
+- [x] バックエンド: `POST /admin/password/reset/emergency` を実装。成功時に TOTP を無効化（シークレット消去）。
+- [x] フロント: `AdminPasswordReset.tsx` に非常用リセットフォーム、`AdminSecurity.tsx` に案内を追加。
+- [x] ドキュメント: `backend/.env.example` を追加し、`docs/admin_system_setup.md` と `frontend/public/docs/admin_system_setup.md` を更新。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`（36件成功）

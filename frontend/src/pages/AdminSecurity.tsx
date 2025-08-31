@@ -224,7 +224,10 @@ export default function AdminSecurity() {
               二段階認証を有効化する
             </Button>
             <Text fontSize="sm" color="gray.700">
-              パスワードをリセットするには二段階認証の有効化が必要です。セキュリティ強化のため有効化を推奨します。
+              セキュリティ強化のため二段階認証の有効化を推奨します。
+              なお、二段階認証が無効のときにサーバ環境変数 <code>ADMIN_EMERGENCY_RESET_PASSWORD</code> が設定されていれば、
+              「<RouterLink to="/admin/password/reset">パスワードリセット</RouterLink>」から非常用パスワードでリセットできます。未設定の場合は CLI の
+              <code>backend/tools/reset_admin_password.py</code> をサーバ上で実行してください。
             </Text>
           </VStack>
         ) : (

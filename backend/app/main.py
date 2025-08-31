@@ -1444,6 +1444,8 @@ class AdminAuthStatus(BaseModel):
     is_initial_password: bool
     is_totp_enabled: bool
     totp_mode: str | None = None
+    # 非常用リセット用の環境変数が構成されているか
+    emergency_reset_available: bool | None = None
 
 
 class TotpVerifyRequest(BaseModel):
@@ -1460,6 +1462,16 @@ class PasswordResetRequest(BaseModel):
 class PasswordResetConfirm(BaseModel):
     """パスワードリセットの確認。"""
     token: str
+    new_password: str
+
+class EmergencyPasswordResetRequest(BaseModel):
+    """非常用パスワードを用いたリセット要求。
+
+    二段階認証（TOTP）が無効の場合のみ使用可能。
+    環境変数 `ADMIN_EMERGENCY_RESET_PASSWORD` に設定されたパスワードと一致した場合、
+    管理者パスワードを新しい値に更新する。
+    """
+    emergency_password: str
     new_password: str
 
 
@@ -1486,6 +1498,7 @@ def get_admin_auth_status() -> AdminAuthStatus:
         is_initial_password=is_default_now,
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
         totp_mode=get_totp_mode("admin"),
+        emergency_reset_available=bool(os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")),
     )
     try:
         logging.getLogger("security").info(
@@ -1754,6 +1767,48 @@ def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
         logging.getLogger("security").warning("password_reset_confirmed username=admin")
     except Exception:
         pass
+    return {"status": "ok", "message": "Password has been reset successfully"}
+
+
+@app.post("/admin/password/reset/emergency")
+def emergency_password_reset(payload: EmergencyPasswordResetRequest) -> dict:
+    """TOTP 無効時に、環境変数ベースの非常用パスワードでリセットする。
+
+    前提:
+    - 環境変数 `ADMIN_EMERGENCY_RESET_PASSWORD` が設定されていること。
+    - 管理者の TOTP が無効（`is_totp_enabled=0` または `totp_mode='off'`）であること。
+    セキュリティ上、成功時には TOTP を無効化し、再設定を促す運用を想定する。
+    """
+    admin_user = get_user_by_username("admin")
+    if not admin_user:
+        raise HTTPException(status_code=500, detail="Admin user not found")
+
+    # TOTP が無効であることを確認
+    mode = get_totp_mode("admin")
+    if admin_user.get("is_totp_enabled") or mode != "off":
+        raise HTTPException(status_code=403, detail="Emergency reset is allowed only when TOTP is disabled")
+
+    emergency_pw = os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")
+    if not emergency_pw:
+        raise HTTPException(status_code=400, detail="Emergency reset password is not configured")
+
+    if payload.emergency_password != emergency_pw:
+        try:
+            logging.getLogger("security").warning("emergency_reset_failed_bad_password")
+        except Exception:
+            pass
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
+
+    # パスワード更新と TOTP の無効化（秘密のクリア）
+    update_password("admin", payload.new_password)
+    try:
+        set_totp_status("admin", enabled=False, clear_secret=True)
+        logging.getLogger("security").warning("emergency_password_reset username=admin")
+    except Exception:
+        logging.getLogger(__name__).exception("failed to disable totp on emergency reset")
     return {"status": "ok", "message": "Password has been reset successfully"}
 
 

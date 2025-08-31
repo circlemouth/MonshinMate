@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 interface AuthStatus {
   is_initial_password: boolean;
   is_totp_enabled: boolean;
+  emergency_reset_available?: boolean;
 }
 
 // Contextが提供する値の型定義
@@ -12,6 +13,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isInitialPassword: boolean;
   isTotpEnabled: boolean;
+  emergencyResetAvailable: boolean;
   showTotpSetup: boolean;
   setShowTotpSetup: (show: boolean) => void;
   login: (password: string, totpCode?: string) => Promise<boolean>;
@@ -28,6 +30,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isInitialPassword, setIsInitialPassword] = useState(false);
   const [isTotpEnabled, setIsTotpEnabled] = useState(false);
+  const [emergencyResetAvailable, setEmergencyResetAvailable] = useState(false);
   const [showTotpSetup, setShowTotpSetup] = useState(false);
 
   // NOTE: checkAuthStatus が再生成されると依存コンポーネントの useEffect が連続発火し、
@@ -43,6 +46,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const data: AuthStatus = await response.json();
         setIsInitialPassword(data.is_initial_password);
         setIsTotpEnabled(data.is_totp_enabled);
+        setEmergencyResetAvailable(Boolean(data.emergency_reset_available));
       } else {
         setIsAuthenticated(false);
       }
@@ -75,6 +79,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated,
     isInitialPassword,
     isTotpEnabled,
+    emergencyResetAvailable,
     showTotpSetup,
     setShowTotpSetup,
     login,
@@ -85,6 +90,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated,
     isInitialPassword,
     isTotpEnabled,
+    emergencyResetAvailable,
     showTotpSetup,
     login,
     logout,

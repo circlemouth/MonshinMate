@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast, PinInput, PinInputField, HStack } from '@chakra-ui/react';
+import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast, PinInput, PinInputField, HStack, Divider } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -12,7 +12,7 @@ export default function AdminPasswordReset() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
-  const { checkAuthStatus, isTotpEnabled, setShowTotpSetup } = useAuth();
+  const { checkAuthStatus, isTotpEnabled, emergencyResetAvailable, setShowTotpSetup } = useAuth();
 
   useEffect(() => {
     // 認証状態の確認で全画面ローディングが発生すると本画面が再マウントされ
@@ -20,20 +20,87 @@ export default function AdminPasswordReset() {
     checkAuthStatus(true);
   }, [checkAuthStatus]);
 
-  if (!isTotpEnabled) {
+  // 非TOTP時の非常用リセットフォーム用 state
+  const [emergencyPw, setEmergencyPw] = useState('');
+  const [emNewPw, setEmNewPw] = useState('');
+  const handleEmergencyReset = async () => {
+    if (!emergencyPw || emNewPw.length < 8) {
+      setError('非常用パスワードと新パスワード(8文字以上)を入力してください。');
+      return;
+    }
+    setIsLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/admin/password/reset/emergency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emergency_password: emergencyPw, new_password: emNewPw }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || 'パスワードの更新に失敗しました。');
+      }
+      toast({ title: 'パスワードがリセットされました。', status: 'success' });
+      navigate('/admin/login');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (!isTotpEnabled && !emergencyResetAvailable) {
     return (
       <Container centerContent pt={10}>
         <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
           <Heading size="lg">パスワードリセット</Heading>
-          <Text>
-            Authenticator を有効にしていないためパスワードリセットは行えません。パスワードを忘れた場合はシステムの初期化が必要です。
-            <br />
-            <code>backend/tools/reset_admin_password.py</code> を実行してください。
+          <Text fontSize="sm" color="gray.700">
+            二段階認証（Authenticator）が無効で、非常用パスワードも未構成です。
+            サーバ側で <code>ADMIN_EMERGENCY_RESET_PASSWORD</code> を設定できない場合は、管理者がサーバ上で次のスクリプトを実行してください。
           </Text>
-          <Box mt={4}>
-            <Button as={RouterLink} to="/admin/login" variant="link" size="sm">
-              ログイン画面に戻る
-            </Button>
+          <Box w="100%" bg="gray.50" borderRadius="md" p={3} fontFamily="monospace" fontSize="sm">
+            backend/tools/reset_admin_password.py
+          </Box>
+          <Text fontSize="xs" color="gray.600">
+            実行後は、管理者パスワードが再設定されます。セキュリティのため、完了後に二段階認証の再有効化を推奨します。
+          </Text>
+          <Divider />
+          {error && (<Text color="red.500" mt={2} fontSize="sm">{error}</Text>)}
+          <Box mt={2}>
+            <Button as={RouterLink} to="/admin/login" variant="link" size="sm">ログイン画面に戻る</Button>
+          </Box>
+        </VStack>
+      </Container>
+    );
+  }
+
+  if (!isTotpEnabled && emergencyResetAvailable) {
+    return (
+      <Container centerContent pt={10}>
+        <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
+          <Heading size="lg">パスワードリセット</Heading>
+          <Text fontSize="sm" color="gray.700">
+            二段階認証（Authenticator）が無効のため、非常用パスワードでのリセットを利用できます。
+            サーバの環境変数 <code>ADMIN_EMERGENCY_RESET_PASSWORD</code> に設定された値を入力してください。
+          </Text>
+          <Divider />
+          <FormControl isInvalid={!!error}>
+            <FormLabel>非常用リセットパスワード</FormLabel>
+            <Input type="password" value={emergencyPw} onChange={(e)=>setEmergencyPw(e.target.value)} />
+            <Text fontSize="xs" color="gray.600" mt={1}>
+              非常用リセットパスワードはサーバの環境変数 <code>ADMIN_EMERGENCY_RESET_PASSWORD</code> で設定されています。
+            </Text>
+          </FormControl>
+          <FormControl isInvalid={!!error}>
+            <FormLabel>新しいパスワード</FormLabel>
+            <Input type="password" value={emNewPw} onChange={(e)=>setEmNewPw(e.target.value)} />
+          </FormControl>
+          <Button colorScheme="primary" onClick={handleEmergencyReset} isLoading={isLoading} width="100%">
+            非常用パスワードでリセット
+          </Button>
+          {error && (<Text color="red.500" mt={2} fontSize="sm">{error}</Text>)}
+          <Box mt={2}>
+            <Button as={RouterLink} to="/admin/login" variant="link" size="sm">ログイン画面に戻る</Button>
           </Box>
         </VStack>
       </Container>
