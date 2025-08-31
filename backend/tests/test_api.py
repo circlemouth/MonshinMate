@@ -352,6 +352,46 @@ def test_admin_session_download() -> None:
         assert len(r.content) > 0
 
 
+def test_admin_bulk_download() -> None:
+    """複数セッションの一括ダウンロードが各形式で成功することを確認する。"""
+    on_startup()
+    # セッションを2件作成・確定
+    payload1 = {
+        "patient_name": "一括太郎1",
+        "dob": "1980-01-01",
+        "gender": "male",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "腹痛"},
+    }
+    payload2 = {
+        "patient_name": "一括太郎2",
+        "dob": "1990-02-02",
+        "gender": "female",
+        "visit_type": "followup",
+        "answers": {"chief_complaint": "頭痛"},
+    }
+    r1 = client.post("/sessions", json=payload1)
+    r2 = client.post("/sessions", json=payload2)
+    assert r1.status_code == 200 and r2.status_code == 200
+    sid1 = r1.json()["id"]
+    sid2 = r2.json()["id"]
+    assert client.post(f"/sessions/{sid1}/finalize").status_code == 200
+    assert client.post(f"/sessions/{sid2}/finalize").status_code == 200
+
+    # CSV は単一CSVとして返る
+    r_csv = client.get("/admin/sessions/bulk/download/csv", params=[("ids", sid1), ("ids", sid2)])
+    assert r_csv.status_code == 200
+    assert r_csv.headers["content-type"].startswith("text/csv")
+    assert len(r_csv.content) > 0
+
+    # MD/PDF は ZIP で返る
+    for fmt in ("md", "pdf"):
+        r_zip = client.get(f"/admin/sessions/bulk/download/{fmt}", params=[("ids", sid1), ("ids", sid2)])
+        assert r_zip.status_code == 200
+        assert r_zip.headers["content-type"].startswith("application/zip")
+        assert len(r_zip.content) > 0
+
+
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
     on_startup()

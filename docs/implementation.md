@@ -742,3 +742,10 @@
 - [x] フロント: `AdminPasswordReset.tsx` に非常用リセットフォーム、`AdminSecurity.tsx` に案内を追加。
 - [x] ドキュメント: `backend/.env.example` を追加し、`docs/admin_system_setup.md` と `frontend/public/docs/admin_system_setup.md` を更新。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`（36件成功）
+
+## 90. 一括ダウンロードの404不具合修正（2025-08-31）
+- [x] 事象: `/admin/sessions/bulk/download/{fmt}` で `{"detail":"session not found"}` が返る（PDF/CSV/MD 全て）。
+- [x] 原因: ルーティング競合により `/admin/sessions/{session_id}/download/{fmt}` が優先マッチしていた。
+- [x] 対応: バルク用エンドポイント（`/admin/sessions/bulk/download/{fmt}`）を定義順で先に評価される位置へ移動（`backend/app/main.py`）。
+- [x] テスト追加: `tests/test_api.py::test_admin_bulk_download` を追加し、CSVは単一CSV、MD/PDFはZIP返却を検証。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`（37件成功）
