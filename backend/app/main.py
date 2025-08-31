@@ -1258,15 +1258,88 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
         raise
     except Exception:
         logger.exception("llm_settings_post_update_check_failed")
-
     return llm_gateway.settings
 
 
-@app.post("/llm/settings/test")
-def test_llm_settings() -> dict:
-    """LLM 接続テスト（スタブ）。"""
-    return llm_gateway.test_connection()
+def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) -> list[str]:
+    """セッション情報からMarkdown形式の行リストを生成する。"""
+    lines = [
+        "# 問診結果",
+        "",
+        "## 患者情報",
+        f"- 患者名: {s['patient_name']}",
+        f"- 生年月日: {s['dob']}",
+        f"- 受診種別: {vt_label}",
+        f"- テンプレートID: {s['questionnaire_id']}",
+        "",
+        "## 回答",
+    ]
+    for label, ans in rows:
+        lines.append(f"- {label}: {ans or '未回答'}")
+    if s.get("summary"):
+        lines.append("")
+        lines.append("## 自動生成サマリー")
+        lines.extend(str(s["summary"]).splitlines())
+    return lines
 
+
+def markdown_to_pdf(lines: list[str]) -> bytes:
+    """Markdown形式の行リストを簡易フォーマットでPDFに変換する。"""
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
+    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    normal_font = "HeiseiMin-W3"
+    bold_font = "HeiseiKakuGo-W5"
+    y = 800
+
+    def new_page() -> None:
+        nonlocal y
+        c.showPage()
+        y = 800
+
+    def write_line(text: str, font: str = normal_font, size: int = 12, x: int = 40) -> None:
+        nonlocal y
+        c.setFont(font, size)
+        c.drawString(x, y, text)
+        y -= size + 2
+        if y < 40:
+            new_page()
+
+    for line in lines:
+        if line.startswith("## "):
+            write_line(line[3:], bold_font, 14)
+            y -= 2
+        elif line.startswith("# "):
+            write_line(line[2:], bold_font, 16)
+            y -= 4
+        elif line.startswith("- "):
+            content = line[2:]
+            if ": " in content:
+                label, value = content.split(": ", 1)
+                c.setFont(normal_font, 12)
+                c.drawString(60, y, "・")
+                x = 60 + c.stringWidth("・", normal_font, 12)
+                c.setFont(bold_font, 12)
+                c.drawString(x, y, label)
+                x += c.stringWidth(label, bold_font, 12)
+                c.setFont(normal_font, 12)
+                c.drawString(x, y, f": {value}")
+                y -= 14
+                if y < 40:
+                    new_page()
+            else:
+                c.setFont(normal_font, 12)
+                c.drawString(60, y, f"・ {content}")
+                y -= 14
+                if y < 40:
+                    new_page()
+        else:
+            write_line(line)
+
+    c.save()
+    buf.seek(0)
+    return buf.getvalue()
 
 class ListModelsRequest(BaseModel):
     """モデル一覧取得リクエスト。"""
@@ -2235,6 +2308,7 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
         return rows, vt_label
 
+
     # CSV は「全件を1枚の集計CSV」で返す
     if fmt == "csv":
         sbuf = io.StringIO()
@@ -2275,59 +2349,13 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
                 continue
             rows, vt_label = build_rows(s)
             base = sanitize_filename(f"{s.get('patient_name','')}_{s.get('dob','')}_{sid}")
+            lines = build_markdown_lines(s, rows, vt_label)
             if fmt == "md":
-                lines = [
-                    "# 問診結果",
-                    "",
-                    "## 患者情報",
-                    f"- 患者名: {s['patient_name']}",
-                    f"- 生年月日: {s['dob']}",
-                    f"- 受診種別: {vt_label}",
-                    f"- テンプレートID: {s['questionnaire_id']}",
-                    "",
-                    "## 回答",
-                ]
-                for label, ans in rows:
-                    lines.append(f"- {label}: {ans or '未回答'}")
-                if s.get("summary"):
-                    lines.extend(["", "## 自動生成サマリー", str(s["summary"])])
                 content = "\n".join(lines).encode("utf-8")
                 zf.writestr(f"{base}.md", content)
             elif fmt == "pdf":
-                pbuf = io.BytesIO()
-                pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
-                c = canvas.Canvas(pbuf, pagesize=A4)
-                c.setFont("HeiseiMin-W3", 12)
-                y = 800
-
-                def write_line(text: str) -> None:
-                    nonlocal y
-                    c.drawString(40, y, text)
-                    y -= 14
-                    if y < 40:
-                        c.showPage()
-                        c.setFont("HeiseiMin-W3", 12)
-                        y = 800
-
-                write_line("問診結果")
-                write_line("")
-                write_line("患者情報")
-                write_line(f"患者名: {s['patient_name']}")
-                write_line(f"生年月日: {s['dob']}")
-                write_line(f"受診種別: {vt_label}")
-                write_line(f"テンプレートID: {s['questionnaire_id']}")
-                write_line("")
-                write_line("回答")
-                for label, ans in rows:
-                    write_line(f"{label}: {ans or '未回答'}")
-                if s.get("summary"):
-                    write_line("")
-                    write_line("自動生成サマリー")
-                    for line in str(s["summary"]).splitlines():
-                        write_line(line)
-                c.save()
-                pbuf.seek(0)
-                zf.writestr(f"{base}.pdf", pbuf.getvalue())
+                pdf_bytes = markdown_to_pdf(lines)
+                zf.writestr(f"{base}.pdf", pdf_bytes)
 
     zip_buf.seek(0)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -2366,22 +2394,8 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
     vt = s.get("visit_type")
     vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
 
+    lines = build_markdown_lines(s, rows, vt_label)
     if fmt == "md":
-        lines = [
-            "# 問診結果",
-            "",
-            "## 患者情報",
-            f"- 患者名: {s['patient_name']}",
-            f"- 生年月日: {s['dob']}",
-            f"- 受診種別: {vt_label}",
-            f"- テンプレートID: {s['questionnaire_id']}",
-            "",
-            "## 回答",
-        ]
-        for label, ans in rows:
-            lines.append(f"- {label}: {ans or '未回答'}")
-        if s.get("summary"):
-            lines.extend(["", "## 自動生成サマリー", s["summary"]])
         content = "\n".join(lines)
         return Response(
             content,
@@ -2401,41 +2415,9 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.csv"},
         )
     if fmt == "pdf":
-        buf = io.BytesIO()
-        pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
-        c = canvas.Canvas(buf, pagesize=A4)
-        c.setFont("HeiseiMin-W3", 12)
-        y = 800
-
-        def write_line(text: str) -> None:
-            nonlocal y
-            c.drawString(40, y, text)
-            y -= 14
-            if y < 40:
-                c.showPage()
-                c.setFont("HeiseiMin-W3", 12)
-                y = 800
-
-        write_line("問診結果")
-        write_line("")
-        write_line("患者情報")
-        write_line(f"患者名: {s['patient_name']}")
-        write_line(f"生年月日: {s['dob']}")
-        write_line(f"受診種別: {vt_label}")
-        write_line(f"テンプレートID: {s['questionnaire_id']}")
-        write_line("")
-        write_line("回答")
-        for label, ans in rows:
-            write_line(f"{label}: {ans or '未回答'}")
-        if s.get("summary"):
-            write_line("")
-            write_line("自動生成サマリー")
-            for line in str(s["summary"]).splitlines():
-                write_line(line)
-        c.save()
-        buf.seek(0)
+        pdf_bytes = markdown_to_pdf(lines)
         return StreamingResponse(
-            buf,
+            io.BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.pdf"},
         )
