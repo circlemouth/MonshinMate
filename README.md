@@ -1,4 +1,6 @@
 # MonshinMate（問診メイト）
+<img width="1366" height="768" alt="問診メイト" src="https://github.com/user-attachments/assets/c741390c-55f5-48a1-8da2-37bd1e11082d" />
+
 
 MonshinMate は、診療所やクリニックのための「問診テンプレート管理」「患者回答収集」「LLM による追加質問とサマリー生成」「各種エクスポート（PDF/CSV/Markdown）」を提供するフルスタックのローカル実行システムです。バックエンドは FastAPI、フロントエンドは React（Vite + Chakra UI）で構成されています。
 
