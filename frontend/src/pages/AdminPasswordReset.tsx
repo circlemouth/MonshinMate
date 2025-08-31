@@ -80,7 +80,7 @@ export default function AdminPasswordReset() {
         <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
           <Heading size="lg">パスワードリセット</Heading>
           <Text fontSize="sm" color="gray.700">
-            二段階認証（Authenticator）が無効のため、非常用パスワードでのリセットを利用できます。
+            二段階認証（Authenticator）が無効のため、非常用パスワードでのリセットします。
             サーバの環境変数 <code>ADMIN_EMERGENCY_RESET_PASSWORD</code> に設定された値を入力してください。
           </Text>
           <Divider />

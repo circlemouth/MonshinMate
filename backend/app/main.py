@@ -12,6 +12,11 @@ import zipfile
 import re
 import csv
 import json
+try:
+    from dotenv import load_dotenv
+except Exception:  # ランタイム環境に dotenv が無い場合でも起動を継続
+    def load_dotenv(*_args, **_kwargs):  # type: ignore
+        return False
 
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query
 from fastapi.responses import StreamingResponse
@@ -65,6 +70,10 @@ from .structured_context import StructuredContextManager
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+# .env の読み込み（backend/.env を優先的に参照）
+_BASE_DIR = Path(__file__).resolve().parents[1]
+load_dotenv(_BASE_DIR / ".env")
 
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")

@@ -10,9 +10,20 @@ export default defineConfig({
     {
       name: 'spa-admin-fallback',
       configureServer(server) {
-        const apiPrefixes = ['/admin/auth', '/admin/password', '/admin/login', '/admin/totp', '/admin/sessions'];
+        const apiPrefixes = ['/admin/auth', '/admin/login', '/admin/totp', '/admin/sessions', '/admin/password'];
         server.middlewares.use(async (req, res, next) => {
           const url = req.url || '';
+          // リセット画面（/admin/password/reset）はフロントのSPAルートとして index.html を返す
+          if (url === '/admin/password/reset') {
+            try {
+              const indexPath = path.resolve(process.cwd(), 'frontend', 'index.html');
+              const htmlRaw = fs.readFileSync(indexPath, 'utf-8');
+              const html = await server.transformIndexHtml(url, htmlRaw);
+              res.setHeader('Content-Type', 'text/html');
+              res.end(html);
+              return;
+            } catch {}
+          }
           if (url.startsWith('/admin') && !apiPrefixes.some((p) => url.startsWith(p))) {
             try {
               const indexPath = path.resolve(process.cwd(), 'frontend', 'index.html');

@@ -24,8 +24,9 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
   const [totpRequired, setTotpRequired] = useState(false);
   const [totpCode, setTotpCode] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
   const navigate = useNavigate();
-  const { checkAuthStatus, isTotpEnabled } = useAuth();
+  const { checkAuthStatus, isTotpEnabled, emergencyResetAvailable } = useAuth();
 
   const handleLogin = async () => {
     setError('');
@@ -47,12 +48,14 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
       }
 
       sessionStorage.setItem('adminLoggedIn', '1');
+      setFailedAttempts(0);
       await checkAuthStatus(true); // AuthContextの状態を更新
       onSuccess?.();
       navigate('/admin/templates');
 
     } catch (e: any) {
       setError(e.message);
+      setFailedAttempts((n) => n + 1);
     } finally {
       setLoading(false);
     }
@@ -105,13 +108,7 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
               />
             </FormControl>
             <HStack justify="space-between" width="100%">
-              {isTotpEnabled ? (
-                <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm">
-                  パスワードをお忘れですか？
-                </Button>
-              ) : (
-                <Box />
-              )}
+              <Box />
               <Button onClick={handleLogin} colorScheme="primary" isLoading={loading}>
                 ログイン
               </Button>
@@ -144,7 +141,30 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
           </>
         )}
         {error && (
-          <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
+          <>
+            <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
+            {failedAttempts >= 3 && (
+              <>
+                {isTotpEnabled && (
+                  <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm" display="block" mx="auto">
+                    パスワードをお忘れですか？
+                  </Button>
+                )}
+                {!isTotpEnabled && emergencyResetAvailable && (
+                  <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm" display="block" mx="auto">
+                    非常用パスワードでリセット
+                  </Button>
+                )}
+                {!isTotpEnabled && !emergencyResetAvailable && error.includes('パスワードが間違っています') && (
+                  <Text fontSize="xs" color="gray.600" textAlign="center" width="100%" mt={2}>
+                    リセットには二段階認証の有効化、またはサーバ上で
+                    <code> backend/tools/reset_admin_password.py </code>
+                    の実行が必要です。
+                  </Text>
+                )}
+              </>
+            )}
+          </>
         )}
       </VStack>
   );

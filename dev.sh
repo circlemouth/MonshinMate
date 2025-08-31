@@ -37,6 +37,14 @@ echo "[setup] backend の依存関係をインストールします"
 echo "[start] backend: http://localhost:8001"
 (
   cd "$ROOT_DIR/backend"
+  # backend/.env があれば読み込んで環境変数をエクスポート
+  # 開発時の非常用リセットパスワードなどを反映させるため
+  set -a
+  if [[ -f .env ]]; then
+    # shellcheck source=/dev/null
+    . ./.env
+  fi
+  set +a
   exec uvicorn app.main:app --reload --port 8001
 ) &
 BACKEND_PID=$!

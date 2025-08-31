@@ -108,6 +108,13 @@ export default function App() {
   const isChatPage = location.pathname === '/chat';
   const isAdminPage = location.pathname.startsWith('/admin');
 
+  // パスワードリセット画面へ遷移した場合は、ログイン用モーダルを閉じる
+  useEffect(() => {
+    if (location.pathname.startsWith('/admin/password/reset')) {
+      closeLogin();
+    }
+  }, [location.pathname]);
+
   // --- 強制表示ロジック（患者対話画面に限定） ---
   if (isLoading) {
     return (

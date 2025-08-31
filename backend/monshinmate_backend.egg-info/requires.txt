@@ -7,3 +7,4 @@ qrcode[pil]
 python-jose[cryptography]
 cryptography
 reportlab
+python-dotenv
