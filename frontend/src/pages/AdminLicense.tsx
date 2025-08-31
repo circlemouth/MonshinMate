@@ -3,14 +3,14 @@ import { Box, Spinner, Text } from '@chakra-ui/react';
 
 /**
  * 管理画面: ライセンス本文表示ページ。
- * `frontend/public/docs/LICENSE_GPL-3.0.md` を取得して最小Markdownで表示する。
+ * ルート `/LICENSE` を取得して最小Markdownで表示する。
  */
 export default function AdminLicense() {
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetch('/docs/LICENSE_GPL-3.0.md')
+    fetch('/LICENSE')
       .then((res) => {
         if (!res.ok) throw new Error();
         return res.text();
@@ -74,4 +74,3 @@ export default function AdminLicense() {
     />
   );
 }
-
