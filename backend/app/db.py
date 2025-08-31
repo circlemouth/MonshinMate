@@ -1,12 +1,14 @@
-"""SQLite ベースの簡易永続化レイヤー。
+"""永続化レイヤー。
 
-テンプレート・セッション・回答を管理する。
+テンプレート・セッション・回答を管理する。既定では SQLite を使用するが、
+環境変数で CouchDB を指定した場合はセッション情報のみ CouchDB に保存する。
 """
 from __future__ import annotations
 
 import json
 import os
 import sqlite3
+import couchdb
 from pathlib import Path
 from datetime import datetime, UTC
 from typing import Any, Iterable
@@ -30,6 +32,24 @@ fernet = Fernet(FERNET_KEY)
 
 # パスワードハッシュ化のコンテキスト
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# CouchDB 設定
+COUCHDB_URL = os.getenv("COUCHDB_URL")
+COUCHDB_DB_NAME = os.getenv("COUCHDB_DB", "monshin_sessions")
+COUCHDB_USER = os.getenv("COUCHDB_USER")
+COUCHDB_PASSWORD = os.getenv("COUCHDB_PASSWORD")
+couch_db = None
+if COUCHDB_URL:
+    try:
+        _server = couchdb.Server(COUCHDB_URL)
+        if COUCHDB_USER and COUCHDB_PASSWORD:
+            _server.resource.credentials = (COUCHDB_USER, COUCHDB_PASSWORD)
+        try:
+            couch_db = _server[COUCHDB_DB_NAME]
+        except couchdb.http.ResourceNotFound:
+            couch_db = _server.create(COUCHDB_DB_NAME)
+    except Exception:
+        couch_db = None
 
 
 def _dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -636,6 +656,27 @@ def delete_template(template_id: str, visit_type: str, db_path: str = DEFAULT_DB
 
 def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
     """セッション情報と回答を保存する。"""
+    if couch_db:
+        doc = {
+            "_id": session.id,
+            "patient_name": session.patient_name,
+            "dob": session.dob,
+            "gender": session.gender,
+            "visit_type": session.visit_type,
+            "questionnaire_id": session.questionnaire_id,
+            "answers": session.answers,
+            "summary": session.summary,
+            "remaining_items": session.remaining_items,
+            "completion_status": session.completion_status,
+            "attempt_counts": session.attempt_counts,
+            "additional_questions_used": session.additional_questions_used,
+            "max_additional_questions": session.max_additional_questions,
+            "followup_prompt": session.followup_prompt,
+            "finalized_at": session.finalized_at.isoformat() if session.finalized_at else None,
+            "llm_question_texts": getattr(session, "llm_question_texts", {}) or {},
+        }
+        couch_db.save(doc)
+        return
     conn = get_conn(db_path)
     try:
         conn.execute(
@@ -719,6 +760,30 @@ def list_sessions(
 
     検索条件が指定された場合はそれに応じてフィルタする。
     """
+    if couch_db:
+        docs = [r.doc for r in couch_db.view("_all_docs", include_docs=True)]
+        result: list[dict[str, Any]] = []
+        for d in docs:
+            if patient_name and patient_name not in d.get("patient_name", ""):
+                continue
+            if dob and dob != d.get("dob"):
+                continue
+            f_at = d.get("finalized_at")
+            if start_date and f_at and f_at < f"{start_date}T00:00:00":
+                continue
+            if end_date and f_at and f_at > f"{end_date}T23:59:59":
+                continue
+            result.append(
+                {
+                    "id": d.get("_id"),
+                    "patient_name": d.get("patient_name"),
+                    "dob": d.get("dob"),
+                    "visit_type": d.get("visit_type"),
+                    "finalized_at": d.get("finalized_at"),
+                }
+            )
+        result.sort(key=lambda x: x.get("finalized_at") or "", reverse=True)
+        return result
     conn = get_conn(db_path)
     try:
         query = "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions"
@@ -750,6 +815,12 @@ def list_sessions(
 
 def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     """DB からセッションを取得する。"""
+    if couch_db:
+        doc = couch_db.get(session_id)
+        if not doc:
+            return None
+        doc["id"] = doc.pop("_id")
+        return doc
     conn = get_conn(db_path)
     try:
         srow = conn.execute(

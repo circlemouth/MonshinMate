@@ -49,7 +49,7 @@
   - `finalized_at` (str): ISO8601形式の確定時刻
   - `status` (str): `finalized`
 
-※ セッションと回答は SQLite に永続化される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象（`session_responses.question_text`）。
+※ セッションと回答は既定で CouchDB に保存される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象。環境変数 `COUCHDB_URL` を設定しない場合は従来通り SQLite に保存される。`COUCHDB_URL` に認証情報を含めない場合は、`COUCHDB_USER` と `COUCHDB_PASSWORD` を併せて設定する。
 
 ## GET /llm/settings
 - 概要: 現在の LLM 設定を取得する。
