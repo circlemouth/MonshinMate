@@ -765,3 +765,9 @@
 - [x] ドキュメント更新: `docs/session_api.md`, `internal_docs/docker_setup.md`, `backend/.env copy.example`。
 - [x] 認証情報を `COUCHDB_USER` / `COUCHDB_PASSWORD` で指定可能にし、URLから分離。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`（37件成功）。
+
+## 92. PDF出力の見やすさ改善（2025-12-14）
+- [x] PDF出力をMarkdownベースのセクション・太字・箇条書きで整形し、視認性を向上。
+- [x] 変更（バックエンド）: `backend/app/main.py`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `ADMIN_PASSWORD=admin .venv/bin/pytest -q`（37件成功）
