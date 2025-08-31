@@ -1,9 +1,11 @@
 """LLM ゲートウェイのスタブ実装。"""
+from __future__ import annotations
 
 from typing import Any
 import time
 import logging
 import json
+import threading
 
 from pydantic import BaseModel
 import httpx
@@ -42,6 +44,23 @@ class LLMGateway:
 
     def __init__(self, settings: LLMSettings) -> None:
         self.settings = settings
+        # セッション単位での直列化用ロック
+        self._locks: dict[str, threading.RLock] = {}
+        self._locks_guard = threading.Lock()
+
+    def _get_lock(self, key: str | None) -> threading.RLock | None:
+        if not key:
+            return None
+        # RLock を使い再入可能に（同一スレッド内の入れ子を許容）
+        lock = self._locks.get(key)
+        if lock is None:
+            # 競合を避けるために辞書更新時はガード
+            with self._locks_guard:
+                lock = self._locks.get(key)
+                if lock is None:
+                    self._locks[key] = threading.RLock()
+                    lock = self._locks[key]
+        return lock
 
     def update_settings(self, settings: LLMSettings) -> None:
         """設定値を更新する。"""
@@ -220,7 +239,12 @@ class LLMGateway:
         return result
 
     def generate_followups(
-        self, context: dict[str, Any], max_questions: int, prompt: str | None = None
+        self,
+        context: dict[str, Any],
+        max_questions: int,
+        prompt: str | None = None,
+        lock_key: str | None = None,
+        retry: int = 1,
     ) -> list[str]:
         """ユーザー回答全体を基に追加質問を生成する。"""
         s = self.settings
@@ -230,7 +254,9 @@ class LLMGateway:
             "{max_questions}", str(max_questions)
         )
         if s.base_url:
-            try:
+            # セッション単位の直列化
+            lock = self._get_lock(lock_key)
+            def _attempt() -> list[str]:
                 timeout = httpx.Timeout(15.0)
                 # プロバイダごとに構造化出力（JSON Schema）を強制する
                 if s.provider == "ollama":
@@ -309,10 +335,24 @@ class LLMGateway:
                         if isinstance(arr, list):
                             return [str(x) for x in arr][:max_questions]
                     raise RuntimeError("invalid structured response from lm studio")
+            # ロック内で実行し、失敗時は1回だけリトライ
+            try:
+                if lock:
+                    with lock:
+                        return _attempt()
+                return _attempt()
             except Exception as e:  # noqa: BLE001
-                logging.getLogger("llm").exception(
-                    "generate_followups_failed: %s", e
-                )
+                logging.getLogger("llm").warning("generate_followups attempt failed: %s", e)
+                if retry > 0:
+                    time.sleep(0.4)
+                    try:
+                        if lock:
+                            with lock:
+                                return _attempt()
+                        return _attempt()
+                    except Exception as e2:  # noqa: BLE001
+                        logging.getLogger("llm").exception("generate_followups retry failed: %s", e2)
+                # リトライも失敗した場合は呼び出し側でスキップさせるため送出
                 raise
         # スタブ実装：固定的な質問を返す
         return [f"追加質問{idx + 1}" for idx in range(max_questions)]
@@ -427,6 +467,8 @@ class LLMGateway:
         system_prompt: str,
         answers: dict[str, Any],
         labels: dict[str, str] | None = None,
+        lock_key: str | None = None,
+        retry: int = 1,
     ) -> str:
         """カスタムのシステムプロンプトと問診回答を用いてサマリーを生成する。
 
@@ -444,59 +486,79 @@ class LLMGateway:
 
             # リモート可能なら OpenAI/Ollama 互換のチャットで生成
             if s.enabled and s.base_url:
-                timeout = httpx.Timeout(20.0)
-                if s.provider == "ollama":
-                    url = s.base_url.rstrip("/") + "/api/chat"
-                    messages = []
-                    if system_prompt:
-                        messages.append({"role": "system", "content": system_prompt})
-                    messages.append({
-                        "role": "user",
-                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
-                    })
-                    payload: dict[str, Any] = {
-                        "model": s.model,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {"temperature": s.temperature},
-                    }
-                    r = httpx.post(url, json=payload, timeout=timeout)
-                    r.raise_for_status()
-                    data = r.json()
-                    content = (
-                        (data.get("message") or {}).get("content")
-                        or data.get("response")
-                        or ""
-                    )
-                    if content:
-                        return content
-                else:
-                    url = s.base_url.rstrip("/") + "/v1/chat/completions"
-                    headers = {"Content-Type": "application/json"}
-                    if s.api_key:
-                        headers["Authorization"] = f"Bearer {s.api_key}"
-                    messages = []
-                    if system_prompt:
-                        messages.append({"role": "system", "content": system_prompt})
-                    messages.append({
-                        "role": "user",
-                        "content": f"以下の問診回答を要約してください。\n{pairs_text}",
-                    })
-                    payload = {
-                        "model": s.model,
-                        "messages": messages,
-                        "temperature": s.temperature,
-                        "stream": False,
-                    }
-                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-                    r.raise_for_status()
-                    data = r.json()
-                    choices = data.get("choices") or []
-                    if choices:
-                        msg = choices[0].get("message") or {}
-                        content = msg.get("content") or ""
+                lock = self._get_lock(lock_key)
+                def _attempt() -> str:
+                    timeout = httpx.Timeout(20.0)
+                    if s.provider == "ollama":
+                        url = s.base_url.rstrip("/") + "/api/chat"
+                        messages = []
+                        if system_prompt:
+                            messages.append({"role": "system", "content": system_prompt})
+                        messages.append({
+                            "role": "user",
+                            "content": f"以下の問診回答を要約してください。\n{pairs_text}",
+                        })
+                        payload: dict[str, Any] = {
+                            "model": s.model,
+                            "messages": messages,
+                            "stream": False,
+                            "options": {"temperature": s.temperature},
+                        }
+                        r = httpx.post(url, json=payload, timeout=timeout)
+                        r.raise_for_status()
+                        data = r.json()
+                        content = (
+                            (data.get("message") or {}).get("content")
+                            or data.get("response")
+                            or ""
+                        )
                         if content:
                             return content
+                        raise RuntimeError("empty content from ollama summary")
+                    else:
+                        url = s.base_url.rstrip("/") + "/v1/chat/completions"
+                        headers = {"Content-Type": "application/json"}
+                        if s.api_key:
+                            headers["Authorization"] = f"Bearer {s.api_key}"
+                        messages = []
+                        if system_prompt:
+                            messages.append({"role": "system", "content": system_prompt})
+                        messages.append({
+                            "role": "user",
+                            "content": f"以下の問診回答を要約してください。\n{pairs_text}",
+                        })
+                        payload = {
+                            "model": s.model,
+                            "messages": messages,
+                            "temperature": s.temperature,
+                            "stream": False,
+                        }
+                        r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                        r.raise_for_status()
+                        data = r.json()
+                        choices = data.get("choices") or []
+                        if choices:
+                            msg = choices[0].get("message") or {}
+                            content = msg.get("content") or ""
+                            if content:
+                                return content
+                        raise RuntimeError("empty content from lm studio summary")
+                try:
+                    if lock:
+                        with lock:
+                            return _attempt()
+                    return _attempt()
+                except Exception as e:
+                    logging.getLogger("llm").warning("summarize_with_prompt attempt failed: %s", e)
+                    if retry > 0:
+                        time.sleep(0.4)
+                        try:
+                            if lock:
+                                with lock:
+                                    return _attempt()
+                            return _attempt()
+                        except Exception as e2:
+                            logging.getLogger("llm").exception("summarize_with_prompt retry failed: %s", e2)
         except Exception as e:  # noqa: BLE001 - フォールバックへ
             logging.getLogger("llm").exception("summarize_with_prompt failed: %s", e)
 

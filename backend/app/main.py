@@ -386,6 +386,8 @@ default_llm_settings = LLMSettings(
     temperature=0.2,
     system_prompt=DEFAULT_SYSTEM_PROMPT,
     enabled=False,
+    # 初期値としてローカルの Ollama 既定ポートを設定
+    base_url="http://localhost:11434",
 )
 llm_gateway = LLMGateway(default_llm_settings)
 
@@ -1199,8 +1201,14 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
                         labels[it.get("id")] = it.get("label")
                 except Exception:
                     labels = {}
-                # 生成
-                new_summary = llm_gateway.summarize_with_prompt(prompt, srow.get("answers", {}), labels)
+                # 生成（セッション単位で直列化・簡易リトライ付き）
+                new_summary = llm_gateway.summarize_with_prompt(
+                    prompt,
+                    srow.get("answers", {}),
+                    labels,
+                    lock_key=sid,
+                    retry=1,
+                )
                 # 保存（必要フィールドを埋めて save_session を再利用）
                 from types import SimpleNamespace
 
@@ -2123,7 +2131,13 @@ def finalize_session(
             )
         )
         if getattr(llm_gateway.settings, "enabled", True):
-            new_summary = llm_gateway.summarize_with_prompt(prompt, s.answers, labels)
+            new_summary = llm_gateway.summarize_with_prompt(
+                prompt,
+                s.answers,
+                labels,
+                lock_key=sid,
+                retry=1,
+            )
             s.summary = new_summary
             save_session(s)
 

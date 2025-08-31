@@ -48,6 +48,7 @@ class SessionFSM:
                     context=self.session.answers,
                     max_questions=remaining_slots,
                     prompt=self.session.followup_prompt,
+                    lock_key=getattr(self.session, "id", None),
                 )
                 self.session.pending_llm_questions = []
                 # LLM 追加質問の提示文も保存（永続化用）。

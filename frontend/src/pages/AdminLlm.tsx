@@ -43,7 +43,8 @@ export default function AdminLlm() {
     temperature: 0.2,
     system_prompt: '',
     enabled: false, // 既定は「LLMを使用しない」
-    base_url: '',
+    // 初期表示はバックエンド既定（Ollama: 11434）に合わせる
+    base_url: 'http://localhost:11434',
     api_key: '',
   });
   const [message, setMessage] = useState<string>('');
@@ -157,7 +158,19 @@ export default function AdminLlm() {
           <FormLabel>LLM プロバイダ</FormLabel>
           <Select
             value={settings.provider}
-            onChange={(e) => setSettings({ ...settings, provider: e.target.value, model: '' })}
+            onChange={(e) => {
+              const next = e.target.value;
+              const prev = settings.provider;
+              const defaultFor = (p: string) => (p === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234');
+              // 既存が空、または前プロバイダの既定であれば、プロバイダ変更時に既定URLへ更新
+              const shouldSetDefault = !settings.base_url || settings.base_url === defaultFor(prev);
+              setSettings({
+                ...settings,
+                provider: next,
+                model: '',
+                base_url: shouldSetDefault ? defaultFor(next) : settings.base_url,
+              });
+            }}
           >
             <option value="ollama">Ollama</option>
             <option value="lm_studio">LM Studio</option>
@@ -167,7 +180,7 @@ export default function AdminLlm() {
       <FormControl isDisabled={!settings.enabled}>
         <FormLabel>ベースURL（任意・リモート接続時）</FormLabel>
         <Input
-          placeholder="例: http://server:11434"
+          placeholder={`例: ${settings.provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234'}`}
           value={settings.base_url ?? ''}
           onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
         />
