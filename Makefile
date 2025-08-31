@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: dev backend frontend test
+.PHONY: dev backend frontend test submodules export-public
 
 dev:
 	@bash ./dev.sh
@@ -14,3 +14,9 @@ frontend:
 test:
 	@source venv/bin/activate && cd backend && pytest -q
 
+submodules:
+	@git submodule update --init --recursive
+
+# 公開用エクスポート（internal_docs を含めない）
+export-public:
+	@bash tools/export_public.sh public_export

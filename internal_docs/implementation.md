@@ -198,6 +198,15 @@
 
 ## 8. リリース手順
 1) DBマイグレーション（テンプレ・セッション関連）
+...
+
+---
+
+## 付録：ドキュメント整理（非公開化）
+- [x] `docs/` 配下のうち、公開不要な文書を `internal_docs/` に移動（2025-08-31）。
+  - 対象: `AGENTS.md`, `GEMINI.md`, `plannedSystem.md`, `PlannedDesign.md`, `LLMcommunication.md`, `implementation.md`, `admin_system_setup.md`, `docker_setup.md`, `UI_Redesign_Plan.md`, `Accessibility_And_Typography_Verification.md`
+  - `docs/` 側には移動案内のプレースホルダを設置し、既存リンクの断絶を最小化。
+  - `docs/` に残す公開想定ドキュメント: `session_api.md`, `admin_user_manual.md`
 2) 管理画面で `llm_settings` と初診/再診テンプレ投入
 
 ---
