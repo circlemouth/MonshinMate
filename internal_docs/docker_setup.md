@@ -12,6 +12,8 @@ docker compose up -d
 - バックエンド: http://localhost:8001
 - CouchDB 管理画面: http://localhost:5984/_utils
 - `docker-compose.yml` では CouchDB の認証情報を `COUCHDB_USER` と `COUCHDB_PASSWORD` で指定する。
+- `_users` データベースが存在しない場合、バックエンド起動時に自動作成されるため、
+  初回起動時の認証キャッシュエラーが解消される。
 
 ## データ永続化
 - セッションデータは CouchDB に保存され、`couchdb_data` ボリュームで永続化されます。
