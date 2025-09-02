@@ -31,6 +31,7 @@ import AdminSecurity from './pages/AdminSecurity';
 import AdminLayout from './components/AdminLayout';
 import LlmStatusBadge from './components/LlmStatusBadge';
 import FontSizeControl from './components/FontSizeControl';
+import CouchDbStatusIcon from './components/CouchDbStatusIcon';
 import { refreshLlmStatus } from './utils/llmStatus';
 
 export default function App() {
@@ -149,22 +150,26 @@ export default function App() {
           <Spacer />
           {isAdminPage ? (
             <>
+              <CouchDbStatusIcon />
               <LlmStatusBadge />
               <Button
-              as={RouterLink}
-              to="/"
-              onClick={logout}
-              colorScheme="primary"
-              variant="outline"
-              size="sm"
+                as={RouterLink}
+                to="/"
+                onClick={logout}
+                colorScheme="primary"
+                variant="outline"
+                size="sm"
               >
                 問診画面に戻る
               </Button>
             </>
           ) : (
             <>
+              <CouchDbStatusIcon />
               <LlmStatusBadge />
-              <Button onClick={handleAdminClick} colorScheme="primary" size="sm">管理画面</Button>
+              <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
+                管理画面
+              </Button>
             </>
           )}
         </Flex>
