@@ -63,6 +63,8 @@ from .db import (
     get_totp_mode,
     set_totp_mode,
     DEFAULT_DB_PATH,
+    couch_db,
+    COUCHDB_URL,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -1507,6 +1509,26 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
     except Exception:
         logger.exception("set_default_questionnaire_failed")
         return payload
+
+
+class CouchDbStatus(BaseModel):
+    """CouchDB の稼働状況。"""
+
+    status: str
+
+
+@app.get("/system/couchdb-status", response_model=CouchDbStatus)
+def get_couchdb_status() -> CouchDbStatus:
+    """CouchDB コンテナの稼働状況を返す。"""
+    if not COUCHDB_URL:
+        return CouchDbStatus(status="disabled")
+    try:
+        if couch_db is None:
+            raise RuntimeError("couch_db not initialized")
+        couch_db.info()
+        return CouchDbStatus(status="ok")
+    except Exception:
+        return CouchDbStatus(status="ng")
 
 
 # --- 管理者認証 API ---

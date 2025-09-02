@@ -685,6 +685,9 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
         }
         couch_db.save(doc)
         return
+    elif COUCHDB_URL:
+        # CouchDB が設定されている場合、保存失敗時は例外を送出しフォールバックしない
+        raise RuntimeError("CouchDB への保存に失敗しました")
     conn = get_conn(db_path)
     try:
         conn.execute(

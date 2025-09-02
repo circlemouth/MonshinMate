@@ -776,3 +776,15 @@
 - [x] CouchDB 起動時に `_users` が存在しない場合、バックエンドが自動作成するよう修正。
 - [x] ドキュメント更新: `internal_docs/docker_setup.md`
 - [x] バックエンド自動テスト実行: `cd backend && .venv/bin/pytest -q`
+
+## 94. CouchDB保存失敗時のSQLiteフォールバック廃止（2025-09-02）
+- [x] CouchDB 設定時に保存に失敗した場合、SQLite へフォールバックせず例外を送出。
+  - 変更: `backend/app/db.py`
+- [x] ドキュメント更新: `docs/session_api.md`
+
+## 95. CouchDB稼働状況アイコンを追加（2025-09-02）
+- [x] 管理画面ヘッダーに CouchDB の稼働状況アイコンを表示。
+  - 追加: `frontend/src/components/CouchDbStatusIcon.tsx`
+  - 変更: `frontend/src/App.tsx`, `docs/admin_user_manual.md`
+- [x] バックエンド API を追加: `/system/couchdb-status`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
