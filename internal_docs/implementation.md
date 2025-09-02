@@ -771,3 +771,8 @@
 - [x] 変更（バックエンド）: `backend/app/main.py`
 - [x] ドキュメント更新: `docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `ADMIN_PASSWORD=admin .venv/bin/pytest -q`（37件成功）
+
+## 93. `_users` データベース自動作成（2025-12-15）
+- [x] CouchDB 起動時に `_users` が存在しない場合、バックエンドが自動作成するよう修正。
+- [x] ドキュメント更新: `internal_docs/docker_setup.md`
+- [x] バックエンド自動テスト実行: `cd backend && .venv/bin/pytest -q`

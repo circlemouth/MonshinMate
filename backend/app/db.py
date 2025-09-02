@@ -44,6 +44,14 @@ if COUCHDB_URL:
         _server = couchdb.Server(COUCHDB_URL)
         if COUCHDB_USER and COUCHDB_PASSWORD:
             _server.resource.credentials = (COUCHDB_USER, COUCHDB_PASSWORD)
+        # `_users` データベースが存在しないと認証キャッシュでエラーが出るため、
+        # 初回起動時に自動作成しておく。
+        try:  # pragma: no cover - 既存環境では作成済みの場合があるため
+            _server["_users"]
+        except couchdb.http.ResourceNotFound:  # pragma: no cover - 実行時のみ
+            _server.create("_users")
+        except Exception:
+            pass
         try:
             couch_db = _server[COUCHDB_DB_NAME]
         except couchdb.http.ResourceNotFound:
