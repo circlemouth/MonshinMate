@@ -795,3 +795,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`
 - [x] 変更（バックエンド）: `backend/app/main.py`, `backend/tests/test_api.py`, `backend/tests/test_admin.py`
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`
+
+## 97. セッション保存時の更新競合対処（2025-09-03）
+- [x] CouchDB へのセッション保存時に `_rev` を付与し、`ResourceConflict` 発生時は最新リビジョンを取得して再試行するよう修正。
+  - 変更: `backend/app/db.py`
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`（39件成功）
