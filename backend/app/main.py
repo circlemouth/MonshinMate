@@ -1343,6 +1343,36 @@ def markdown_to_pdf(lines: list[str]) -> bytes:
     buf.seek(0)
     return buf.getvalue()
 
+
+class LLMTestRequest(BaseModel):
+    """LLM疎通テスト用の一時設定。"""
+
+    provider: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = None
+    enabled: bool | None = None
+
+
+@app.post("/llm/settings/test")
+def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
+    """現在の設定または指定された設定でLLM疎通テストを実行する。"""
+
+    if req:
+        current = llm_gateway.settings
+        temp = LLMSettings(
+            provider=req.provider or current.provider,
+            model=req.model or current.model,
+            temperature=current.temperature,
+            system_prompt=current.system_prompt,
+            enabled=req.enabled if req.enabled is not None else current.enabled,
+            base_url=req.base_url or current.base_url,
+            api_key=req.api_key or current.api_key,
+        )
+        gateway = LLMGateway(temp)
+        return gateway.test_connection()
+    return llm_gateway.test_connection()
+
 class ListModelsRequest(BaseModel):
     """モデル一覧取得リクエスト。"""
 

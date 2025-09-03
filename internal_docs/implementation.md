@@ -788,3 +788,10 @@
   - 変更: `frontend/src/App.tsx`, `docs/admin_user_manual.md`
 - [x] バックエンド API を追加: `/system/couchdb-status`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 96. モデル一覧取得時の自動疎通テスト（2025-09-03）
+- [x] `POST /llm/settings/test` を実装し、リクエストの設定でLLM疎通テストを実行可能にした。
+- [x] モデル一覧取得ボタン押下時に選択中モデルで疎通テストを実施し、結果をステータスバッジへ反映。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx`
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/tests/test_api.py`, `backend/tests/test_admin.py`
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`
