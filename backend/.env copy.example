@@ -14,9 +14,9 @@
 # CouchDB 接続設定
 # 有効な URL を指定するとセッションデータを CouchDB に保存します。
 # 認証情報は `COUCHDB_USER` / `COUCHDB_PASSWORD` で指定してください。
-#COUCHDB_URL=http://localhost:5984/
+COUCHDB_URL=http://couchdb:5984/
 # 使用するデータベース名（未指定時は 'monshin_sessions'）
-#COUCHDB_DB=monshin_sessions
-#COUCHDB_USER=admin
-#COUCHDB_PASSWORD=change-me
+COUCHDB_DB=monshin_sessions
+COUCHDB_USER=admin
+COUCHDB_PASSWORD=admin
 
