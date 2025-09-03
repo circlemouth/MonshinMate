@@ -683,7 +683,21 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             "finalized_at": session.finalized_at.isoformat() if session.finalized_at else None,
             "llm_question_texts": getattr(session, "llm_question_texts", {}) or {},
         }
-        couch_db.save(doc)
+        if session.id in couch_db:
+            existing = couch_db.get(session.id)
+            if existing:
+                doc["_rev"] = existing.rev
+        for _ in range(3):
+            try:
+                couch_db.save(doc)
+                break
+            except couchdb.http.ResourceConflict:  # pragma: no cover - 時間的競合時のみ
+                existing = couch_db.get(session.id)
+                if not existing:
+                    raise
+                doc["_rev"] = existing.rev
+        else:  # pragma: no cover - 異常時の保険
+            raise
         return
     elif COUCHDB_URL:
         # CouchDB が設定されている場合、保存失敗時は例外を送出しフォールバックしない
