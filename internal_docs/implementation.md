@@ -800,3 +800,8 @@
 - [x] CouchDB へのセッション保存時に `_rev` を付与し、`ResourceConflict` 発生時は最新リビジョンを取得して再試行するよう修正。
   - 変更: `backend/app/db.py`
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`（39件成功）
+
+## 98. CouchDB用環境変数の既定値設定（2025-12-20）
+- [x] `backend/.env copy.example` の CouchDB 関連変数をデフォルト値に設定し、リポジトリ同梱の CouchDB に接続できるようにした。
+- [x] ドキュメント更新: `internal_docs/docker_setup.md`, `docs/session_api.md`。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`。
