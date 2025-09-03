@@ -77,6 +77,23 @@ def test_llm_settings_get_and_update() -> None:
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
 
 
+def test_llm_settings_test_endpoint() -> None:
+    """疎通テストエンドポイントがステータスを返すことを確認する。"""
+    on_startup()
+    res = client.post("/llm/settings/test")
+    assert res.status_code == 200
+    assert res.json()["status"] == "ng"
+
+
+def test_llm_settings_test_with_body() -> None:
+    """疎通テストでリクエストの設定が利用されることを確認する。"""
+    on_startup()
+    payload = {"provider": "ollama", "model": "dummy", "enabled": True}
+    res = client.post("/llm/settings/test", json=payload)
+    assert res.status_code == 200
+    assert res.json()["status"] == "ng"
+
+
 def test_create_session() -> None:
     """セッション作成が行われ ID が発行されることを確認する。"""
     on_startup()

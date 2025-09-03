@@ -102,6 +102,7 @@ def test_totp_flag_without_secret_disables_totp_on_login():
     """TOTPフラグが有効なのにシークレットが無い場合、自動で無効化されることを確認。"""
     if DB_PATH.exists():
         DB_PATH.unlink()
+    os.environ.pop("ADMIN_PASSWORD", None)
     init_db()
     local_client = TestClient(app)
     # DB初期化のためにステータス確認

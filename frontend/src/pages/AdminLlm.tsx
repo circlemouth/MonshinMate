@@ -111,6 +111,7 @@ export default function AdminLlm() {
   const fetchModels = async () => {
     setIsLoadingModels(true);
     setMessage('');
+    let nextModel = settings.model;
     try {
       const res = await fetch('/llm/list-models', {
         method: 'POST',
@@ -126,15 +127,40 @@ export default function AdminLlm() {
         setModels(data);
         if (data.length > 0) {
           setMessage(`${data.length}件のモデルを読み込みました`);
-          // 現在のモデルが一覧にない場合は、先頭のモデルを選択
           if (settings.model && !data.includes(settings.model)) {
-            setSettings({ ...settings, model: data[0] });
+            nextModel = data[0];
+            setSettings({ ...settings, model: nextModel });
           }
         } else {
           setMessage('モデルが見つかりません');
         }
       } else {
         setMessage('モデルの読み込みに失敗しました');
+      }
+      try {
+        const t = await fetch('/llm/settings/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: settings.provider,
+            base_url: settings.base_url,
+            api_key: settings.api_key,
+            model: nextModel,
+            enabled: settings.enabled,
+          }),
+        });
+        const d = await t.json().catch(() => ({}));
+        setMessage((prev) =>
+          d.status === 'ok'
+            ? `${prev} / 疎通テスト成功`
+            : `${prev} / 疎通テスト失敗`
+        );
+      } catch {
+        setMessage((prev) => `${prev} / 疎通テストでエラー`);
+      } finally {
+        try {
+          await refreshLlmStatus();
+        } catch {}
       }
     } catch (error) {
       setMessage('モデルの読み込み中にエラーが発生しました');
