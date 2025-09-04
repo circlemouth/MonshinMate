@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Icon } from '@chakra-ui/react';
-import { CheckCircleIcon, WarningIcon, NotAllowedIcon } from '@chakra-ui/icons';
+import { Tag } from '@chakra-ui/react';
 
 /**
- * CouchDB コンテナの稼働状況アイコン。
+ * CouchDB の稼働状況バッジ。
  * - 緑: 稼働中
  * - 赤: 停止または疎通不可
  * - 灰: 無効
  */
-export default function CouchDbStatusIcon() {
+export default function CouchDbStatusBadge() {
   const [status, setStatus] = useState<'ok' | 'ng' | 'disabled'>('disabled');
 
   useEffect(() => {
@@ -33,10 +32,17 @@ export default function CouchDbStatusIcon() {
     };
   }, []);
 
-  const icon =
-    status === 'ok' ? CheckCircleIcon : status === 'disabled' ? NotAllowedIcon : WarningIcon;
-  const color =
-    status === 'ok' ? 'green.500' : status === 'disabled' ? 'gray.400' : 'red.500';
+  const label =
+    status === 'ok'
+      ? 'CouchDB接続済'
+      : status === 'ng'
+      ? 'CouchDBエラー'
+      : 'CouchDB未使用';
+  const scheme = status === 'ok' ? 'green' : status === 'ng' ? 'red' : 'gray';
 
-  return <Icon as={icon} w={5} h={5} color={color} mr={2} />;
+  return (
+    <Tag size="sm" colorScheme={scheme} variant="subtle" mr={2}>
+      {label}
+    </Tag>
+  );
 }
