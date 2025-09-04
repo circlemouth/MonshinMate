@@ -21,6 +21,7 @@ import LlmWait from './pages/LlmWait';
 import AdminAppearance from './pages/AdminAppearance';
 import AdminManual from './pages/AdminManual';
 import AdminLicense from './pages/AdminLicense';
+import AdminLicenseDeps from './pages/AdminLicenseDeps';
 import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
@@ -198,6 +199,7 @@ export default function App() {
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
           <Route path="/admin/license" element={<AdminLayout><AdminLicense /></AdminLayout>} />
+          <Route path="/admin/license/dependencies" element={<AdminLayout><AdminLicenseDeps /></AdminLayout>} />
         </Routes>
       </Box>
 

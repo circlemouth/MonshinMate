@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Box, Spinner, Text } from '@chakra-ui/react';
+import { Box, Spinner, Text, Button } from '@chakra-ui/react';
+import { Link as RouterLink } from 'react-router-dom';
 
 /**
  * 管理画面: ライセンス本文表示ページ。
  * ルート `/LICENSE` を取得して最小Markdownで表示する。
+ * 画面下部から依存ライブラリのライセンス一覧ページへ遷移できる。
  */
 export default function AdminLicense() {
   const [content, setContent] = useState('');
@@ -57,20 +59,31 @@ export default function AdminLicense() {
 
   const html = mdToHtml(content);
   return (
-    <Box
-      fontSize="sm"
-      sx={{
-        'h1': { fontSize: 'xl', fontWeight: 'bold', mt: 4, mb: 2 },
-        'h2': { fontSize: 'lg', fontWeight: 'bold', mt: 4, mb: 2 },
-        'h3': { fontSize: 'md', fontWeight: 'semibold', mt: 3, mb: 2 },
-        'p': { mb: 2, lineHeight: 1.7 },
-        'ul': { pl: 6, mb: 2, listStyleType: 'disc' },
-        'ol': { pl: 6, mb: 2 },
-        'li': { mb: 1 },
-        'code': { bg: 'gray.50', px: 1, borderRadius: 'sm', fontFamily: 'monospace' },
-        'a': { color: 'primary.600', textDecoration: 'underline' },
-      }}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <Box>
+      <Box
+        fontSize="sm"
+        sx={{
+          'h1': { fontSize: 'xl', fontWeight: 'bold', mt: 4, mb: 2 },
+          'h2': { fontSize: 'lg', fontWeight: 'bold', mt: 4, mb: 2 },
+          'h3': { fontSize: 'md', fontWeight: 'semibold', mt: 3, mb: 2 },
+          'p': { mb: 2, lineHeight: 1.7 },
+          'ul': { pl: 6, mb: 2, listStyleType: 'disc' },
+          'ol': { pl: 6, mb: 2 },
+          'li': { mb: 1 },
+          'code': { bg: 'gray.50', px: 1, borderRadius: 'sm', fontFamily: 'monospace' },
+          'a': { color: 'primary.600', textDecoration: 'underline' },
+        }}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+      <Button
+        as={RouterLink}
+        to="/admin/license/dependencies"
+        colorScheme="primary"
+        mt={4}
+        size="sm"
+      >
+        外部ライブラリ一覧
+      </Button>
+    </Box>
   );
 }
