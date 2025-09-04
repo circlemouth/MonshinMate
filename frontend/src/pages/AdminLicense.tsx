@@ -82,7 +82,7 @@ export default function AdminLicense() {
         mt={4}
         size="sm"
       >
-        外部ライブラリ一覧
+        使用ライブラリライセンス一覧
       </Button>
     </Box>
   );
