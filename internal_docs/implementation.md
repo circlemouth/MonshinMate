@@ -814,3 +814,9 @@
   - 変更: `frontend/src/App.tsx`, `frontend/src/pages/AdminLicense.tsx`
 - [x] ドキュメント更新: `frontend/public/docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 100. CouchDB稼働状況表示をバッジに統一（2025-09-05）
+- [x] CouchDB の状態表示を LLM ステータスと同形式のバッジに変更。
+  - 変更: `frontend/src/components/CouchDbStatusBadge.tsx`, `frontend/src/App.tsx`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
