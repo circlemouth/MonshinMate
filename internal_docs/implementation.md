@@ -805,3 +805,12 @@
 - [x] `backend/.env copy.example` の CouchDB 関連変数をデフォルト値に設定し、リポジトリ同梱の CouchDB に接続できるようにした。
 - [x] ドキュメント更新: `internal_docs/docker_setup.md`, `docs/session_api.md`。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`。
+
+## 99. 依存ライブラリのライセンス一覧表示機能（2025-09-04）
+- [x] 依存ライブラリのライセンス情報と本文を取得するスクリプトを追加。
+  - 追加: `backend/tools/collect_licenses.py`
+- [x] 管理画面ライセンスページに外部ライブラリ一覧ページへのボタンを追加。
+  - 追加: `frontend/src/pages/AdminLicenseDeps.tsx`
+  - 変更: `frontend/src/App.tsx`, `frontend/src/pages/AdminLicense.tsx`
+- [x] ドキュメント更新: `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
