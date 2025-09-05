@@ -838,3 +838,10 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `internal_docs/implementation.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 103. スライドバー形式の問診項目追加（2025-09-07）
+- [x] 問診項目にスライドバー型を追加し、最小値・最大値を設定可能にした（既定0〜10）。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/app/validator.py`, `backend/tests/test_api.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`

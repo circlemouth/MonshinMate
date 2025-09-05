@@ -804,6 +804,48 @@ def test_followup_prompt_api() -> None:
     client.delete("/questionnaires/adv?visit_type=initial")
 
 
+def test_slider_item_validation() -> None:
+    """スライドバー項目の範囲チェックを確認する。"""
+    on_startup()
+    client.post(
+        "/questionnaires",
+        json={
+            "id": "slider",
+            "visit_type": "initial",
+            "items": [
+                {"id": "pain", "label": "痛み", "type": "slider", "min": 0, "max": 10, "required": True}
+            ],
+        },
+    )
+    res = client.post(
+        "/sessions",
+        json={
+            "patient_name": "三郎",
+            "dob": "2000-01-01",
+            "gender": "male",
+            "visit_type": "initial",
+            "answers": {},
+            "questionnaire_id": "slider",
+        },
+    )
+    sid = res.json()["id"]
+    ok = client.post(f"/sessions/{sid}/answers", json={"answers": {"pain": 5}})
+    assert ok.status_code == 200
+    sid2 = client.post(
+        "/sessions",
+        json={
+            "patient_name": "四郎",
+            "dob": "2000-01-01",
+            "gender": "male",
+            "visit_type": "initial",
+            "answers": {},
+            "questionnaire_id": "slider",
+        },
+    ).json()["id"]
+    ng = client.post(f"/sessions/{sid2}/answers", json={"answers": {"pain": 11}})
+    assert ng.status_code == 400
+
+
 def test_summary_prompt_api_default() -> None:
     """サマリープロンプトの既定値取得を確認する。"""
     on_startup()

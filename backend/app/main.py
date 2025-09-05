@@ -474,6 +474,8 @@ class QuestionnaireItem(BaseModel):
     demographic_enabled: bool = False
     min_age: int | None = None
     max_age: int | None = None
+    min: float | None = None
+    max: float | None = None
     followups: dict[str, list["QuestionnaireItem"]] | None = None
 
 

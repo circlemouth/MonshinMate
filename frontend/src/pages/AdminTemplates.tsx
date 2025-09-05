@@ -30,6 +30,10 @@ import {
   SimpleGrid,
   NumberInput,
   NumberInputField,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
   useDisclosure,
   Modal,
   ModalOverlay,
@@ -58,6 +62,8 @@ import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
     gender?: string;
     min_age?: number;
     max_age?: number;
+    min?: number;
+    max?: number;
     image?: string;
     followups?: Record<string, Item[]>;
   }
@@ -88,6 +94,8 @@ export default function AdminTemplates() {
     min_age: string;
     max_age: string;
     image: string;
+    min: string;
+    max: string;
   }>({
     label: '',
     type: 'string',
@@ -102,6 +110,8 @@ export default function AdminTemplates() {
     min_age: '',
     max_age: '',
     image: '',
+    min: '0',
+    max: '10',
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
@@ -356,6 +366,8 @@ export default function AdminTemplates() {
             ? Number(newItem.max_age)
             : undefined,
         image: newItem.image || undefined,
+        min: newItem.type === 'slider' ? Number(newItem.min) : undefined,
+        max: newItem.type === 'slider' ? Number(newItem.max) : undefined,
       },
     ]);
     markDirty();
@@ -374,6 +386,8 @@ export default function AdminTemplates() {
       min_age: '',
       max_age: '',
       image: '',
+      min: '0',
+      max: '10',
     });
     setIsAddingNewItem(false);
   };
@@ -393,10 +407,19 @@ export default function AdminTemplates() {
       // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
       next.allow_freetext = true;
       next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
-    } else {
-      // それ以外に切り替えたら、選択肢系はリセット
+      delete (next as any).min;
+      delete (next as any).max;
+    } else if (newType === 'slider') {
       delete (next as any).options;
       next.allow_freetext = false;
+      next.min = target.min ?? 0;
+      next.max = target.max ?? 10;
+    } else {
+      // それ以外に切り替えたら、選択肢系・範囲系はリセット
+      delete (next as any).options;
+      next.allow_freetext = false;
+      delete (next as any).min;
+      delete (next as any).max;
     }
     const updated = [...items];
     updated[index] = next;
@@ -1085,6 +1108,7 @@ export default function AdminTemplates() {
                                           <option value="multi">複数選択</option>
                                           <option value="yesno">はい/いいえ</option>
                                           <option value="date">日付</option>
+                                          <option value="slider">スライドバー</option>
                                         </Select>
                                       </FormControl>
                                       <IconButton
@@ -1143,6 +1167,32 @@ export default function AdminTemplates() {
                                           </Button>
                                         </VStack>
                                       </Box>
+                                    )}
+                                    {item.type === 'slider' && (
+                                      <HStack>
+                                        <FormControl>
+                                          <FormLabel m={0}>最小値</FormLabel>
+                                          <NumberInput
+                                            value={item.min ?? 0}
+                                            onChange={(v) =>
+                                              updateItem(idx, 'min', v ? Number(v) : undefined)
+                                            }
+                                          >
+                                            <NumberInputField />
+                                          </NumberInput>
+                                        </FormControl>
+                                        <FormControl>
+                                          <FormLabel m={0}>最大値</FormLabel>
+                                          <NumberInput
+                                            value={item.max ?? 10}
+                                            onChange={(v) =>
+                                              updateItem(idx, 'max', v ? Number(v) : undefined)
+                                            }
+                                          >
+                                            <NumberInputField />
+                                          </NumberInput>
+                                        </FormControl>
+                                      </HStack>
                                     )}
                                     
                                   </VStack>
@@ -1231,9 +1281,13 @@ export default function AdminTemplates() {
                           type: t,
                           allow_freetext: true,
                           options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
+                          min: '',
+                          max: '',
                         });
+                      } else if (t === 'slider') {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
                       } else {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [] });
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
                       }
                     }}
                   >
@@ -1241,6 +1295,7 @@ export default function AdminTemplates() {
                     <option value="multi">複数選択</option>
                     <option value="yesno">はい/いいえ</option>
                     <option value="date">日付</option>
+                    <option value="slider">スライドバー</option>
                   </Select>
                 </FormControl>
                 {['multi'].includes(newItem.type) && (
@@ -1289,6 +1344,28 @@ export default function AdminTemplates() {
                   >
                     フリーテキスト入力を
                   </Checkbox>
+                )}
+                {newItem.type === 'slider' && (
+                  <HStack>
+                    <FormControl>
+                      <FormLabel>最小値</FormLabel>
+                      <NumberInput
+                        value={newItem.min}
+                        onChange={(v) => setNewItem({ ...newItem, min: v })}
+                      >
+                        <NumberInputField />
+                      </NumberInput>
+                    </FormControl>
+                    <FormControl>
+                      <FormLabel>最大値</FormLabel>
+                      <NumberInput
+                        value={newItem.max}
+                        onChange={(v) => setNewItem({ ...newItem, max: v })}
+                      >
+                        <NumberInputField />
+                      </NumberInput>
+                    </FormControl>
+                  </HStack>
                 )}
                 <Checkbox
                   isChecked={newItem.demographic_enabled}
@@ -1474,6 +1551,25 @@ export default function AdminTemplates() {
                                   }}
                                 />
                               )}
+                            </>
+                          ) : item.type === 'slider' ? (
+                            <>
+                              <HStack spacing={4} px={2}>
+                                <Text>{item.min ?? 0}</Text>
+                                <Slider
+                                  value={previewAnswers[item.id] ?? item.min ?? 0}
+                                  min={item.min ?? 0}
+                                  max={item.max ?? 10}
+                                  onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
+                                >
+                                  <SliderTrack>
+                                    <SliderFilledTrack />
+                                  </SliderTrack>
+                                  <SliderThumb />
+                                </Slider>
+                                <Text>{item.max ?? 10}</Text>
+                              </HStack>
+                              <Box textAlign="center" mt={2}>{previewAnswers[item.id] ?? item.min ?? 0}</Box>
                             </>
                           ) : item.type === 'date' ? (
                             <DateSelect

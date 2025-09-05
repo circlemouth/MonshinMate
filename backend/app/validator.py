@@ -32,11 +32,25 @@ class Validator:
             if item_type in ("string", "text"):
                 if not isinstance(value, str):
                     raise HTTPException(status_code=400, detail=f"{key} は文字列で入力してください")
-            elif item_type == "number":
+            elif item_type in ("number", "slider"):
                 try:
-                    float(value)
+                    val = float(value)
                 except Exception as exc:  # noqa: BLE001
                     raise HTTPException(status_code=400, detail=f"{key} は数値で入力してください") from exc
+                min_val = (
+                    getattr(spec, "min", None)
+                    if not isinstance(spec, dict)
+                    else spec.get("min")
+                )
+                max_val = (
+                    getattr(spec, "max", None)
+                    if not isinstance(spec, dict)
+                    else spec.get("max")
+                )
+                if min_val is not None and val < float(min_val):
+                    raise HTTPException(status_code=400, detail=f"{key} は {min_val} 以上で入力してください")
+                if max_val is not None and val > float(max_val):
+                    raise HTTPException(status_code=400, detail=f"{key} は {max_val} 以下で入力してください")
             elif item_type == "date":
                 try:
                     datetime.fromisoformat(str(value))
