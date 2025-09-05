@@ -12,6 +12,8 @@ import {
   FormErrorMessage,
   FormHelperText,
   Box,
+  HStack,
+  Image,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
@@ -29,6 +31,7 @@ interface Item {
   allow_freetext?: boolean;
   description?: string;
   gender?: string;
+  image?: string;
 }
 
 /** 患者向けの問診フォーム画面。 */
@@ -183,113 +186,119 @@ export default function QuestionnaireForm() {
         const helperText = item.description || defaultHelperTexts[item.id];
         return (
           <Box key={item.id} bg="white" p={6} borderRadius="lg" boxShadow="sm">
-            <FormControl
-              isRequired={item.required}
-              isInvalid={
-                attempted &&
-                item.required &&
-                (answers[item.id] === undefined ||
-                  answers[item.id] === '' ||
-                  (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
-              }
-            >
-              <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
-                {item.label}
-              </FormLabel>
-              {helperText && (
-                <FormHelperText id={`help-item-${item.id}`} mb={4}>
-                  {helperText}
-                </FormHelperText>
+            <HStack align="flex-start" spacing={4}>
+              {item.image && (
+                <Image src={item.image} alt="" boxSize="100px" objectFit="contain" />
               )}
-              {item.type === 'yesno' ? (
-                <RadioGroup
-                  value={answers[item.id] || ''}
-                  onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
-                  aria-describedby={helperText ? `help-item-${item.id}` : undefined}
-                >
-                  <VStack align="start" spacing={3}>
-                    <Radio value="yes" size="lg">はい</Radio>
-                    <Radio value="no" size="lg">いいえ</Radio>
-                  </VStack>
-                </RadioGroup>
-              ) : item.type === 'multi' && item.options ? (
-                <>
-                  <CheckboxGroup
-                    value={(answers[item.id] || []).filter((v: string) => v !== freeTexts[item.id])}
-                    onChange={(vals) => {
-                      const other = freeTextChecks[item.id] ? freeTexts[item.id] : null;
-                      const newVals = other ? [...vals, other] : vals;
-                      setAnswers({ ...answers, [item.id]: newVals });
-                    }}
+              <FormControl
+                isRequired={item.required}
+                isInvalid={
+                  attempted &&
+                  item.required &&
+                  (answers[item.id] === undefined ||
+                    answers[item.id] === '' ||
+                    (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
+                }
+                flex="1"
+              >
+                <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
+                  {item.label}
+                </FormLabel>
+                {helperText && (
+                  <FormHelperText id={`help-item-${item.id}`} mb={4}>
+                    {helperText}
+                  </FormHelperText>
+                )}
+                {item.type === 'yesno' ? (
+                  <RadioGroup
+                    value={answers[item.id] || ''}
+                    onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
                     aria-describedby={helperText ? `help-item-${item.id}` : undefined}
                   >
                     <VStack align="start" spacing={3}>
-                      {item.options.map((opt) => (
-                        <Checkbox key={opt} value={opt} size="lg">
-                          {opt}
-                        </Checkbox>
-                      ))}
+                      <Radio value="yes" size="lg">はい</Radio>
+                      <Radio value="no" size="lg">いいえ</Radio>
                     </VStack>
-                  </CheckboxGroup>
-                  {item.allow_freetext && (
-                    <Box mt={2}>
-                      <Checkbox
-                        isChecked={freeTextChecks[item.id] || false}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          const prev = freeTexts[item.id] || '';
-                          const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
-                          const updated = checked && prev ? [...selected, prev] : selected;
-                          setFreeTextChecks({ ...freeTextChecks, [item.id]: checked });
-                          setAnswers({ ...answers, [item.id]: updated });
-                          if (!checked) setFreeTexts({ ...freeTexts, [item.id]: '' });
-                        }}
-                        size="lg"
-                      >
-                        その他
-                      </Checkbox>
+                  </RadioGroup>
+                ) : item.type === 'multi' && item.options ? (
+                  <>
+                    <CheckboxGroup
+                      value={(answers[item.id] || []).filter((v: string) => v !== freeTexts[item.id])}
+                      onChange={(vals) => {
+                        const other = freeTextChecks[item.id] ? freeTexts[item.id] : null;
+                        const newVals = other ? [...vals, other] : vals;
+                        setAnswers({ ...answers, [item.id]: newVals });
+                      }}
+                      aria-describedby={helperText ? `help-item-${item.id}` : undefined}
+                    >
+                      <VStack align="start" spacing={3}>
+                        {item.options.map((opt) => (
+                          <Checkbox key={opt} value={opt} size="lg">
+                            {opt}
+                          </Checkbox>
+                        ))}
+                      </VStack>
+                    </CheckboxGroup>
+                    {item.allow_freetext && (
+                      <Box mt={2}>
+                        <Checkbox
+                          isChecked={freeTextChecks[item.id] || false}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            const prev = freeTexts[item.id] || '';
+                            const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                            const updated = checked && prev ? [...selected, prev] : selected;
+                            setFreeTextChecks({ ...freeTextChecks, [item.id]: checked });
+                            setAnswers({ ...answers, [item.id]: updated });
+                            if (!checked) setFreeTexts({ ...freeTexts, [item.id]: '' });
+                          }}
+                          size="lg"
+                        >
+                          その他
+                        </Checkbox>
+                    <Input
+                      mt={2}
+                      placeholder="自由記述"
+                      value={freeTexts[item.id] || ''}
+                      onChange={(e) => {
+                        const prev = freeTexts[item.id] || '';
+                        const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                        const val = e.target.value;
+                        const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
+                        setFreeTexts({ ...freeTexts, [item.id]: val });
+                        setAnswers({ ...answers, [item.id]: updated });
+                      }}
+                      autoComplete="off"
+                      name={`qi-free-${item.id}`}
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      isDisabled={!freeTextChecks[item.id]}
+                    />
+                      </Box>
+                    )}
+                  </>
+                ) : item.type === 'date' ? (
+                  <DateSelect
+                    value={answers[item.id] || ''}
+                    onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+                  />
+                ) : (
                   <Input
-                    mt={2}
-                    placeholder="自由記述"
-                    value={freeTexts[item.id] || ''}
-                    onChange={(e) => {
-                      const prev = freeTexts[item.id] || '';
-                      const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
-                      const val = e.target.value;
-                      const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
-                      setFreeTexts({ ...freeTexts, [item.id]: val });
-                      setAnswers({ ...answers, [item.id]: updated });
-                    }}
+                    id={`item-${item.id}`}
+                    aria-describedby={helperText ? `help-item-${item.id}` : undefined}
+                    value={answers[item.id] || ''}
+                    onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
                     autoComplete="off"
-                    name={`qi-free-${item.id}`}
+                    name={`qi-${item.id}`}
                     autoCorrect="off"
                     autoCapitalize="off"
                     spellCheck={false}
-                    isDisabled={!freeTextChecks[item.id]}
                   />
-                    </Box>
-                  )}
-                </>
-              ) : item.type === 'date' ? (
-                <DateSelect
-                  value={answers[item.id] || ''}
-                  onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
-                />
-              ) : (
-                <Input
-                  id={`item-${item.id}`}
-                  aria-describedby={helperText ? `help-item-${item.id}` : undefined}
-                  value={answers[item.id] || ''}
-                  onChange={(e) => setAnswers({ ...answers, [item.id]: e.target.value })}
-                  autoComplete="off"
-                  name={`qi-${item.id}`}
-                  autoCorrect="off"
-                  autoCapitalize="off"
-                  spellCheck={false}
-                />
-              )}
-              <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
-            </FormControl>
+                )}
+                <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
+              </FormControl>
+            </HStack>
           </Box>
         );
       })}

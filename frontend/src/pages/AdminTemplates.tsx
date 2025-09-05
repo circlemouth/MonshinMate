@@ -38,6 +38,7 @@ import {
   ModalCloseButton,
   ModalBody,
   FormHelperText,
+  Image,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
@@ -54,6 +55,7 @@ interface Item {
   allow_freetext?: boolean;
   description?: string;
   gender?: string;
+  image?: string;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -78,6 +80,7 @@ export default function AdminTemplates() {
     allow_freetext: boolean;
     description: string;
     gender: string;
+    image: string;
   }>({
     label: '',
     type: 'string',
@@ -88,6 +91,7 @@ export default function AdminTemplates() {
     allow_freetext: false,
     description: '',
     gender: 'both',
+    image: '',
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
@@ -317,6 +321,7 @@ export default function AdminTemplates() {
         allow_freetext: newItem.allow_freetext,
         description: newItem.description,
         gender: newItem.gender !== 'both' ? newItem.gender : undefined,
+        image: newItem.image || undefined,
       },
     ]);
     markDirty();
@@ -331,6 +336,7 @@ export default function AdminTemplates() {
       allow_freetext: false,
       description: '',
       gender: 'both',
+      image: '',
     });
     setIsAddingNewItem(false);
   };
@@ -935,6 +941,37 @@ export default function AdminTemplates() {
                                       <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
                                     </FormControl>
                                     <FormControl>
+                                      <FormLabel m={0}>画像</FormLabel>
+                                      {item.image && (
+                                        <>
+                                          <Image src={item.image} alt="" maxH="100px" mb={2} />
+                                          <Button
+                                            size="xs"
+                                            colorScheme="red"
+                                            mb={2}
+                                            onClick={() => updateItem(idx, 'image', undefined)}
+                                          >
+                                            画像を削除
+                                          </Button>
+                                        </>
+                                      )}
+                                      <Input
+                                        key={item.image || 'empty'}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) {
+                                            updateItem(idx, 'image', undefined);
+                                            return;
+                                          }
+                                          const reader = new FileReader();
+                                          reader.onload = () => updateItem(idx, 'image', reader.result as string);
+                                          reader.readAsDataURL(file);
+                                        }}
+                                      />
+                                    </FormControl>
+                                    <FormControl>
                                       <FormLabel m={0}>対象性別</FormLabel>
                                       <RadioGroup
                                         value={item.gender || 'both'}
@@ -1056,6 +1093,37 @@ export default function AdminTemplates() {
                     placeholder="例: わかる範囲で構いません"
                     value={newItem.description}
                     onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+                  />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>画像</FormLabel>
+                  {newItem.image && (
+                    <>
+                      <Image src={newItem.image} alt="" maxH="100px" mb={2} />
+                      <Button
+                        size="xs"
+                        colorScheme="red"
+                        mb={2}
+                        onClick={() => setNewItem({ ...newItem, image: '' })}
+                      >
+                        画像を削除
+                      </Button>
+                    </>
+                  )}
+                  <Input
+                    key={newItem.image || 'empty'}
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) {
+                        setNewItem({ ...newItem, image: '' });
+                        return;
+                      }
+                      const reader = new FileReader();
+                      reader.onload = () => setNewItem({ ...newItem, image: reader.result as string });
+                      reader.readAsDataURL(file);
+                    }}
                   />
                 </FormControl>
                 <FormControl>
@@ -1212,67 +1280,74 @@ export default function AdminTemplates() {
                 </FormControl>
                 <VStack spacing={3} align="stretch">
                   {previewItems.map((item) => (
-                    <FormControl key={item.id} isRequired={item.required}>
-                      <FormLabel>{item.label}</FormLabel>
-                      {item.description && (
-                        <FormHelperText mb={2}>{item.description}</FormHelperText>
-                      )}
-                      {item.type === 'yesno' ? (
-                        <RadioGroup
-                          onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
-                          value={previewAnswers[item.id] || ''}
-                        >
-                          <VStack align="start">
-                            <Radio value="yes" size="lg">
-                              はい
-                            </Radio>
-                            <Radio value="no" size="lg">
-                              いいえ
-                            </Radio>
-                          </VStack>
-                        </RadioGroup>
-                      ) : item.type === 'multi' && item.options ? (
-                        <>
-                          <CheckboxGroup
-                            onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
-                            value={previewAnswers[item.id] || []}
-                          >
-                            <VStack align="start">
-                              {item.options.map((opt) => (
-                                <Checkbox key={opt} value={opt} size="lg">
-                                  {opt}
-                                </Checkbox>
-                              ))}
-                            </VStack>
-                          </CheckboxGroup>
-                          {item.allow_freetext && (
+                    <Box key={item.id}>
+                      <HStack align="flex-start" spacing={4}>
+                        {item.image && (
+                          <Image src={item.image} alt="" boxSize="100px" objectFit="contain" />
+                        )}
+                        <FormControl isRequired={item.required} flex="1">
+                          <FormLabel>{item.label}</FormLabel>
+                          {item.description && (
+                            <FormHelperText mb={2}>{item.description}</FormHelperText>
+                          )}
+                          {item.type === 'yesno' ? (
+                            <RadioGroup
+                              onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
+                              value={previewAnswers[item.id] || ''}
+                            >
+                              <VStack align="start">
+                                <Radio value="yes" size="lg">
+                                  はい
+                                </Radio>
+                                <Radio value="no" size="lg">
+                                  いいえ
+                                </Radio>
+                              </VStack>
+                            </RadioGroup>
+                          ) : item.type === 'multi' && item.options ? (
+                            <>
+                              <CheckboxGroup
+                                onChange={(vals) => setPreviewAnswers({ ...previewAnswers, [item.id]: vals })}
+                                value={previewAnswers[item.id] || []}
+                              >
+                                <VStack align="start">
+                                  {item.options.map((opt) => (
+                                    <Checkbox key={opt} value={opt} size="lg">
+                                      {opt}
+                                    </Checkbox>
+                                  ))}
+                                </VStack>
+                              </CheckboxGroup>
+                              {item.allow_freetext && (
+                                <Input
+                                  mt={2}
+                                  placeholder="自由に記載してください"
+                                  value={previewFreeTexts[item.id] || ''}
+                                  onChange={(e) => {
+                                    const prev = previewFreeTexts[item.id] || '';
+                                    const selected = (previewAnswers[item.id] || []).filter((v: string) => v !== prev);
+                                    const val = e.target.value;
+                                    const updated = val ? [...selected, val] : selected;
+                                    setPreviewFreeTexts({ ...previewFreeTexts, [item.id]: val });
+                                    setPreviewAnswers({ ...previewAnswers, [item.id]: updated });
+                                  }}
+                                />
+                              )}
+                            </>
+                          ) : item.type === 'date' ? (
+                            <DateSelect
+                              value={previewAnswers[item.id] || ''}
+                              onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
+                            />
+                          ) : (
                             <Input
-                              mt={2}
-                              placeholder="自由に記載してください"
-                              value={previewFreeTexts[item.id] || ''}
-                              onChange={(e) => {
-                                const prev = previewFreeTexts[item.id] || '';
-                                const selected = (previewAnswers[item.id] || []).filter((v: string) => v !== prev);
-                                const val = e.target.value;
-                                const updated = val ? [...selected, val] : selected;
-                                setPreviewFreeTexts({ ...previewFreeTexts, [item.id]: val });
-                                setPreviewAnswers({ ...previewAnswers, [item.id]: updated });
-                              }}
+                              onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
+                              value={previewAnswers[item.id] || ''}
                             />
                           )}
-                        </>
-                      ) : item.type === 'date' ? (
-                        <DateSelect
-                          value={previewAnswers[item.id] || ''}
-                          onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
-                        />
-                      ) : (
-                        <Input
-                          onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
-                          value={previewAnswers[item.id] || ''}
-                        />
-                      )}
-                    </FormControl>
+                        </FormControl>
+                      </HStack>
+                    </Box>
                   ))}
                 </VStack>
               </>
