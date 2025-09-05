@@ -32,7 +32,22 @@ interface Item {
   description?: string;
   gender?: string;
   image?: string;
+  followups?: Record<string, Item[]>;
 }
+
+const collectAllItems = (items: Item[]): Item[] => {
+  const result: Item[] = [];
+  const walk = (item: Item) => {
+    result.push(item);
+    if (item.followups) {
+      Object.values(item.followups).forEach((children) =>
+        children.forEach(walk)
+      );
+    }
+  };
+  items.forEach(walk);
+  return result;
+};
 
 /** 患者向けの問診フォーム画面。 */
 export default function QuestionnaireForm() {
@@ -66,9 +81,10 @@ export default function QuestionnaireForm() {
   }, [visitType, sessionId, navigate, gender]);
 
   useEffect(() => {
+    const all = collectAllItems(items);
     const ft: Record<string, string> = {};
     const fc: Record<string, boolean> = {};
-    items.forEach((item) => {
+    all.forEach((item) => {
       if (item.type === 'multi' && item.allow_freetext) {
         const ans = answers[item.id];
         if (Array.isArray(ans)) {
@@ -132,11 +148,22 @@ export default function QuestionnaireForm() {
     }
   };
 
-  const visibleItems = items.filter((item) => {
-    if (item.gender && item.gender !== 'both' && item.gender !== gender) return false;
-    if (!item.when) return true;
-    return answers[item.when.item_id] === item.when.equals;
-  });
+  const buildVisibleItems = (list: Item[]): Item[] => {
+    const result: Item[] = [];
+    const walk = (item: Item) => {
+      if (item.gender && item.gender !== 'both' && item.gender !== gender) return;
+      if (item.when && answers[item.when.item_id] !== item.when.equals) return;
+      result.push(item);
+      const ans = answers[item.id];
+      if (item.followups && ans && item.followups[ans]) {
+        item.followups[ans].forEach(walk);
+      }
+    };
+    list.forEach(walk);
+    return result;
+  };
+
+  const visibleItems = buildVisibleItems(items);
 
   const missingRequired = visibleItems.some((item) => {
     const val = answers[item.id];

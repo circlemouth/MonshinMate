@@ -2,6 +2,7 @@
 
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
+from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 import time
@@ -470,6 +471,7 @@ class QuestionnaireItem(BaseModel):
     image: str | None = None
     when: WhenCondition | None = None
     gender: str | None = None
+    followups: dict[str, list["QuestionnaireItem"]] | None = None
 
 
 class Questionnaire(BaseModel):
