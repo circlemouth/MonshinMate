@@ -14,6 +14,11 @@ import {
   Box,
   HStack,
   Image,
+  Slider,
+  SliderTrack,
+  SliderFilledTrack,
+  SliderThumb,
+  Text,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
@@ -34,6 +39,8 @@ import DateSelect from '../components/DateSelect';
     demographic_enabled?: boolean;
     min_age?: number;
     max_age?: number;
+    min?: number;
+    max?: number;
     image?: string;
     followups?: Record<string, Item[]>;
   }
@@ -77,13 +84,21 @@ export default function QuestionnaireForm() {
         .then((res) => res.json())
         .then((data) => {
           setItems(data.items);
-        sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
-        // 追質問を行うかどうかのフラグを保持
-        sessionStorage.setItem(
-          'llm_followup_enabled',
-          data.llm_followup_enabled ? '1' : '0'
-        );
-      });
+          sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
+          const ans = { ...answers };
+          data.items.forEach((it: Item) => {
+            if (it.type === 'slider' && ans[it.id] === undefined) {
+              ans[it.id] = it.min ?? 0;
+            }
+          });
+          setAnswers(ans);
+          sessionStorage.setItem('answers', JSON.stringify(ans));
+          // 追質問を行うかどうかのフラグを保持
+          sessionStorage.setItem(
+            'llm_followup_enabled',
+            data.llm_followup_enabled ? '1' : '0'
+          );
+        });
     }, [visitType, sessionId, navigate, gender, age]);
 
   useEffect(() => {
@@ -314,6 +329,26 @@ export default function QuestionnaireForm() {
                     />
                       </Box>
                     )}
+                  </>
+                ) : item.type === 'slider' ? (
+                  <>
+                    <HStack spacing={4} px={2}>
+                      <Text>{item.min ?? 0}</Text>
+                      <Slider
+                        value={answers[item.id] ?? item.min ?? 0}
+                        min={item.min ?? 0}
+                        max={item.max ?? 10}
+                        onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+                        aria-describedby={helperText ? `help-item-${item.id}` : undefined}
+                      >
+                        <SliderTrack>
+                          <SliderFilledTrack />
+                        </SliderTrack>
+                        <SliderThumb />
+                      </Slider>
+                      <Text>{item.max ?? 10}</Text>
+                    </HStack>
+                    <Box textAlign="center" mt={2}>{answers[item.id] ?? item.min ?? 0}</Box>
                   </>
                 ) : item.type === 'date' ? (
                   <DateSelect
