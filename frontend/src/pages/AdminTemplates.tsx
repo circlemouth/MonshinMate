@@ -56,6 +56,7 @@ interface Item {
   description?: string;
   gender?: string;
   image?: string;
+  followups?: Record<string, Item[]>;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -904,7 +905,12 @@ export default function AdminTemplates() {
                                 <DragHandleIcon aria-label="ドラッグして並び替え" cursor="grab" />
                               </HStack>
                             </Td>
-                            <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">{item.label}</Td>
+                            <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">
+                              {item.label}
+                              {item.followups && Object.keys(item.followups).length > 0 && (
+                                <Text as="span" color="blue.500" ml={2}>枝</Text>
+                              )}
+                            </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 isChecked={item.required}
