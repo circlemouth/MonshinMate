@@ -1,5 +1,6 @@
 from pathlib import Path
 import sys
+import base64
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -445,6 +446,41 @@ def test_questionnaire_options() -> None:
     assert data["items"][1]["allow_freetext"] is True
     # 後片付け
     del_res = client.delete("/questionnaires/opt?visit_type=initial")
+    assert del_res.status_code == 200
+
+
+def test_questionnaire_image() -> None:
+    """画像付きテンプレートの保存と取得を確認する。"""
+    on_startup()
+    img = "data:image/png;base64," + base64.b64encode(b"test").decode()
+    payload = {
+        "id": "img",
+        "visit_type": "initial",
+        "items": [
+            {
+                "id": "img_q",
+                "label": "画像付き",
+                "type": "string",
+                "required": False,
+                "image": img,
+            }
+        ],
+    }
+    res = client.post("/questionnaires", json=payload)
+    assert res.status_code == 200
+    get_res = client.get("/questionnaires/img/template?visit_type=initial")
+    assert get_res.status_code == 200
+    data = get_res.json()
+    assert data["items"][0]["image"] == img
+    # 画像を削除して更新
+    payload["items"][0]["image"] = None
+    res2 = client.post("/questionnaires", json=payload)
+    assert res2.status_code == 200
+    get_res2 = client.get("/questionnaires/img/template?visit_type=initial")
+    assert get_res2.status_code == 200
+    data2 = get_res2.json()
+    assert data2["items"][0].get("image") is None
+    del_res = client.delete("/questionnaires/img?visit_type=initial")
     assert del_res.status_code == 200
 
 

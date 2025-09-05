@@ -142,8 +142,9 @@
   - `id` (str): テンプレートID
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
-  - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description?, gender? }`
+  - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description?, gender?, image? }`
     - `gender`: `"male"` | `"female"` | `"both"`（省略または `"both"` の場合は男女共通）
+    - `image`: 画像のデータURL文字列（任意）。削除する場合は `null` を送信するかフィールドを省略してください。
   - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
   - `llm_followup_max_questions` (int): 生成する追加質問の最大個数
 - レスポンス:

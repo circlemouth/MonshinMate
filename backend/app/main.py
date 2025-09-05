@@ -467,6 +467,7 @@ class QuestionnaireItem(BaseModel):
     options: list[str] | None = None
     allow_freetext: bool = False
     description: str | None = None
+    image: str | None = None
     when: WhenCondition | None = None
     gender: str | None = None
 
