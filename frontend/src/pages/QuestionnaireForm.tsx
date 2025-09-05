@@ -21,19 +21,22 @@ import ErrorSummary from '../components/ErrorSummary';
 import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
 
-interface Item {
-  id: string;
-  label: string;
-  type: string;
-  required: boolean;
-  options?: string[];
-  when?: { item_id: string; equals: string };
-  allow_freetext?: boolean;
-  description?: string;
-  gender?: string;
-  image?: string;
-  followups?: Record<string, Item[]>;
-}
+  interface Item {
+    id: string;
+    label: string;
+    type: string;
+    required: boolean;
+    options?: string[];
+    when?: { item_id: string; equals: string };
+    allow_freetext?: boolean;
+    description?: string;
+    gender?: string;
+    demographic_enabled?: boolean;
+    min_age?: number;
+    max_age?: number;
+    image?: string;
+    followups?: Record<string, Item[]>;
+  }
 
 const collectAllItems = (items: Item[]): Item[] => {
   const result: Item[] = [];
@@ -60,6 +63,8 @@ export default function QuestionnaireForm() {
   const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
   const visitType = sessionStorage.getItem('visit_type') || 'initial';
   const gender = sessionStorage.getItem('gender') || '';
+  const dob = sessionStorage.getItem('dob') || '';
+  const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -67,10 +72,11 @@ export default function QuestionnaireForm() {
       navigate('/');
       return;
     }
-    fetch(`/questionnaires/default/template?visit_type=${visitType}&gender=${gender}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setItems(data.items);
+      const ageParam = age !== undefined ? `&age=${age}` : '';
+      fetch(`/questionnaires/default/template?visit_type=${visitType}&gender=${gender}${ageParam}`)
+        .then((res) => res.json())
+        .then((data) => {
+          setItems(data.items);
         sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
         // 追質問を行うかどうかのフラグを保持
         sessionStorage.setItem(
@@ -78,7 +84,7 @@ export default function QuestionnaireForm() {
           data.llm_followup_enabled ? '1' : '0'
         );
       });
-  }, [visitType, sessionId, navigate, gender]);
+    }, [visitType, sessionId, navigate, gender, age]);
 
   useEffect(() => {
     const all = collectAllItems(items);
@@ -151,7 +157,11 @@ export default function QuestionnaireForm() {
   const buildVisibleItems = (list: Item[]): Item[] => {
     const result: Item[] = [];
     const walk = (item: Item) => {
-      if (item.gender && item.gender !== 'both' && item.gender !== gender) return;
+      if (item.demographic_enabled) {
+        if (item.gender && item.gender !== 'both' && item.gender !== gender) return;
+        if (item.min_age !== undefined && age !== undefined && age < item.min_age) return;
+        if (item.max_age !== undefined && age !== undefined && age > item.max_age) return;
+      }
       if (item.when && answers[item.when.item_id] !== item.when.equals) return;
       result.push(item);
       const ans = answers[item.id];

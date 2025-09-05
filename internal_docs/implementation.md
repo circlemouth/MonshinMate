@@ -830,3 +830,11 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 102. 年齢・性別による表示制御の追加（2025-09-06）
+- [x] 各問診項目に「年齢・性別で表示を制限」フラグを追加し、対象年齢範囲と性別を設定できるようにした。
+- [x] 患者画面およびテンプレートプレビューで年齢・性別をもとに項目を出し分ける処理を実装。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/tests/test_api.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `internal_docs/implementation.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`

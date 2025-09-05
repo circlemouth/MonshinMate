@@ -471,6 +471,9 @@ class QuestionnaireItem(BaseModel):
     image: str | None = None
     when: WhenCondition | None = None
     gender: str | None = None
+    demographic_enabled: bool = False
+    min_age: int | None = None
+    max_age: int | None = None
     followups: dict[str, list["QuestionnaireItem"]] | None = None
 
 
@@ -518,7 +521,7 @@ class QuestionnaireDuplicate(BaseModel):
 
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
 def get_questionnaire_template(
-    questionnaire_id: str, visit_type: str, gender: str | None = None
+    questionnaire_id: str, visit_type: str, gender: str | None = None, age: int | None = None
 ) -> Questionnaire:
     """DB から問診テンプレートを取得する。無い場合は既定テンプレを返す。
 
@@ -560,18 +563,44 @@ def get_questionnaire_template(
             "llm_followup_max_questions": 5,
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
-        items = [QuestionnaireItem(**it) for it in default_tpl["items"]]
-        if gender:
-            items = [it for it in items if not it.gender or it.gender == "both" or it.gender == gender]
+        items = []
+        for it in default_tpl["items"]:
+            if "demographic_enabled" not in it:
+                it["demographic_enabled"] = bool(it.get("gender"))
+            items.append(QuestionnaireItem(**it))
+        if gender or age is not None:
+            items = [
+                it
+                for it in items
+                if not it.demographic_enabled
+                or (
+                    (not it.gender or it.gender == "both" or it.gender == gender)
+                    and (age is None or it.min_age is None or age >= it.min_age)
+                    and (age is None or it.max_age is None or age <= it.max_age)
+                )
+            ]
         return Questionnaire(
             id=questionnaire_id,
             items=items,
             llm_followup_enabled=bool(default_tpl.get("llm_followup_enabled", True)),
             llm_followup_max_questions=int(default_tpl.get("llm_followup_max_questions", 5)),
         )
-    items = [QuestionnaireItem(**it) for it in tpl["items"]]
-    if gender:
-        items = [it for it in items if not it.gender or it.gender == "both" or it.gender == gender]
+    items = []
+    for it in tpl["items"]:
+        if "demographic_enabled" not in it:
+            it["demographic_enabled"] = bool(it.get("gender"))
+        items.append(QuestionnaireItem(**it))
+    if gender or age is not None:
+        items = [
+            it
+            for it in items
+            if not it.demographic_enabled
+            or (
+                (not it.gender or it.gender == "both" or it.gender == gender)
+                and (age is None or it.min_age is None or age >= it.min_age)
+                and (age is None or it.max_age is None or age <= it.max_age)
+            )
+        ]
     return Questionnaire(
         id=tpl["id"],
         items=items,
