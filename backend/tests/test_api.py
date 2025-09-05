@@ -526,9 +526,30 @@ def test_questionnaire_gender_filter() -> None:
         "visit_type": "initial",
         "items": [
             {"id": "common", "label": "共通", "type": "string", "required": True},
-            {"id": "male_only", "label": "男性のみ", "type": "string", "required": False, "gender": "male"},
-            {"id": "female_only", "label": "女性のみ", "type": "string", "required": False, "gender": "female"},
-            {"id": "both_item", "label": "両方", "type": "string", "required": False, "gender": "both"},
+            {
+                "id": "male_only",
+                "label": "男性のみ",
+                "type": "string",
+                "required": False,
+                "gender": "male",
+                "demographic_enabled": True,
+            },
+            {
+                "id": "female_only",
+                "label": "女性のみ",
+                "type": "string",
+                "required": False,
+                "gender": "female",
+                "demographic_enabled": True,
+            },
+            {
+                "id": "both_item",
+                "label": "両方",
+                "type": "string",
+                "required": False,
+                "gender": "both",
+                "demographic_enabled": True,
+            },
         ],
     }
     res = client.post("/questionnaires", json=payload)
@@ -544,6 +565,43 @@ def test_questionnaire_gender_filter() -> None:
     assert "common" in male_items and "common" in female_items
     assert "both_item" in male_items and "both_item" in female_items
     client.delete("/questionnaires/gender_tpl?visit_type=initial")
+
+
+def test_questionnaire_age_filter() -> None:
+    """年齢指定の問診項目がフィルタされることを確認する。"""
+    on_startup()
+    payload = {
+        "id": "age_tpl",
+        "visit_type": "initial",
+        "items": [
+            {
+                "id": "child",
+                "label": "小児のみ",
+                "type": "string",
+                "demographic_enabled": True,
+                "min_age": 0,
+                "max_age": 15,
+            },
+            {
+                "id": "adult",
+                "label": "成人のみ",
+                "type": "string",
+                "demographic_enabled": True,
+                "min_age": 20,
+            },
+            {"id": "all", "label": "全員", "type": "string"},
+        ],
+    }
+    res = client.post("/questionnaires", json=payload)
+    assert res.status_code == 200
+    child_res = client.get("/questionnaires/age_tpl/template?visit_type=initial&age=10")
+    adult_res = client.get("/questionnaires/age_tpl/template?visit_type=initial&age=30")
+    child_ids = [it["id"] for it in child_res.json()["items"]]
+    adult_ids = [it["id"] for it in adult_res.json()["items"]]
+    assert "child" in child_ids and "adult" not in child_ids
+    assert "adult" in adult_ids and "child" not in adult_ids
+    assert "all" in child_ids and "all" in adult_ids
+    client.delete("/questionnaires/age_tpl?visit_type=initial")
 
 
 def test_duplicate_questionnaire() -> None:

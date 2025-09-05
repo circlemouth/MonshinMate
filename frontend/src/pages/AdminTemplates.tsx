@@ -44,20 +44,23 @@ import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakr
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
-interface Item {
-  id: string;
-  label: string;
-  type: string;
-  required: boolean;
-  options?: string[];
-  use_initial: boolean;
-  use_followup: boolean;
-  allow_freetext?: boolean;
-  description?: string;
-  gender?: string;
-  image?: string;
-  followups?: Record<string, Item[]>;
-}
+  interface Item {
+    id: string;
+    label: string;
+    type: string;
+    required: boolean;
+    options?: string[];
+    use_initial: boolean;
+    use_followup: boolean;
+    allow_freetext?: boolean;
+    description?: string;
+    demographic_enabled?: boolean;
+    gender?: string;
+    min_age?: number;
+    max_age?: number;
+    image?: string;
+    followups?: Record<string, Item[]>;
+  }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
@@ -80,7 +83,10 @@ export default function AdminTemplates() {
     use_followup: boolean;
     allow_freetext: boolean;
     description: string;
+    demographic_enabled: boolean;
     gender: string;
+    min_age: string;
+    max_age: string;
     image: string;
   }>({
     label: '',
@@ -91,7 +97,10 @@ export default function AdminTemplates() {
     use_followup: true,
     allow_freetext: false,
     description: '',
+    demographic_enabled: false,
     gender: 'both',
+    min_age: '',
+    max_age: '',
     image: '',
   });
   const [templateId, setTemplateId] = useState<string | null>(null);
@@ -102,6 +111,7 @@ export default function AdminTemplates() {
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
   const [previewGender, setPreviewGender] = useState<'male' | 'female'>('male');
+  const [previewAge, setPreviewAge] = useState<number>(30);
   const previewModal = useDisclosure();
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
@@ -274,13 +284,24 @@ export default function AdminTemplates() {
       fetch(`/questionnaires/${id}/followup-prompt?visit_type=followup`).then((r) => r.json()),
     ]).then(([init, follow, pInit, pFollow, fInit, fFollow]) => {
       const map = new Map<string, Item>();
-      (init.items || []).forEach((it: any) => map.set(it.id, { ...it, use_initial: true, use_followup: false }));
+      (init.items || []).forEach((it: any) =>
+        map.set(it.id, {
+          ...it,
+          demographic_enabled: it.demographic_enabled ?? (it.gender ? true : false),
+          use_initial: true,
+          use_followup: false,
+        })
+      );
       (follow.items || []).forEach((it: any) => {
+        const merged = {
+          ...it,
+          demographic_enabled: it.demographic_enabled ?? (it.gender ? true : false),
+        };
         const exist = map.get(it.id);
         if (exist) {
-          map.set(it.id, { ...exist, ...it, use_initial: exist.use_initial, use_followup: true });
+          map.set(it.id, { ...exist, ...merged, use_initial: exist.use_initial, use_followup: true });
         } else {
-          map.set(it.id, { ...it, use_initial: false, use_followup: true });
+          map.set(it.id, { ...merged, use_initial: false, use_followup: true });
         }
       });
       const arr = Array.from(map.values());
@@ -321,7 +342,19 @@ export default function AdminTemplates() {
         use_followup: newItem.use_followup,
         allow_freetext: newItem.allow_freetext,
         description: newItem.description,
-        gender: newItem.gender !== 'both' ? newItem.gender : undefined,
+        demographic_enabled: newItem.demographic_enabled,
+        gender:
+          newItem.demographic_enabled && newItem.gender !== 'both'
+            ? newItem.gender
+            : undefined,
+        min_age:
+          newItem.demographic_enabled && newItem.min_age
+            ? Number(newItem.min_age)
+            : undefined,
+        max_age:
+          newItem.demographic_enabled && newItem.max_age
+            ? Number(newItem.max_age)
+            : undefined,
         image: newItem.image || undefined,
       },
     ]);
@@ -336,7 +369,10 @@ export default function AdminTemplates() {
       use_followup: true,
       allow_freetext: false,
       description: '',
+      demographic_enabled: false,
       gender: 'both',
+      min_age: '',
+      max_age: '',
       image: '',
     });
     setIsAddingNewItem(false);
@@ -594,7 +630,11 @@ export default function AdminTemplates() {
   const previewItems = items.filter((item) => {
     if (previewVisitType === 'initial' && !item.use_initial) return false;
     if (previewVisitType === 'followup' && !item.use_followup) return false;
-    if (item.gender && item.gender !== 'both' && item.gender !== previewGender) return false;
+    if (item.demographic_enabled) {
+      if (item.gender && item.gender !== 'both' && item.gender !== previewGender) return false;
+      if (item.min_age !== undefined && previewAge < item.min_age) return false;
+      if (item.max_age !== undefined && previewAge > item.max_age) return false;
+    }
     return true;
   });
 
@@ -977,19 +1017,66 @@ export default function AdminTemplates() {
                                         }}
                                       />
                                     </FormControl>
-                                    <FormControl>
-                                      <FormLabel m={0}>対象性別</FormLabel>
-                                      <RadioGroup
-                                        value={item.gender || 'both'}
-                                        onChange={(val) => updateItem(idx, 'gender', val === 'both' ? undefined : val)}
-                                      >
-                                        <HStack spacing={4}>
-                                          <Radio value="both">制限なし</Radio>
-                                          <Radio value="male">男性のみ</Radio>
-                                          <Radio value="female">女性のみ</Radio>
+                                    <Checkbox
+                                      isChecked={item.demographic_enabled}
+                                      onChange={(e) => updateItem(idx, 'demographic_enabled', e.target.checked)}
+                                      alignSelf="flex-start"
+                                    >
+                                      年齢・性別で表示を制限
+                                    </Checkbox>
+                                    {item.demographic_enabled && (
+                                      <>
+                                        <FormControl>
+                                          <FormLabel m={0}>対象性別</FormLabel>
+                                          <RadioGroup
+                                            value={item.gender || 'both'}
+                                            onChange={(val) =>
+                                              updateItem(idx, 'gender', val === 'both' ? undefined : val)
+                                            }
+                                          >
+                                            <HStack spacing={4}>
+                                              <Radio value="both">制限なし</Radio>
+                                              <Radio value="male">男性のみ</Radio>
+                                              <Radio value="female">女性のみ</Radio>
+                                            </HStack>
+                                          </RadioGroup>
+                                        </FormControl>
+                                        <HStack>
+                                          <FormControl>
+                                            <FormLabel m={0}>最低年齢</FormLabel>
+                                            <NumberInput
+                                              min={0}
+                                              value={item.min_age ?? ''}
+                                              onChange={(v) =>
+                                                updateItem(
+                                                  idx,
+                                                  'min_age',
+                                                  v ? Number(v) : undefined
+                                                )
+                                              }
+                                            >
+                                              <NumberInputField />
+                                            </NumberInput>
+                                          </FormControl>
+                                          <FormControl>
+                                            <FormLabel m={0}>最高年齢</FormLabel>
+                                            <NumberInput
+                                              min={0}
+                                              value={item.max_age ?? ''}
+                                              onChange={(v) =>
+                                                updateItem(
+                                                  idx,
+                                                  'max_age',
+                                                  v ? Number(v) : undefined
+                                                )
+                                              }
+                                            >
+                                              <NumberInputField />
+                                            </NumberInput>
+                                          </FormControl>
                                         </HStack>
-                                      </RadioGroup>
-                                    </FormControl>
+                                      </>
+                                    )}
                                     <HStack justifyContent="space-between">
                                       <FormControl maxW="360px">
                                         <FormLabel m={0}>入力方法</FormLabel>
@@ -1203,19 +1290,54 @@ export default function AdminTemplates() {
                     フリーテキスト入力を
                   </Checkbox>
                 )}
-                <FormControl>
-                  <FormLabel>対象性別</FormLabel>
-                  <RadioGroup
-                    value={newItem.gender}
-                    onChange={(val) => setNewItem({ ...newItem, gender: val })}
-                  >
-                    <HStack spacing={4}>
-                      <Radio value="both">制限なし</Radio>
-                      <Radio value="male">男性のみ</Radio>
-                      <Radio value="female">女性のみ</Radio>
+                <Checkbox
+                  isChecked={newItem.demographic_enabled}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, demographic_enabled: e.target.checked })
+                  }
+                  alignSelf="flex-start"
+                >
+                  年齢・性別で表示を制限
+                </Checkbox>
+                {newItem.demographic_enabled && (
+                  <>
+                    <FormControl>
+                      <FormLabel>対象性別</FormLabel>
+                      <RadioGroup
+                        value={newItem.gender}
+                        onChange={(val) => setNewItem({ ...newItem, gender: val })}
+                      >
+                        <HStack spacing={4}>
+                          <Radio value="both">制限なし</Radio>
+                          <Radio value="male">男性のみ</Radio>
+                          <Radio value="female">女性のみ</Radio>
+                        </HStack>
+                      </RadioGroup>
+                    </FormControl>
+                    <HStack>
+                      <FormControl>
+                        <FormLabel>最低年齢</FormLabel>
+                        <NumberInput
+                          min={0}
+                          value={newItem.min_age}
+                          onChange={(v) => setNewItem({ ...newItem, min_age: v })}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
+                      <FormControl>
+                        <FormLabel>最高年齢</FormLabel>
+                        <NumberInput
+                          min={0}
+                          value={newItem.max_age}
+                          onChange={(v) => setNewItem({ ...newItem, max_age: v })}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
                     </HStack>
-                  </RadioGroup>
-                </FormControl>
+                  </>
+                )}
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
                     必須
@@ -1283,6 +1405,19 @@ export default function AdminTemplates() {
                       <Radio value="female">女性</Radio>
                     </HStack>
                   </RadioGroup>
+                </FormControl>
+                <FormControl mb={4}>
+                  <FormLabel>年齢</FormLabel>
+                  <NumberInput
+                    min={0}
+                    value={previewAge}
+                    onChange={(v) => {
+                      setPreviewAge(Number(v));
+                      setPreviewAnswers({});
+                    }}
+                  >
+                    <NumberInputField />
+                  </NumberInput>
                 </FormControl>
                 <VStack spacing={3} align="stretch">
                   {previewItems.map((item) => (
