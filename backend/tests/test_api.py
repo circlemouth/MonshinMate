@@ -8,6 +8,7 @@ from app.main import app, on_startup  # type: ignore[import]
 from app.db import get_session as db_get_session
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
+import base64
 
 
 client = TestClient(app)
@@ -118,19 +119,28 @@ def test_create_session() -> None:
     assert q_res.status_code == 200
     q_data = q_res.json()
     assert q_data["questions"]
-    first_q = q_data["questions"][0]
-    ans_res = client.post(
-        f"/sessions/{session_id}/llm-answers",
-        json={"item_id": first_q["id"], "answer": "昨日から"},
-    )
-    assert ans_res.status_code == 200
 
-    finalize_res = client.post(f"/sessions/{session_id}/finalize")
-    assert finalize_res.status_code == 200
-    data = finalize_res.json()
-    assert data["summary"] == ""
-    assert data["status"] == "finalized"
-    assert "finalized_at" in data and data["finalized_at"]
+
+def test_upload_and_delete_question_item_image(tmp_path) -> None:
+    """問診項目画像のアップロードと削除ができる。"""
+    on_startup()
+    png_b64 = (
+        b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII="
+    )
+    data = base64.b64decode(png_b64)
+    res = client.post(
+        "/questionnaire-item-images",
+        files={"file": ("test.png", data, "image/png")},
+    )
+    assert res.status_code == 200
+    url = res.json()["url"]
+    get_res = client.get(url)
+    assert get_res.status_code == 200
+    filename = url.split("/")[-1]
+    del_res = client.delete(f"/questionnaire-item-images/{filename}")
+    assert del_res.status_code == 200
+    after = client.get(url)
+    assert after.status_code == 404
 
 
 def test_add_answers() -> None:

@@ -845,3 +845,10 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`
+
+## 104. 問診項目への画像添付機能追加（2025-09-08）
+- [x] 各問診項目に画像ファイルをアップロードし、プレビューおよび削除ができるようにした。
+- [x] 変更（バックエンド）: `backend/app/main.py`, `backend/tests/test_api.py`
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`

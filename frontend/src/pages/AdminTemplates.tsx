@@ -137,6 +137,22 @@ export default function AdminTemplates() {
   const [initialLlmMax, setInitialLlmMax] = useState<number>(5);
   const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
   const isDirtyRef = useRef<boolean>(false);
+
+  const uploadItemImage = async (file: File): Promise<string | undefined> => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/questionnaire-item-images', { method: 'POST', body: fd });
+    if (!res.ok) return undefined;
+    const data = await res.json();
+    return data.url as string;
+  };
+
+  const deleteItemImage = async (url?: string): Promise<void> => {
+    if (!url || url.startsWith('data:')) return;
+    const name = url.split('/').pop();
+    if (!name) return;
+    await fetch(`/questionnaire-item-images/${name}`, { method: 'DELETE' });
+  };
   const markDirty = () => {
     isDirtyRef.current = true;
   };
@@ -556,7 +572,8 @@ export default function AdminTemplates() {
     markDirty();
   };
 
-  const removeItem = (index: number) => {
+  const removeItem = async (index: number) => {
+    await deleteItemImage(items[index]?.image);
     const removedId = items[index]?.id;
     const updated = items.filter((_, i) => i !== index);
     setItems(updated);
@@ -1147,7 +1164,10 @@ export default function AdminTemplates() {
                                             size="xs"
                                             colorScheme="red"
                                             mb={2}
-                                            onClick={() => updateItem(idx, 'image', undefined)}
+                                            onClick={async () => {
+                                              await deleteItemImage(item.image);
+                                              updateItem(idx, 'image', undefined);
+                                            }}
                                           >
                                             画像を削除
                                           </Button>
@@ -1157,15 +1177,16 @@ export default function AdminTemplates() {
                                         key={item.image || 'empty'}
                                         type="file"
                                         accept="image/*"
-                                        onChange={(e) => {
+                                        onChange={async (e) => {
                                           const file = e.target.files?.[0];
                                           if (!file) {
+                                            await deleteItemImage(item.image);
                                             updateItem(idx, 'image', undefined);
                                             return;
                                           }
-                                          const reader = new FileReader();
-                                          reader.onload = () => updateItem(idx, 'image', reader.result as string);
-                                          reader.readAsDataURL(file);
+                                          await deleteItemImage(item.image);
+                                          const url = await uploadItemImage(file);
+                                          if (url) updateItem(idx, 'image', url);
                                         }}
                                       />
                                     </FormControl>
@@ -1246,7 +1267,9 @@ export default function AdminTemplates() {
                                         size="sm"
                                         colorScheme="red"
                                         variant="outline"
-                                        onClick={() => removeItem(idx)}
+                                        onClick={() => {
+                                          void removeItem(idx);
+                                        }}
                                       />
                                     </HStack>
                                     {item.type === 'multi' && (
@@ -1433,7 +1456,10 @@ export default function AdminTemplates() {
                         size="xs"
                         colorScheme="red"
                         mb={2}
-                        onClick={() => setNewItem({ ...newItem, image: '' })}
+                        onClick={async () => {
+                          await deleteItemImage(newItem.image);
+                          setNewItem({ ...newItem, image: '' });
+                        }}
                       >
                         画像を削除
                       </Button>
@@ -1443,15 +1469,16 @@ export default function AdminTemplates() {
                     key={newItem.image || 'empty'}
                     type="file"
                     accept="image/*"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) {
+                        await deleteItemImage(newItem.image);
                         setNewItem({ ...newItem, image: '' });
                         return;
                       }
-                      const reader = new FileReader();
-                      reader.onload = () => setNewItem({ ...newItem, image: reader.result as string });
-                      reader.readAsDataURL(file);
+                      await deleteItemImage(newItem.image);
+                      const url = await uploadItemImage(file);
+                      if (url) setNewItem({ ...newItem, image: url });
                     }}
                   />
                 </FormControl>
@@ -1619,7 +1646,30 @@ export default function AdminTemplates() {
                   </Checkbox>
                 </HStack>
                 <HStack justifyContent="flex-end">
-                  <Button onClick={() => setIsAddingNewItem(false)} variant="ghost">
+                  <Button
+                    onClick={async () => {
+                      await deleteItemImage(newItem.image);
+                      setNewItem({
+                        label: '',
+                        type: 'string',
+                        required: false,
+                        options: [],
+                        use_initial: true,
+                        use_followup: true,
+                        allow_freetext: false,
+                        description: '',
+                        demographic_enabled: false,
+                        gender: 'both',
+                        min_age: '',
+                        max_age: '',
+                        image: '',
+                        min: '0',
+                        max: '10',
+                      });
+                      setIsAddingNewItem(false);
+                    }}
+                    variant="ghost"
+                  >
                     キャンセル
                   </Button>
                   <Button onClick={addItem} colorScheme="primary">
