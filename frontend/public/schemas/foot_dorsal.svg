@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <title>足背</title>
+  <rect id="foot_dorsal" x="40" y="80" width="120" height="60" stroke="black" fill="none"/>
+  <rect id="toe1_dorsal" x="60" y="40" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="toe2_dorsal" x="80" y="40" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="toe3_dorsal" x="100" y="40" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="toe4_dorsal" x="120" y="40" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="toe5_dorsal" x="140" y="40" width="20" height="40" stroke="black" fill="none"/>
+</svg>
