@@ -44,7 +44,7 @@ import {
   FormHelperText,
   Image,
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, ChatIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
@@ -141,6 +141,135 @@ export default function AdminTemplates() {
     isDirtyRef.current = true;
   };
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+
+  type FollowupState = {
+    items: Item[];
+    depth: number;
+    onSave: (items: Item[], stack: FollowupState[]) => void;
+  };
+  const [followupStack, setFollowupStack] = useState<FollowupState[]>([]);
+  const followupModal = useDisclosure();
+
+  const openFollowups = (
+    items: Item[],
+    onSave: (items: Item[], stack: FollowupState[]) => void,
+    depth: number
+  ) => {
+    setFollowupStack((prev) => [
+      ...prev,
+      { items: JSON.parse(JSON.stringify(items)), depth, onSave },
+    ]);
+    followupModal.onOpen();
+  };
+
+  const closeFollowups = () => {
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      stack.pop();
+      if (stack.length === 0) followupModal.onClose();
+      return stack;
+    });
+  };
+
+  const saveFollowups = () => {
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      const current = stack.pop();
+      if (current) current.onSave(current.items, stack);
+      if (stack.length === 0) followupModal.onClose();
+      return stack;
+    });
+  };
+
+  const currentFollowup = followupStack[followupStack.length - 1];
+
+  const updateFollowupItem = (index: number, field: keyof Item, value: any) => {
+    if (!currentFollowup) return;
+    const updated = [...currentFollowup.items];
+    updated[index] = { ...updated[index], [field]: value } as Item;
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      stack[stack.length - 1] = { ...currentFollowup, items: updated };
+      return stack;
+    });
+    markDirty();
+  };
+
+  const changeFollowupType = (index: number, newType: string) => {
+    if (!currentFollowup) return;
+    const target = currentFollowup.items[index];
+    const next: Item = { ...target, type: newType } as Item;
+    if (newType === 'multi') {
+      next.allow_freetext = true;
+      next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
+      delete (next as any).min;
+      delete (next as any).max;
+    } else if (newType === 'slider') {
+      delete (next as any).options;
+      next.allow_freetext = false;
+      next.min = target.min ?? 0;
+      next.max = target.max ?? 10;
+    } else {
+      delete (next as any).options;
+      next.allow_freetext = false;
+      delete (next as any).min;
+      delete (next as any).max;
+    }
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      const items = [...currentFollowup.items];
+      items[index] = next;
+      stack[stack.length - 1] = { ...currentFollowup, items };
+      return stack;
+    });
+    markDirty();
+  };
+
+  const addFollowupItem = () => {
+    if (!currentFollowup) return;
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      stack[stack.length - 1] = {
+        ...currentFollowup,
+        items: [
+          ...currentFollowup.items,
+          {
+            id: crypto.randomUUID(),
+            label: '',
+            type: 'string',
+            required: false,
+            options: [],
+            use_initial: true,
+            use_followup: true,
+            allow_freetext: false,
+            description: '',
+            demographic_enabled: false,
+            gender: 'both',
+            min_age: undefined,
+            max_age: undefined,
+            image: undefined,
+            min: undefined,
+            max: undefined,
+            followups: undefined,
+          },
+        ],
+      };
+      return stack;
+    });
+    markDirty();
+  };
+
+  const removeFollowupItem = (index: number) => {
+    if (!currentFollowup) return;
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      const items = [...currentFollowup.items];
+      items.splice(index, 1);
+      stack[stack.length - 1] = { ...currentFollowup, items };
+      return stack;
+    });
+    markDirty();
+  };
 
   const [defaultQuestionnaireId, setDefaultQuestionnaireId] = useState('default');
   const [defaultSaveStatus, setDefaultSaveStatus] = useState<SaveStatus>('idle');
@@ -1130,8 +1259,32 @@ export default function AdminTemplates() {
                                                 value={opt}
                                                 onChange={(e) => {
                                                   const newOptions = [...(item.options || [])];
+                                                  const oldVal = newOptions[optIdx];
                                                   newOptions[optIdx] = e.target.value;
                                                   updateItem(idx, 'options', newOptions);
+                                                  if (item.followups && item.followups[oldVal]) {
+                                                    const newFollowups = { ...(item.followups || {}) };
+                                                    newFollowups[e.target.value] = newFollowups[oldVal];
+                                                    delete newFollowups[oldVal];
+                                                    updateItem(idx, 'followups', newFollowups);
+                                                  }
+                                                }}
+                                              />
+                                              <IconButton
+                                                aria-label="ネスト質問を編集"
+                                                icon={<ChatIcon />}
+                                                size="sm"
+                                                isDisabled={!opt.trim()}
+                                                colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                onClick={() => {
+                                                  openFollowups(
+                                                    (item.followups && item.followups[opt]) || [],
+                                                    (newItems, _stack) => {
+                                                      const f = { ...(item.followups || {}), [opt]: newItems };
+                                                      updateItem(idx, 'followups', f);
+                                                    },
+                                                    1
+                                                  );
                                                 }}
                                               />
                                               <IconButton
@@ -1140,8 +1293,13 @@ export default function AdminTemplates() {
                                                 size="sm"
                                                 onClick={() => {
                                                   const newOptions = [...(item.options || [])];
-                                                  newOptions.splice(optIdx, 1);
+                                                  const removed = newOptions.splice(optIdx, 1)[0];
                                                   updateItem(idx, 'options', newOptions);
+                                                  if (item.followups && item.followups[removed]) {
+                                                    const newFollowups = { ...(item.followups || {}) };
+                                                    delete newFollowups[removed];
+                                                    updateItem(idx, 'followups', newFollowups);
+                                                  }
                                                 }}
                                               />
                                             </HStack>
@@ -1165,6 +1323,34 @@ export default function AdminTemplates() {
                                           >
                                             選択肢を追加
                                           </Button>
+                                        </VStack>
+                                      </Box>
+                                    )}
+                                    {item.type === 'yesno' && (
+                                      <Box>
+                                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
+                                        <VStack align="stretch">
+                                          {['yes', 'no'].map((opt) => (
+                                            <HStack key={opt}>
+                                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
+                                              <IconButton
+                                                aria-label="ネスト質問を編集"
+                                                icon={<ChatIcon />}
+                                                size="sm"
+                                                colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                onClick={() => {
+                                                  openFollowups(
+                                                    (item.followups && item.followups[opt]) || [],
+                                                    (newItems, _stack) => {
+                                                      const f = { ...(item.followups || {}), [opt]: newItems };
+                                                      updateItem(idx, 'followups', f);
+                                                    },
+                                                    1
+                                                  );
+                                                }}
+                                              />
+                                            </HStack>
+                                          ))}
                                         </VStack>
                                       </Box>
                                     )}
@@ -1594,6 +1780,301 @@ export default function AdminTemplates() {
           </ModalBody>
         </ModalContent>
       </Modal>
+      {currentFollowup && (
+        <Modal
+          isOpen={followupModal.isOpen}
+          onClose={closeFollowups}
+          size="xl"
+          scrollBehavior="inside"
+        >
+          <ModalOverlay />
+          <ModalContent>
+            <ModalHeader>ネスト質問の設定</ModalHeader>
+            <ModalCloseButton />
+            <ModalBody>
+              <VStack align="stretch" spacing={4} mb={4}>
+                {currentFollowup.items.map((fi, fIdx) => (
+                  <Box key={fi.id} borderWidth="1px" borderRadius="md" p={3}>
+                    <HStack justifyContent="space-between" alignItems="flex-start">
+                      <FormControl mr={2}>
+                        <FormLabel m={0}>質問文</FormLabel>
+                        <Input
+                          value={fi.label}
+                          onChange={(e) => updateFollowupItem(fIdx, 'label', e.target.value)}
+                        />
+                      </FormControl>
+                      <IconButton
+                        aria-label="追質問を削除"
+                        icon={<DeleteIcon />}
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        onClick={() => removeFollowupItem(fIdx)}
+                      />
+                    </HStack>
+                    <FormControl mt={2} maxW="200px">
+                      <FormLabel m={0}>入力方法</FormLabel>
+                      <Select
+                        value={fi.type}
+                        onChange={(e) => changeFollowupType(fIdx, e.target.value)}
+                      >
+                        <option value="string">テキスト</option>
+                        <option value="multi">複数選択</option>
+                        <option value="yesno">はい/いいえ</option>
+                        <option value="date">日付</option>
+                        <option value="slider">スライドバー</option>
+                      </Select>
+                    </FormControl>
+                    <HStack mt={2} spacing={4}>
+                      <Checkbox
+                        isChecked={fi.required}
+                        onChange={(e) => updateFollowupItem(fIdx, 'required', e.target.checked)}
+                      >
+                        必須
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_initial}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_initial', e.target.checked)}
+                      >
+                        初診
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_followup}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_followup', e.target.checked)}
+                      >
+                        再診
+                      </Checkbox>
+                    </HStack>
+                    <FormControl mt={2}>
+                      <FormLabel m={0}>説明</FormLabel>
+                      <Textarea
+                        value={fi.description || ''}
+                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
+                      />
+                    </FormControl>
+                    <Checkbox
+                      mt={2}
+                      isChecked={fi.demographic_enabled}
+                      onChange={(e) => updateFollowupItem(fIdx, 'demographic_enabled', e.target.checked)}
+                    >
+                      年齢・性別で表示を制限
+                    </Checkbox>
+                    {fi.demographic_enabled && (
+                      <HStack mt={2} spacing={4}>
+                        <Select
+                          value={fi.gender || 'both'}
+                          onChange={(e) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'gender',
+                              e.target.value === 'both' ? undefined : e.target.value
+                            )
+                          }
+                        >
+                          <option value="both">男女</option>
+                          <option value="male">男性</option>
+                          <option value="female">女性</option>
+                        </Select>
+                        <NumberInput
+                          value={fi.min_age ?? ''}
+                          onChange={(v) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'min_age',
+                              v ? Number(v) : undefined
+                            )
+                          }
+                        >
+                          <NumberInputField placeholder="最小年齢" />
+                        </NumberInput>
+                        <NumberInput
+                          value={fi.max_age ?? ''}
+                          onChange={(v) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'max_age',
+                              v ? Number(v) : undefined
+                            )
+                          }
+                        >
+                          <NumberInputField placeholder="最大年齢" />
+                        </NumberInput>
+                      </HStack>
+                    )}
+                    {fi.type === 'slider' && (
+                      <HStack mt={2} spacing={4}>
+                        <FormControl>
+                          <FormLabel m={0}>最小値</FormLabel>
+                          <NumberInput
+                            value={fi.min ?? 0}
+                            onChange={(v) =>
+                              updateFollowupItem(
+                                fIdx,
+                                'min',
+                                v ? Number(v) : undefined
+                              )
+                            }
+                          >
+                            <NumberInputField />
+                          </NumberInput>
+                        </FormControl>
+                        <FormControl>
+                          <FormLabel m={0}>最大値</FormLabel>
+                          <NumberInput
+                            value={fi.max ?? 10}
+                            onChange={(v) =>
+                              updateFollowupItem(
+                                fIdx,
+                                'max',
+                                v ? Number(v) : undefined
+                              )
+                            }
+                          >
+                            <NumberInputField />
+                          </NumberInput>
+                        </FormControl>
+                      </HStack>
+                    )}
+                    {fi.type === 'multi' && (
+                      <Box mt={2}>
+                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
+                        <VStack align="stretch">
+                          {fi.options?.map((opt, oIdx) => (
+                            <HStack key={oIdx}>
+                              <Input
+                                value={opt}
+                                onChange={(e) => {
+                                  const newOptions = [...(fi.options || [])];
+                                  const oldVal = newOptions[oIdx];
+                                  newOptions[oIdx] = e.target.value;
+                                  updateFollowupItem(fIdx, 'options', newOptions);
+                                  if (fi.followups && fi.followups[oldVal]) {
+                                    const nf = { ...(fi.followups || {}) };
+                                    nf[e.target.value] = nf[oldVal];
+                                    delete nf[oldVal];
+                                    updateFollowupItem(fIdx, 'followups', nf);
+                                  }
+                                }}
+                              />
+                              <IconButton
+                                aria-label="ネスト質問を編集"
+                                icon={<ChatIcon />}
+                                size="sm"
+                                isDisabled={!opt.trim() || currentFollowup.depth >= 2}
+                                colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
+                                onClick={() => {
+                                  openFollowups(
+                                    (fi.followups && fi.followups[opt]) || [],
+                                    (newItems, stack) => {
+                                      const parent = stack[stack.length - 1];
+                                      const items = [...parent.items];
+                                      const f = {
+                                        ...(items[fIdx].followups || {}),
+                                        [opt]: newItems,
+                                      };
+                                      items[fIdx] = { ...items[fIdx], followups: f };
+                                      stack[stack.length - 1] = { ...parent, items };
+                                      markDirty();
+                                    },
+                                    currentFollowup.depth + 1
+                                  );
+                                }}
+                              />
+                              <IconButton
+                                aria-label="選択肢を削除"
+                                icon={<DeleteIcon />}
+                                size="sm"
+                                onClick={() => {
+                                  const newOptions = [...(fi.options || [])];
+                                  const removed = newOptions.splice(oIdx, 1)[0];
+                                  updateFollowupItem(fIdx, 'options', newOptions);
+                                  if (fi.followups && fi.followups[removed]) {
+                                    const nf = { ...(fi.followups || {}) };
+                                    delete nf[removed];
+                                    updateFollowupItem(fIdx, 'followups', nf);
+                                  }
+                                }}
+                              />
+                            </HStack>
+                          ))}
+                          <Checkbox
+                            isChecked={fi.allow_freetext}
+                            onChange={(e) =>
+                              updateFollowupItem(fIdx, 'allow_freetext', e.target.checked)
+                            }
+                            alignSelf="flex-end"
+                          >
+                            フリーテキスト入力を許可
+                          </Checkbox>
+                          <Button
+                            size="sm"
+                            py={2}
+                            onClick={() => {
+                              const newOptions = [...(fi.options || []), ''];
+                              updateFollowupItem(fIdx, 'options', newOptions);
+                            }}
+                            isDisabled={fi.options?.some((o) => !o.trim())}
+                            alignSelf="flex-end"
+                          >
+                            選択肢を追加
+                          </Button>
+                        </VStack>
+                      </Box>
+                    )}
+                    {fi.type === 'yesno' && (
+                      <Box mt={2}>
+                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
+                        <VStack align="stretch">
+                          {['yes', 'no'].map((opt) => (
+                            <HStack key={opt}>
+                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
+                              <IconButton
+                                aria-label="ネスト質問を編集"
+                                icon={<ChatIcon />}
+                                size="sm"
+                                colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
+                                isDisabled={currentFollowup.depth >= 2}
+                                onClick={() => {
+                                  openFollowups(
+                                    (fi.followups && fi.followups[opt]) || [],
+                                    (newItems, stack) => {
+                                      const parent = stack[stack.length - 1];
+                                      const items = [...parent.items];
+                                      const f = {
+                                        ...(items[fIdx].followups || {}),
+                                        [opt]: newItems,
+                                      };
+                                      items[fIdx] = { ...items[fIdx], followups: f };
+                                      stack[stack.length - 1] = { ...parent, items };
+                                      markDirty();
+                                    },
+                                    currentFollowup.depth + 1
+                                  );
+                                }}
+                              />
+                            </HStack>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )}
+                  </Box>
+                ))}
+                <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary">
+                  質問を追加
+                </Button>
+                <HStack justifyContent="flex-end" w="full">
+                  <Button onClick={closeFollowups} variant="ghost">
+                    キャンセル
+                  </Button>
+                  <Button onClick={saveFollowups} colorScheme="primary">
+                    保存
+                  </Button>
+                </HStack>
+              </VStack>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+      )}
     </VStack>
   );
 }

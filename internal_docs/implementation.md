@@ -825,7 +825,7 @@
 - [x] `QuestionnaireItem` に `followups` フィールドを追加し、選択肢ごとに追質問を定義可能にした。
 - [x] 患者画面で条件を満たした際に通常の質問として間に挿入される表示処理を実装。
 - [x] 問診テンプレート一覧でネスト質問の有無が分かるよう表示を追加。
-- [ ] 管理画面からのネスト質問編集 UI は簡易表示のみ（追実装予定）。
+- [x] 管理画面からネスト質問を編集できるモーダル UI を実装（最大2階層）。
 - [x] 変更（バックエンド）: `backend/app/main.py`
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`, `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/admin_user_manual.md`
