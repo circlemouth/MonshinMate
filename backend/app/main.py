@@ -19,8 +19,11 @@ except Exception:  # ランタイム環境に dotenv が無い場合でも起動
     def load_dotenv(*_args, **_kwargs):  # type: ignore
         return False
 
-from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import shutil
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
@@ -85,6 +88,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 init_db()
 app = FastAPI(title="MonshinMate API")
+
+# 問診項目画像の保存先を初期化し、静的配信を行う
+IMAGE_DIR = Path(__file__).resolve().parent / "questionnaire_item_images"
+IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/questionnaire-item-images/files",
+    StaticFiles(directory=str(IMAGE_DIR)),
+    name="questionnaire-item-images",
+)
 
 logger = logging.getLogger("api")
 
@@ -1102,6 +1114,26 @@ def reset_default_template() -> dict:
     upsert_summary_prompt("default", "followup", DEFAULT_SUMMARY_PROMPT, False)
     upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
     upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
+    return {"status": "ok"}
+
+
+@app.post("/questionnaire-item-images")
+def upload_questionnaire_item_image(file: UploadFile = File(...)) -> dict:
+    """問診項目に添付する画像をアップロードし、URLを返す。"""
+    suffix = Path(file.filename).suffix
+    filename = f"{uuid4().hex}{suffix}"
+    dest = IMAGE_DIR / filename
+    with dest.open("wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"url": f"/questionnaire-item-images/files/{filename}"}
+
+
+@app.delete("/questionnaire-item-images/{filename}")
+def delete_questionnaire_item_image(filename: str) -> dict:
+    """アップロード済みの問診項目画像を削除する。"""
+    target = IMAGE_DIR / filename
+    if target.exists():
+        target.unlink()
     return {"status": "ok"}
 
 
