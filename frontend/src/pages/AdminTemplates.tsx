@@ -44,7 +44,7 @@ import {
   FormHelperText,
   Image,
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, ChatIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, AddIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
@@ -809,6 +809,42 @@ export default function AdminTemplates() {
 
   return (
     <VStack spacing={8} align="stretch">
+      {/* Item editor backdrop: dim background while editing */}
+      {(selectedItemId || isAddingNewItem) && (
+        <Box
+          position="fixed"
+          top={0}
+          right={0}
+          bottom={0}
+          left={0}
+          bg="blackAlpha.300"
+          zIndex={1000}
+          onClick={async () => {
+            if (selectedItemId) setSelectedItemId(null);
+            if (isAddingNewItem) {
+              await deleteItemImage(newItem.image);
+              setNewItem({
+                label: '',
+                type: 'string',
+                required: false,
+                options: [],
+                use_initial: true,
+                use_followup: true,
+                allow_freetext: false,
+                description: '',
+                demographic_enabled: false,
+                gender: 'both',
+                min_age: '',
+                max_age: '',
+                image: '',
+                min: '0',
+                max: '10',
+              });
+              setIsAddingNewItem(false);
+            }
+          }}
+        />
+      )}
       <Box borderWidth="1px" borderRadius="md" p={4}>
         <Heading size="lg" mb={4}>
           テンプレート管理
@@ -1145,7 +1181,7 @@ export default function AdminTemplates() {
                           {selected && (
                             <Tr key={`editor-${item.id}`}>
                               <Td colSpan={5} p={0}>
-                                <Box p={4} bg="gray.50" borderTopWidth="1px">
+                                <Box p={4} bg="blue.50" borderTopWidth="1px" position="relative" zIndex={1100} boxShadow="lg" borderRadius="md">
                                   <VStack align="stretch" spacing={3}>
                                     <FormControl>
                                       <FormLabel m={0}>問診内容</FormLabel>
@@ -1155,6 +1191,30 @@ export default function AdminTemplates() {
                                       <FormLabel m={0}>補足説明</FormLabel>
                                       <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
                                     </FormControl>
+                                    {/* 入力方法や選択肢の設定（この下に画像・年齢/性別制限を移動） */}
+                                    <HStack justifyContent="space-between">
+                                      <FormControl maxW="360px">
+                                        <FormLabel m={0}>入力方法</FormLabel>
+                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
+                                          <option value="string">テキスト</option>
+                                          <option value="multi">複数選択</option>
+                                          <option value="yesno">はい/いいえ</option>
+                                          <option value="date">日付</option>
+                                          <option value="slider">スライドバー</option>
+                                        </Select>
+                                      </FormControl>
+                                      <IconButton
+                                        aria-label="項目を削除"
+                                        icon={<DeleteIcon />}
+                                        size="sm"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        onClick={() => {
+                                          void removeItem(idx);
+                                        }}
+                                      />
+                                    </HStack>
+                                    {/* 画像アップロード欄（入力方法の直下に移動） */}
                                     <FormControl>
                                       <FormLabel m={0}>画像</FormLabel>
                                       {item.image && (
@@ -1190,6 +1250,7 @@ export default function AdminTemplates() {
                                         }}
                                       />
                                     </FormControl>
+                                    {/* 年齢・性別制限（入力方法の直下に移動） */}
                                     <Checkbox
                                       isChecked={item.demographic_enabled}
                                       onChange={(e) => updateItem(idx, 'demographic_enabled', e.target.checked)}
@@ -1250,28 +1311,6 @@ export default function AdminTemplates() {
                                         </HStack>
                                       </>
                                     )}
-                                    <HStack justifyContent="space-between">
-                                      <FormControl maxW="360px">
-                                        <FormLabel m={0}>入力方法</FormLabel>
-                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                                          <option value="string">テキスト</option>
-                                          <option value="multi">複数選択</option>
-                                          <option value="yesno">はい/いいえ</option>
-                                          <option value="date">日付</option>
-                                          <option value="slider">スライドバー</option>
-                                        </Select>
-                                      </FormControl>
-                                      <IconButton
-                                        aria-label="項目を削除"
-                                        icon={<DeleteIcon />}
-                                        size="sm"
-                                        colorScheme="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          void removeItem(idx);
-                                        }}
-                                      />
-                                    </HStack>
                                     {item.type === 'multi' && (
                                       <Box>
                                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
@@ -1294,8 +1333,8 @@ export default function AdminTemplates() {
                                                 }}
                                               />
                                               <IconButton
-                                                aria-label="ネスト質問を編集"
-                                                icon={<ChatIcon />}
+                                                aria-label="追質問を追加/編集"
+                                                icon={<AddIcon />}
                                                 size="sm"
                                                 isDisabled={!opt.trim()}
                                                 colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
@@ -1357,8 +1396,8 @@ export default function AdminTemplates() {
                                             <HStack key={opt}>
                                               <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
                                               <IconButton
-                                                aria-label="ネスト質問を編集"
-                                                icon={<ChatIcon />}
+                                                aria-label="追質問を追加/編集"
+                                                icon={<AddIcon />}
                                                 size="sm"
                                                 colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
                                                 onClick={() => {
@@ -1403,7 +1442,7 @@ export default function AdminTemplates() {
                                         </FormControl>
                                       </HStack>
                                     )}
-                                    
+                                  
                                   </VStack>
                                 </Box>
                               </Td>
@@ -1426,7 +1465,7 @@ export default function AdminTemplates() {
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
           {isAddingNewItem && (
-            <Box borderWidth="1px" borderRadius="md" p={4} mt={6}>
+            <Box borderWidth="1px" borderRadius="md" p={4} mt={6} position="relative" zIndex={1100} boxShadow="lg">
               <Heading size="md" mb={4}>
                 問診項目を追加
               </Heading>
@@ -1447,6 +1486,36 @@ export default function AdminTemplates() {
                     onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                   />
                 </FormControl>
+                <FormControl>
+                  <FormLabel>入力方法</FormLabel>
+                  <Select
+                    value={newItem.type}
+                    onChange={(e) => {
+                      const t = e.target.value;
+                      if (t === 'multi') {
+                        setNewItem({
+                          ...newItem,
+                          type: t,
+                          allow_freetext: true,
+                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
+                          min: '',
+                          max: '',
+                        });
+                      } else if (t === 'slider') {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
+                      } else {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
+                      }
+                    }}
+                  >
+                    <option value="string">テキスト</option>
+                    <option value="multi">複数選択</option>
+                    <option value="yesno">はい/いいえ</option>
+                    <option value="date">日付</option>
+                  <option value="slider">スライドバー</option>
+                  </Select>
+                </FormControl>
+                {/* 画像アップロード欄（入力方法の直下へ移動） */}
                 <FormControl>
                   <FormLabel>画像</FormLabel>
                   {newItem.image && (
@@ -1482,35 +1551,56 @@ export default function AdminTemplates() {
                     }}
                   />
                 </FormControl>
-                <FormControl>
-                  <FormLabel>入力方法</FormLabel>
-                  <Select
-                    value={newItem.type}
-                    onChange={(e) => {
-                      const t = e.target.value;
-                      if (t === 'multi') {
-                        setNewItem({
-                          ...newItem,
-                          type: t,
-                          allow_freetext: true,
-                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
-                          min: '',
-                          max: '',
-                        });
-                      } else if (t === 'slider') {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
-                      } else {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
-                      }
-                    }}
-                  >
-                    <option value="string">テキスト</option>
-                    <option value="multi">複数選択</option>
-                    <option value="yesno">はい/いいえ</option>
-                    <option value="date">日付</option>
-                    <option value="slider">スライドバー</option>
-                  </Select>
-                </FormControl>
+                {/* 年齢・性別制限（入力方法の直下へ移動） */}
+                <Checkbox
+                  isChecked={newItem.demographic_enabled}
+                  onChange={(e) =>
+                    setNewItem({ ...newItem, demographic_enabled: e.target.checked })
+                  }
+                  alignSelf="flex-start"
+                >
+                  年齢・性別で表示を制限
+                </Checkbox>
+                {newItem.demographic_enabled && (
+                  <>
+                    <FormControl>
+                      <FormLabel>対象性別</FormLabel>
+                      <RadioGroup
+                        value={newItem.gender}
+                        onChange={(val) => setNewItem({ ...newItem, gender: val })}
+                      >
+                        <HStack spacing={4}>
+                          <Radio value="both">制限なし</Radio>
+                          <Radio value="male">男性のみ</Radio>
+                          <Radio value="female">女性のみ</Radio>
+                        </HStack>
+                      </RadioGroup>
+                    </FormControl>
+                    <HStack>
+                      <FormControl>
+                        <FormLabel>最低年齢</FormLabel>
+                        <NumberInput
+                          min={0}
+                          value={newItem.min_age}
+                          onChange={(v) => setNewItem({ ...newItem, min_age: v })}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
+                      <FormControl>
+                        <FormLabel>最高年齢</FormLabel>
+                        <NumberInput
+                          min={0}
+                          value={newItem.max_age}
+                          onChange={(v) => setNewItem({ ...newItem, max_age: v })}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
+                    </HStack>
+                  </>
+                )}
+                {/* 種別別の詳細設定（選択肢やスライダー設定） */}
                 {['multi'].includes(newItem.type) && (
                   <FormControl>
                     <FormLabel>選択肢</FormLabel>
@@ -1579,54 +1669,6 @@ export default function AdminTemplates() {
                       </NumberInput>
                     </FormControl>
                   </HStack>
-                )}
-                <Checkbox
-                  isChecked={newItem.demographic_enabled}
-                  onChange={(e) =>
-                    setNewItem({ ...newItem, demographic_enabled: e.target.checked })
-                  }
-                  alignSelf="flex-start"
-                >
-                  年齢・性別で表示を制限
-                </Checkbox>
-                {newItem.demographic_enabled && (
-                  <>
-                    <FormControl>
-                      <FormLabel>対象性別</FormLabel>
-                      <RadioGroup
-                        value={newItem.gender}
-                        onChange={(val) => setNewItem({ ...newItem, gender: val })}
-                      >
-                        <HStack spacing={4}>
-                          <Radio value="both">制限なし</Radio>
-                          <Radio value="male">男性のみ</Radio>
-                          <Radio value="female">女性のみ</Radio>
-                        </HStack>
-                      </RadioGroup>
-                    </FormControl>
-                    <HStack>
-                      <FormControl>
-                        <FormLabel>最低年齢</FormLabel>
-                        <NumberInput
-                          min={0}
-                          value={newItem.min_age}
-                          onChange={(v) => setNewItem({ ...newItem, min_age: v })}
-                        >
-                          <NumberInputField />
-                        </NumberInput>
-                      </FormControl>
-                      <FormControl>
-                        <FormLabel>最高年齢</FormLabel>
-                        <NumberInput
-                          min={0}
-                          value={newItem.max_age}
-                          onChange={(v) => setNewItem({ ...newItem, max_age: v })}
-                        >
-                          <NumberInputField />
-                        </NumberInput>
-                      </FormControl>
-                    </HStack>
-                  </>
                 )}
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
@@ -1875,33 +1917,43 @@ export default function AdminTemplates() {
                         <option value="slider">スライドバー</option>
                       </Select>
                     </FormControl>
-                    <HStack mt={2} spacing={4}>
-                      <Checkbox
-                        isChecked={fi.required}
-                        onChange={(e) => updateFollowupItem(fIdx, 'required', e.target.checked)}
-                      >
-                        必須
-                      </Checkbox>
-                      <Checkbox
-                        isChecked={fi.use_initial}
-                        onChange={(e) => updateFollowupItem(fIdx, 'use_initial', e.target.checked)}
-                      >
-                        初診
-                      </Checkbox>
-                      <Checkbox
-                        isChecked={fi.use_followup}
-                        onChange={(e) => updateFollowupItem(fIdx, 'use_followup', e.target.checked)}
-                      >
-                        再診
-                      </Checkbox>
-                    </HStack>
+                    {/* 画像アップロード（入力方法の直下へ配置） */}
                     <FormControl mt={2}>
-                      <FormLabel m={0}>説明</FormLabel>
-                      <Textarea
-                        value={fi.description || ''}
-                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
+                      <FormLabel m={0}>画像</FormLabel>
+                      {fi.image && (
+                        <>
+                          <Image src={fi.image} alt="" maxH="100px" mb={2} />
+                          <Button
+                            size="xs"
+                            colorScheme="red"
+                            mb={2}
+                            onClick={async () => {
+                              await deleteItemImage(fi.image);
+                              updateFollowupItem(fIdx, 'image', undefined);
+                            }}
+                          >
+                            画像を削除
+                          </Button>
+                        </>
+                      )}
+                      <Input
+                        key={fi.image || `empty-${fi.id}`}
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) {
+                            await deleteItemImage(fi.image);
+                            updateFollowupItem(fIdx, 'image', undefined);
+                            return;
+                          }
+                          await deleteItemImage(fi.image);
+                          const url = await uploadItemImage(file);
+                          if (url) updateFollowupItem(fIdx, 'image', url);
+                        }}
                       />
                     </FormControl>
+                    {/* 年齢・性別制限（入力方法の直下へ配置） */}
                     <Checkbox
                       mt={2}
                       isChecked={fi.demographic_enabled}
@@ -1951,6 +2003,33 @@ export default function AdminTemplates() {
                         </NumberInput>
                       </HStack>
                     )}
+                    <HStack mt={2} spacing={4}>
+                      <Checkbox
+                        isChecked={fi.required}
+                        onChange={(e) => updateFollowupItem(fIdx, 'required', e.target.checked)}
+                      >
+                        必須
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_initial}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_initial', e.target.checked)}
+                      >
+                        初診
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_followup}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_followup', e.target.checked)}
+                      >
+                        再診
+                      </Checkbox>
+                    </HStack>
+                    <FormControl mt={2}>
+                      <FormLabel m={0}>説明</FormLabel>
+                      <Textarea
+                        value={fi.description || ''}
+                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
+                      />
+                    </FormControl>
                     {fi.type === 'slider' && (
                       <HStack mt={2} spacing={4}>
                         <FormControl>
@@ -2007,8 +2086,8 @@ export default function AdminTemplates() {
                                 }}
                               />
                               <IconButton
-                                aria-label="ネスト質問を編集"
-                                icon={<ChatIcon />}
+                                aria-label="追質問を追加/編集"
+                                icon={<AddIcon />}
                                 size="sm"
                                 isDisabled={!opt.trim() || currentFollowup.depth >= 2}
                                 colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
@@ -2079,8 +2158,8 @@ export default function AdminTemplates() {
                             <HStack key={opt}>
                               <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
                               <IconButton
-                                aria-label="ネスト質問を編集"
-                                icon={<ChatIcon />}
+                                aria-label="追質問を追加/編集"
+                                icon={<AddIcon />}
                                 size="sm"
                                 colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
                                 isDisabled={currentFollowup.depth >= 2}

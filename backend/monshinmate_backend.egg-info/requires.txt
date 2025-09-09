@@ -8,3 +8,5 @@ python-jose[cryptography]
 cryptography
 reportlab
 python-dotenv
+couchdb
+python-multipart

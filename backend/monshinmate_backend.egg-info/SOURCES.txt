@@ -1,5 +1,12 @@
 README.md
 pyproject.toml
+./app/__init__.py
+./app/db.py
+./app/llm_gateway.py
+./app/main.py
+./app/session_fsm.py
+./app/structured_context.py
+./app/validator.py
 app/__init__.py
 app/db.py
 app/llm_gateway.py

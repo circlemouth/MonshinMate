@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400">
+  <title>背面図（部位別）</title>
+  <!-- 頭後部・うなじ -->
+  <circle id="back_head" cx="100" cy="40" r="30" stroke="black" fill="none"/>
+  <!-- 背部 -->
+  <rect id="scapular_left" x="60" y="70" width="40" height="60" stroke="black" fill="none"/>
+  <rect id="scapular_right" x="100" y="70" width="40" height="60" stroke="black" fill="none"/>
+  <rect id="lumbar" x="60" y="130" width="80" height="60" stroke="black" fill="none"/>
+  <rect id="buttocks" x="60" y="190" width="80" height="70" stroke="black" fill="none"/>
+  <!-- 上肢後面 左 -->
+  <rect id="left_shoulder_back" x="40" y="90" width="20" height="20" stroke="black" fill="none"/>
+  <rect id="left_upper_arm_back" x="30" y="110" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="left_elbow_back" x="30" y="150" width="20" height="20" stroke="black" fill="none"/>
+  <rect id="left_forearm_back" x="30" y="170" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="left_hand_back" x="25" y="210" width="30" height="20" stroke="black" fill="none"/>
+  <!-- 上肢後面 右 -->
+  <rect id="right_shoulder_back" x="140" y="90" width="20" height="20" stroke="black" fill="none"/>
+  <rect id="right_upper_arm_back" x="150" y="110" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="right_elbow_back" x="150" y="150" width="20" height="20" stroke="black" fill="none"/>
+  <rect id="right_forearm_back" x="150" y="170" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="right_hand_back" x="145" y="210" width="30" height="20" stroke="black" fill="none"/>
+  <!-- 下肢後面 左 -->
+  <rect id="left_thigh_back" x="80" y="260" width="20" height="35" stroke="black" fill="none"/>
+  <rect id="left_popliteal" x="80" y="295" width="20" height="15" stroke="black" fill="none"/>
+  <rect id="left_lower_leg_back" x="80" y="310" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="left_foot_back" x="80" y="350" width="20" height="30" stroke="black" fill="none"/>
+  <!-- 下肢後面 右 -->
+  <rect id="right_thigh_back" x="100" y="260" width="20" height="35" stroke="black" fill="none"/>
+  <rect id="right_popliteal" x="100" y="295" width="20" height="15" stroke="black" fill="none"/>
+  <rect id="right_lower_leg_back" x="100" y="310" width="20" height="40" stroke="black" fill="none"/>
+  <rect id="right_foot_back" x="100" y="350" width="20" height="30" stroke="black" fill="none"/>
+</svg>
