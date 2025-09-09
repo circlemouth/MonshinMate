@@ -1465,7 +1465,7 @@ export default function AdminTemplates() {
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
           {isAddingNewItem && (
-            <Box borderWidth="1px" borderRadius="md" p={4} mt={6} position="relative" zIndex={1100} boxShadow="lg">
+            <Box borderWidth="1px" borderRadius="md" p={4} mt={6} position="relative" zIndex={1100} boxShadow="lg" bg="blue.50">
               <Heading size="md" mb={4}>
                 問診項目を追加
               </Heading>
@@ -2003,33 +2003,7 @@ export default function AdminTemplates() {
                         </NumberInput>
                       </HStack>
                     )}
-                    <HStack mt={2} spacing={4}>
-                      <Checkbox
-                        isChecked={fi.required}
-                        onChange={(e) => updateFollowupItem(fIdx, 'required', e.target.checked)}
-                      >
-                        必須
-                      </Checkbox>
-                      <Checkbox
-                        isChecked={fi.use_initial}
-                        onChange={(e) => updateFollowupItem(fIdx, 'use_initial', e.target.checked)}
-                      >
-                        初診
-                      </Checkbox>
-                      <Checkbox
-                        isChecked={fi.use_followup}
-                        onChange={(e) => updateFollowupItem(fIdx, 'use_followup', e.target.checked)}
-                      >
-                        再診
-                      </Checkbox>
-                    </HStack>
-                    <FormControl mt={2}>
-                      <FormLabel m={0}>説明</FormLabel>
-                      <Textarea
-                        value={fi.description || ''}
-                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
-                      />
-                    </FormControl>
+                    {/* type-specific UI の前に画像・年齢/性別を配置し、説明と必須/適用は後ろへ移動 */}
                     {fi.type === 'slider' && (
                       <HStack mt={2} spacing={4}>
                         <FormControl>
@@ -2186,6 +2160,35 @@ export default function AdminTemplates() {
                         </VStack>
                       </Box>
                     )}
+                    {/* 説明（タイプ固有の設定の後に配置） */}
+                    <FormControl mt={2}>
+                      <FormLabel m={0}>説明</FormLabel>
+                      <Textarea
+                        value={fi.description || ''}
+                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
+                      />
+                    </FormControl>
+                    {/* 必須/初診/再診（タイプ固有の設定の後に配置） */}
+                    <HStack mt={2} spacing={4}>
+                      <Checkbox
+                        isChecked={fi.required}
+                        onChange={(e) => updateFollowupItem(fIdx, 'required', e.target.checked)}
+                      >
+                        必須
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_initial}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_initial', e.target.checked)}
+                      >
+                        初診
+                      </Checkbox>
+                      <Checkbox
+                        isChecked={fi.use_followup}
+                        onChange={(e) => updateFollowupItem(fIdx, 'use_followup', e.target.checked)}
+                      >
+                        再診
+                      </Checkbox>
+                    </HStack>
                   </Box>
                 ))}
                 <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary">
