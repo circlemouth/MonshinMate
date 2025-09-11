@@ -44,8 +44,10 @@ import {
   ModalBody,
   FormHelperText,
   Image,
+  Icon,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
+import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
@@ -159,17 +161,44 @@ export default function AdminTemplates() {
   };
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
 
-  const renderFollowupRows = (followups?: Record<string, Item[]>, depth = 1): JSX.Element[] => {
-    if (!followups) return [];
+  const renderFollowupRows = (
+    followups?: Record<string, Item[]>,
+    depth = 1,
+    parentIdx?: number
+  ): JSX.Element[] => {
+    if (!followups || parentIdx === undefined) return [];
     const rows: JSX.Element[] = [];
     Object.entries(followups).forEach(([opt, fItems]) => {
       const optLabel = opt === 'yes' ? 'はい' : opt === 'no' ? 'いいえ' : opt;
       fItems.forEach((fi) => {
         rows.push(
-          <Tr key={`followup-row-${fi.id}`}>
+          <Tr
+            key={`followup-row-${fi.id}`}
+            cursor={depth === 1 ? 'pointer' : undefined}
+            onClick={
+              depth === 1
+                ? () => {
+                    openFollowups(
+                      (items[parentIdx].followups &&
+                        items[parentIdx].followups![opt]) ||
+                        [],
+                      (newItems, _stack) => {
+                        const f = {
+                          ...(items[parentIdx].followups || {}),
+                          [opt]: newItems,
+                        };
+                        updateItem(parentIdx, 'followups', f);
+                      },
+                      1
+                    );
+                  }
+                : undefined
+            }
+          >
             <Td />
             <Td pl={depth * 4} color="gray.600">
               ↳[{optLabel}] {fi.label}
+              {fi.image && <Icon as={MdImage} ml={2} color="gray.500" />}
             </Td>
             <Td />
             <Td />
@@ -177,7 +206,7 @@ export default function AdminTemplates() {
           </Tr>
         );
         if (fi.followups) {
-          rows.push(...renderFollowupRows(fi.followups, depth + 1));
+          rows.push(...renderFollowupRows(fi.followups, depth + 1, parentIdx));
         }
       });
     });
@@ -197,9 +226,13 @@ export default function AdminTemplates() {
     onSave: (items: Item[], stack: FollowupState[]) => void,
     depth: number
   ) => {
+    const initialItems =
+      items.length > 0
+        ? JSON.parse(JSON.stringify(items))
+        : [createEmptyFollowupItem()];
     setFollowupStack((prev) => [
       ...prev,
-      { items: JSON.parse(JSON.stringify(items)), depth, onSave },
+      { items: initialItems, depth, onSave },
     ]);
     followupModal.onOpen();
   };
@@ -267,34 +300,33 @@ export default function AdminTemplates() {
     markDirty();
   };
 
+  const createEmptyFollowupItem = (): Item => ({
+    id: crypto.randomUUID(),
+    label: '',
+    type: 'string',
+    required: false,
+    options: [],
+    use_initial: true,
+    use_followup: true,
+    allow_freetext: false,
+    description: '',
+    demographic_enabled: false,
+    gender: 'both',
+    min_age: undefined,
+    max_age: undefined,
+    image: undefined,
+    min: undefined,
+    max: undefined,
+    followups: undefined,
+  });
+
   const addFollowupItem = () => {
     if (!currentFollowup) return;
     setFollowupStack((prev) => {
       const stack = [...prev];
       stack[stack.length - 1] = {
         ...currentFollowup,
-        items: [
-          ...currentFollowup.items,
-          {
-            id: crypto.randomUUID(),
-            label: '',
-            type: 'string',
-            required: false,
-            options: [],
-            use_initial: true,
-            use_followup: true,
-            allow_freetext: false,
-            description: '',
-            demographic_enabled: false,
-            gender: 'both',
-            min_age: undefined,
-            max_age: undefined,
-            image: undefined,
-            min: undefined,
-            max: undefined,
-            followups: undefined,
-          },
-        ],
+        items: [...currentFollowup.items, createEmptyFollowupItem()],
       };
       return stack;
     });
@@ -1181,6 +1213,9 @@ export default function AdminTemplates() {
                               {item.followups && Object.keys(item.followups).length > 0 && (
                                 <Text as="span" color="blue.500" ml={2}>枝</Text>
                               )}
+                              {item.image && (
+                                <Icon as={MdImage} ml={2} color="gray.500" />
+                              )}
                             </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
@@ -1217,30 +1252,6 @@ export default function AdminTemplates() {
                                       <FormLabel m={0}>補足説明</FormLabel>
                                       <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
                                     </FormControl>
-                                    {/* 入力方法や選択肢の設定（この下に画像・年齢/性別制限を移動） */}
-                                    <HStack justifyContent="space-between">
-                                      <FormControl maxW="360px">
-                                        <FormLabel m={0}>入力方法</FormLabel>
-                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                                          <option value="string">テキスト</option>
-                                          <option value="multi">複数選択</option>
-                                          <option value="yesno">はい/いいえ</option>
-                                          <option value="date">日付</option>
-                                          <option value="slider">スライドバー</option>
-                                        </Select>
-                                      </FormControl>
-                                      <IconButton
-                                        aria-label="項目を削除"
-                                        icon={<DeleteIcon />}
-                                        size="sm"
-                                        colorScheme="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          void removeItem(idx);
-                                        }}
-                                      />
-                                    </HStack>
-                                    {/* 画像アップロード欄（入力方法の直下に移動） */}
                                     <FormControl>
                                       <FormLabel m={0}>質問時に表示する画像</FormLabel>
                                       {item.image && (
@@ -1276,6 +1287,29 @@ export default function AdminTemplates() {
                                         }}
                                       />
                                     </FormControl>
+                                    {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
+                                    <HStack justifyContent="space-between">
+                                      <FormControl maxW="360px">
+                                        <FormLabel m={0}>入力方法</FormLabel>
+                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
+                                          <option value="string">テキスト</option>
+                                          <option value="multi">複数選択</option>
+                                          <option value="yesno">はい/いいえ</option>
+                                          <option value="date">日付</option>
+                                          <option value="slider">スライドバー</option>
+                                        </Select>
+                                      </FormControl>
+                                      <IconButton
+                                        aria-label="項目を削除"
+                                        icon={<DeleteIcon />}
+                                        size="sm"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        onClick={() => {
+                                          void removeItem(idx);
+                                        }}
+                                      />
+                                    </HStack>
                                     {item.type === 'multi' && (
                                       <Box>
                                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
@@ -1297,7 +1331,7 @@ export default function AdminTemplates() {
                                                   }
                                                 }}
                                               />
-                                              <Tooltip label="ネスト質問を追加">
+                                              <Tooltip label="追加質問を追加">
                                                 <IconButton
                                                   aria-label="追質問を追加/編集"
                                                   icon={<QuestionIcon />}
@@ -1362,7 +1396,7 @@ export default function AdminTemplates() {
                                           {['yes', 'no'].map((opt) => (
                                             <HStack key={opt}>
                                               <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                                              <Tooltip label="ネスト質問を追加">
+                                              <Tooltip label="追加質問を追加">
                                                 <IconButton
                                                   aria-label="追質問を追加/編集"
                                                   icon={<QuestionIcon />}
@@ -1478,7 +1512,7 @@ export default function AdminTemplates() {
                               </Td>
                             </Tr>
                           )}
-                          {renderFollowupRows(item.followups)}
+                          {renderFollowupRows(item.followups, 1, idx)}
                         </>
                       );
                     })}
@@ -1518,37 +1552,7 @@ export default function AdminTemplates() {
                   />
                 </FormControl>
                 <FormControl>
-                  <FormLabel>入力方法</FormLabel>
-                  <Select
-                    value={newItem.type}
-                    onChange={(e) => {
-                      const t = e.target.value;
-                      if (t === 'multi') {
-                        setNewItem({
-                          ...newItem,
-                          type: t,
-                          allow_freetext: true,
-                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
-                          min: '',
-                          max: '',
-                        });
-                      } else if (t === 'slider') {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
-                      } else {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
-                      }
-                    }}
-                  >
-                    <option value="string">テキスト</option>
-                    <option value="multi">複数選択</option>
-                    <option value="yesno">はい/いいえ</option>
-                    <option value="date">日付</option>
-                  <option value="slider">スライドバー</option>
-                  </Select>
-                </FormControl>
-                {/* 画像アップロード欄（入力方法の直下へ移動） */}
-                <FormControl>
-                  <FormLabel>画像</FormLabel>
+                  <FormLabel>質問時に表示する画像</FormLabel>
                   {newItem.image && (
                     <>
                       <Image src={newItem.image} alt="" maxH="100px" mb={2} />
@@ -1581,6 +1585,35 @@ export default function AdminTemplates() {
                       if (url) setNewItem({ ...newItem, image: url });
                     }}
                   />
+                </FormControl>
+                <FormControl>
+                  <FormLabel>入力方法</FormLabel>
+                  <Select
+                    value={newItem.type}
+                    onChange={(e) => {
+                      const t = e.target.value;
+                      if (t === 'multi') {
+                        setNewItem({
+                          ...newItem,
+                          type: t,
+                          allow_freetext: true,
+                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
+                          min: '',
+                          max: '',
+                        });
+                      } else if (t === 'slider') {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
+                      } else {
+                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
+                      }
+                    }}
+                  >
+                    <option value="string">テキスト</option>
+                    <option value="multi">複数選択</option>
+                    <option value="yesno">はい/いいえ</option>
+                    <option value="date">日付</option>
+                    <option value="slider">スライドバー</option>
+                  </Select>
                 </FormControl>
                 {/* 種別別の詳細設定（選択肢やスライダー設定） */}
                 {['multi'].includes(newItem.type) && (
@@ -1913,7 +1946,7 @@ export default function AdminTemplates() {
         >
           <ModalOverlay />
           <ModalContent>
-            <ModalHeader>ネスト質問の設定</ModalHeader>
+            <ModalHeader>追加質問の設定</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
               <VStack align="stretch" spacing={4} mb={4}>
@@ -1936,20 +1969,13 @@ export default function AdminTemplates() {
                         onClick={() => removeFollowupItem(fIdx)}
                       />
                     </HStack>
-                    <FormControl mt={2} maxW="200px">
-                      <FormLabel m={0}>入力方法</FormLabel>
-                      <Select
-                        value={fi.type}
-                        onChange={(e) => changeFollowupType(fIdx, e.target.value)}
-                      >
-                        <option value="string">テキスト</option>
-                        <option value="multi">複数選択</option>
-                        <option value="yesno">はい/いいえ</option>
-                        <option value="date">日付</option>
-                        <option value="slider">スライドバー</option>
-                      </Select>
+                    <FormControl mt={2}>
+                      <FormLabel m={0}>補足説明</FormLabel>
+                      <Textarea
+                        value={fi.description || ''}
+                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
+                      />
                     </FormControl>
-                    {/* 画像アップロード（入力方法の直下へ配置） */}
                     <FormControl mt={2}>
                       <FormLabel m={0}>質問時に表示する画像</FormLabel>
                       {fi.image && (
@@ -1984,6 +2010,19 @@ export default function AdminTemplates() {
                           if (url) updateFollowupItem(fIdx, 'image', url);
                         }}
                       />
+                    </FormControl>
+                    <FormControl mt={2} maxW="200px">
+                      <FormLabel m={0}>入力方法</FormLabel>
+                      <Select
+                        value={fi.type}
+                        onChange={(e) => changeFollowupType(fIdx, e.target.value)}
+                      >
+                        <option value="string">テキスト</option>
+                        <option value="multi">複数選択</option>
+                        <option value="yesno">はい/いいえ</option>
+                        <option value="date">日付</option>
+                        <option value="slider">スライドバー</option>
+                      </Select>
                     </FormControl>
                     {/* type-specific UI */}
                     {fi.type === 'slider' && (
@@ -2041,7 +2080,7 @@ export default function AdminTemplates() {
                                   }
                                 }}
                               />
-                              <Tooltip label="ネスト質問を追加">
+                              <Tooltip label="追加質問を追加">
                                 <IconButton
                                   aria-label="追質問を追加/編集"
                                   icon={<QuestionIcon />}
@@ -2115,7 +2154,7 @@ export default function AdminTemplates() {
                           {['yes', 'no'].map((opt) => (
                             <HStack key={opt}>
                               <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                              <Tooltip label="ネスト質問を追加">
+                              <Tooltip label="追加質問を追加">
                                 <IconButton
                                   aria-label="追質問を追加/編集"
                                   icon={<QuestionIcon />}
@@ -2146,14 +2185,6 @@ export default function AdminTemplates() {
                         </VStack>
                       </Box>
                     )}
-                    {/* 説明（タイプ固有の設定の後に配置） */}
-                    <FormControl mt={2}>
-                      <FormLabel m={0}>説明</FormLabel>
-                      <Textarea
-                        value={fi.description || ''}
-                        onChange={(e) => updateFollowupItem(fIdx, 'description', e.target.value)}
-                      />
-                    </FormControl>
                     {/* 必須/初診/再診（タイプ固有の設定の後に配置） */}
                     <HStack mt={2} spacing={4}>
                       <Checkbox
