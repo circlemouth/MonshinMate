@@ -44,6 +44,34 @@ echo "[start] backend: http://localhost:8001"
     # shellcheck source=/dev/null
     . ./.env
   fi
+  # CouchDB の設定が存在する場合、疎通できないときはローカル開発向けに SQLite へフォールバック
+  if [[ -n "${COUCHDB_URL:-}" ]]; then
+    if ! "$VENV_DIR/bin/python" - <<'PY'
+import os, sys, socket, urllib.parse
+url = os.environ.get('COUCHDB_URL')
+if not url:
+    sys.exit(0)
+try:
+    u = urllib.parse.urlparse(url)
+    host = u.hostname
+    port = u.port or (443 if u.scheme == 'https' else 80)
+    with socket.create_connection((host, port), timeout=1):
+        pass
+    sys.exit(0)
+except Exception:
+    sys.exit(1)
+PY
+    then
+      echo "[warn] COUCHDB_URL=$COUCHDB_URL に接続できません。SQLite にフォールバックします"
+      # dotenv による上書きを防ぐため空文字を明示設定
+      export COUCHDB_URL=""
+      export COUCHDB_DB=""
+      export COUCHDB_USER=""
+      export COUCHDB_PASSWORD=""
+    else
+      echo "[info] CouchDB に接続可能: $COUCHDB_URL"
+    fi
+  fi
   set +a
   exec uvicorn app.main:app --reload --port 8001
 ) &

@@ -23,6 +23,53 @@ try {
     & "$VenvDir/Scripts/python.exe" -m pip install -e .
     Pop-Location
 
+    # Load backend/.env to export environment variables (for emergency reset, CouchDB, etc.)
+    $BackendDir = Join-Path $RootDir 'backend'
+    $DotenvPath = Join-Path $BackendDir '.env'
+    if (Test-Path $DotenvPath) {
+        Write-Host "[setup] Loading backend/.env"
+        Get-Content $DotenvPath | ForEach-Object {
+            $line = $_.Trim()
+            if (-not $line -or $line.StartsWith('#')) { return }
+            # Basic KEY=VALUE parsing
+            $eq = $line.IndexOf('=')
+            if ($eq -gt 0) {
+                $k = $line.Substring(0, $eq).Trim()
+                $v = $line.Substring($eq + 1).Trim()
+                if ((($v.StartsWith('"')) -and ($v.EndsWith('"'))) -or (($v.StartsWith("'")) -and ($v.EndsWith("'")))) {
+                    $v = $v.Substring(1, $v.Length - 2)
+                }
+                Set-Item -Path Env:$k -Value $v -ErrorAction SilentlyContinue
+            }
+        }
+    }
+
+    # If CouchDB is configured but unreachable, fall back to SQLite for local development
+    if ($env:COUCHDB_URL) {
+        $reachable = $false
+        try {
+            $uri = [Uri]$env:COUCHDB_URL
+            $host = $uri.Host
+            $port = if ($uri.Port -gt 0) { $uri.Port } elseif ($uri.Scheme -eq 'https') { 443 } else { 80 }
+            $client = New-Object System.Net.Sockets.TcpClient
+            $iar = $client.BeginConnect($host, $port, $null, $null)
+            if ($iar.AsyncWaitHandle.WaitOne(1000, $false)) {
+                $client.EndConnect($iar)
+                $reachable = $true
+            }
+            $client.Close()
+        } catch { $reachable = $false }
+        if (-not $reachable) {
+            Write-Host "[warn] COUCHDB_URL=$($env:COUCHDB_URL) に接続できません。SQLite にフォールバックします"
+            $env:COUCHDB_URL = ''
+            $env:COUCHDB_DB = ''
+            $env:COUCHDB_USER = ''
+            $env:COUCHDB_PASSWORD = ''
+        } else {
+            Write-Host "[info] CouchDB に接続可能: $($env:COUCHDB_URL)"
+        }
+    }
+
     Write-Host "[start] backend: http://localhost:8001"
     $backend = Start-Process -FilePath (Join-Path $VenvDir 'Scripts\uvicorn.exe') `
         -ArgumentList 'app.main:app','--reload','--port','8001' `

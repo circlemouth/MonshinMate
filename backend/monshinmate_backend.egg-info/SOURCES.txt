@@ -21,5 +21,6 @@ monshinmate_backend.egg-info/requires.txt
 monshinmate_backend.egg-info/top_level.txt
 tests/test_admin.py
 tests/test_api.py
+tests/test_database_status.py
 tests/test_healthz.py
 tests/test_validator.py

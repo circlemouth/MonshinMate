@@ -34,10 +34,10 @@ export default function DbStatusBadge() {
 
   const label =
     status === 'couchdb'
-      ? 'CouchDB使用中'
+      ? 'DB:CouchDB'
       : status === 'sqlite'
-      ? 'SQLite使用中'
-      : 'DB接続エラー';
+      ? 'DB:SQLite'
+      : 'DB:接続エラー';
   const scheme =
     status === 'couchdb' ? 'green' : status === 'sqlite' ? 'blue' : 'red';
 
