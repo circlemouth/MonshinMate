@@ -177,3 +177,17 @@
 2025-09-12 06:04:45,804 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-09-12 06:04:56,310 INFO admin_login_success
 2025-09-12 06:04:56,603 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:27:58,015 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-09-12 08:27:59,801 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:28:00,110 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:28:04,449 INFO admin_login_failed
+2025-09-12 08:28:07,343 INFO admin_login_success
+2025-09-12 08:28:07,638 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:36:03,413 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:36:03,779 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:40:24,541 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-09-12 08:40:27,708 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:40:28,019 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-12 08:40:31,541 INFO admin_login_failed
+2025-09-12 08:40:37,716 INFO admin_login_success
+2025-09-12 08:40:38,005 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off

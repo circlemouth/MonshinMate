@@ -213,6 +213,9 @@ export default function AdminTemplates() {
     return rows;
   };
 
+  // 追質問は各回答（各オプション）につき最大1件
+  // 追加はモーダル内で制限する（addFollowupItem内のガード）。
+
   type FollowupState = {
     items: Item[];
     depth: number;
@@ -322,6 +325,7 @@ export default function AdminTemplates() {
 
   const addFollowupItem = () => {
     if (!currentFollowup) return;
+    if ((currentFollowup.items?.length || 0) >= 1) return;
     setFollowupStack((prev) => {
       const stack = [...prev];
       stack[stack.length - 1] = {
@@ -2160,7 +2164,6 @@ export default function AdminTemplates() {
                                   icon={<QuestionIcon />}
                                   size="sm"
                                   colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
-                                  isDisabled={currentFollowup.depth >= 2}
                                   onClick={() => {
                                     openFollowups(
                                       (fi.followups && fi.followups[opt]) || [],
@@ -2259,7 +2262,7 @@ export default function AdminTemplates() {
                     )}
                   </Box>
                 ))}
-                <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary">
+                <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary" isDisabled={(currentFollowup?.items?.length || 0) >= 1}>
                   質問を追加
                 </Button>
                 <HStack justifyContent="flex-end" w="full">
