@@ -857,3 +857,8 @@
 - [x] `backend/.env` の `COUCHDB_URL` を Docker Compose の CouchDB コンテナに接続する既定値 `http://couchdb:5984/` に修正。
 - [x] 変更: `backend/.env`, `internal_docs/docker_setup.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 106. 同梱SQLite DBの除去（2025-09-07）
+- [x] リポジトリから `backend/app/app.sqlite3` を削除し、`.gitignore` / `.dockerignore` に `backend/app/*.sqlite3` を追加。
+- [x] ドキュメント更新: `internal_docs/docker_setup.md`, `internal_docs/admin_system_setup.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
