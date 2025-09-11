@@ -32,7 +32,7 @@ import AdminSecurity from './pages/AdminSecurity';
 import AdminLayout from './components/AdminLayout';
 import LlmStatusBadge from './components/LlmStatusBadge';
 import FontSizeControl from './components/FontSizeControl';
-import CouchDbStatusBadge from './components/CouchDbStatusBadge';
+import DbStatusBadge from './components/DbStatusBadge';
 import { refreshLlmStatus } from './utils/llmStatus';
 
 export default function App() {
@@ -151,7 +151,7 @@ export default function App() {
           <Spacer />
           {isAdminPage ? (
             <>
-              <CouchDbStatusBadge />
+              <DbStatusBadge />
               <LlmStatusBadge />
               <Button
                 as={RouterLink}
@@ -166,7 +166,7 @@ export default function App() {
             </>
           ) : (
             <>
-              <CouchDbStatusBadge />
+              <DbStatusBadge />
               <LlmStatusBadge />
               <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
                 管理画面
