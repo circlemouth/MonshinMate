@@ -852,3 +852,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
 - [x] ドキュメント更新: `docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 105. Docker 環境の CouchDB 接続設定の明確化（2025-09-11）
+- [x] `backend/.env` の `COUCHDB_URL` を Docker Compose の CouchDB コンテナに接続する既定値 `http://couchdb:5984/` に修正。
+- [x] 変更: `backend/.env`, `internal_docs/docker_setup.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
