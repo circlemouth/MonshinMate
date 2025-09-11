@@ -862,3 +862,11 @@
 - [x] リポジトリから `backend/app/app.sqlite3` を削除し、`.gitignore` / `.dockerignore` に `backend/app/*.sqlite3` を追加。
 - [x] ドキュメント更新: `internal_docs/docker_setup.md`, `internal_docs/admin_system_setup.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 107. 項目編集UIとネスト質問一覧表示の改善（2025-09-12）
+- [x] 「フリーテキスト入力を許可」チェックボックスを左寄せに統一。
+- [x] 「年齢・性別で表示を制限」を編集エリアの末尾に配置し、選択肢追加ボタンの下でも最下部に表示。
+- [x] ネスト質問追加ボタンを「？」アイコンとし、ホバー時に案内を表示。
+- [x] 問診項目一覧でネスト質問を一段下げて表示。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
