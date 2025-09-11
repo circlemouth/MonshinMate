@@ -34,6 +34,7 @@ import {
   SliderTrack,
   SliderFilledTrack,
   SliderThumb,
+  Tooltip,
   useDisclosure,
   Modal,
   ModalOverlay,
@@ -44,7 +45,7 @@ import {
   FormHelperText,
   Image,
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, AddIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 
@@ -157,6 +158,31 @@ export default function AdminTemplates() {
     isDirtyRef.current = true;
   };
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+
+  const renderFollowupRows = (followups?: Record<string, Item[]>, depth = 1): JSX.Element[] => {
+    if (!followups) return [];
+    const rows: JSX.Element[] = [];
+    Object.entries(followups).forEach(([opt, fItems]) => {
+      const optLabel = opt === 'yes' ? 'はい' : opt === 'no' ? 'いいえ' : opt;
+      fItems.forEach((fi) => {
+        rows.push(
+          <Tr key={`followup-row-${fi.id}`}>
+            <Td />
+            <Td pl={depth * 4} color="gray.600">
+              ↳[{optLabel}] {fi.label}
+            </Td>
+            <Td />
+            <Td />
+            <Td />
+          </Tr>
+        );
+        if (fi.followups) {
+          rows.push(...renderFollowupRows(fi.followups, depth + 1));
+        }
+      });
+    });
+    return rows;
+  };
 
   type FollowupState = {
     items: Item[];
@@ -1250,7 +1276,142 @@ export default function AdminTemplates() {
                                         }}
                                       />
                                     </FormControl>
-                                    {/* 年齢・性別制限（入力方法の直下に移動） */}
+                                    {item.type === 'multi' && (
+                                      <Box>
+                                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
+                                        <VStack align="stretch">
+                                          {item.options?.map((opt, optIdx) => (
+                                            <HStack key={optIdx}>
+                                              <Input
+                                                value={opt}
+                                                onChange={(e) => {
+                                                  const newOptions = [...(item.options || [])];
+                                                  const oldVal = newOptions[optIdx];
+                                                  newOptions[optIdx] = e.target.value;
+                                                  updateItem(idx, 'options', newOptions);
+                                                  if (item.followups && item.followups[oldVal]) {
+                                                    const newFollowups = { ...(item.followups || {}) };
+                                                    newFollowups[e.target.value] = newFollowups[oldVal];
+                                                    delete newFollowups[oldVal];
+                                                    updateItem(idx, 'followups', newFollowups);
+                                                  }
+                                                }}
+                                              />
+                                              <Tooltip label="ネスト質問を追加">
+                                                <IconButton
+                                                  aria-label="追質問を追加/編集"
+                                                  icon={<QuestionIcon />}
+                                                  size="sm"
+                                                  isDisabled={!opt.trim()}
+                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                  onClick={() => {
+                                                    openFollowups(
+                                                      (item.followups && item.followups[opt]) || [],
+                                                      (newItems, _stack) => {
+                                                        const f = { ...(item.followups || {}), [opt]: newItems };
+                                                        updateItem(idx, 'followups', f);
+                                                      },
+                                                      1
+                                                    );
+                                                  }}
+                                                />
+                                              </Tooltip>
+                                              <IconButton
+                                                aria-label="選択肢を削除"
+                                                icon={<DeleteIcon />}
+                                                size="sm"
+                                                onClick={() => {
+                                                  const newOptions = [...(item.options || [])];
+                                                  const removed = newOptions.splice(optIdx, 1)[0];
+                                                  updateItem(idx, 'options', newOptions);
+                                                  if (item.followups && item.followups[removed]) {
+                                                    const newFollowups = { ...(item.followups || {}) };
+                                                    delete newFollowups[removed];
+                                                    updateItem(idx, 'followups', newFollowups);
+                                                  }
+                                                }}
+                                              />
+                                            </HStack>
+                                          ))}
+                                          <Checkbox
+                                            isChecked={item.allow_freetext}
+                                            onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
+                                            alignSelf="flex-start"
+                                          >
+                                            フリーテキスト入力を許可
+                                          </Checkbox>
+                                          <Button
+                                            size="sm"
+                                            py={2}
+                                            onClick={() => {
+                                              const newOptions = [...(item.options || []), ''];
+                                              updateItem(idx, 'options', newOptions);
+                                            }}
+                                            isDisabled={item.options?.some(opt => !opt.trim())}
+                                            alignSelf="flex-end"
+                                          >
+                                            選択肢を追加
+                                          </Button>
+                                        </VStack>
+                                      </Box>
+                                    )}
+                                    {item.type === 'yesno' && (
+                                      <Box>
+                                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
+                                        <VStack align="stretch">
+                                          {['yes', 'no'].map((opt) => (
+                                            <HStack key={opt}>
+                                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
+                                              <Tooltip label="ネスト質問を追加">
+                                                <IconButton
+                                                  aria-label="追質問を追加/編集"
+                                                  icon={<QuestionIcon />}
+                                                  size="sm"
+                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                  onClick={() => {
+                                                    openFollowups(
+                                                      (item.followups && item.followups[opt]) || [],
+                                                      (newItems, _stack) => {
+                                                        const f = { ...(item.followups || {}), [opt]: newItems };
+                                                        updateItem(idx, 'followups', f);
+                                                      },
+                                                      1
+                                                    );
+                                                  }}
+                                                />
+                                              </Tooltip>
+                                            </HStack>
+                                          ))}
+                                        </VStack>
+                                      </Box>
+                                    )}
+                                    {item.type === 'slider' && (
+                                      <HStack>
+                                        <FormControl>
+                                          <FormLabel m={0}>最小値</FormLabel>
+                                          <NumberInput
+                                            value={item.min ?? 0}
+                                            onChange={(v) =>
+                                              updateItem(idx, 'min', v ? Number(v) : undefined)
+                                            }
+                                          >
+                                            <NumberInputField />
+                                          </NumberInput>
+                                        </FormControl>
+                                        <FormControl>
+                                          <FormLabel m={0}>最大値</FormLabel>
+                                          <NumberInput
+                                            value={item.max ?? 10}
+                                            onChange={(v) =>
+                                              updateItem(idx, 'max', v ? Number(v) : undefined)
+                                            }
+                                          >
+                                            <NumberInputField />
+                                          </NumberInput>
+                                        </FormControl>
+                                      </HStack>
+                                    )}
+                                    {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
                                     <Checkbox
                                       isChecked={item.demographic_enabled}
                                       onChange={(e) => updateItem(idx, 'demographic_enabled', e.target.checked)}
@@ -1311,143 +1472,13 @@ export default function AdminTemplates() {
                                         </HStack>
                                       </>
                                     )}
-                                    {item.type === 'multi' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
-                                        <VStack align="stretch">
-                                          {item.options?.map((opt, optIdx) => (
-                                            <HStack key={optIdx}>
-                                              <Input
-                                                value={opt}
-                                                onChange={(e) => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const oldVal = newOptions[optIdx];
-                                                  newOptions[optIdx] = e.target.value;
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[oldVal]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    newFollowups[e.target.value] = newFollowups[oldVal];
-                                                    delete newFollowups[oldVal];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                              <IconButton
-                                                aria-label="追質問を追加/編集"
-                                                icon={<AddIcon />}
-                                                size="sm"
-                                                isDisabled={!opt.trim()}
-                                                colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                onClick={() => {
-                                                  openFollowups(
-                                                    (item.followups && item.followups[opt]) || [],
-                                                    (newItems, _stack) => {
-                                                      const f = { ...(item.followups || {}), [opt]: newItems };
-                                                      updateItem(idx, 'followups', f);
-                                                    },
-                                                    1
-                                                  );
-                                                }}
-                                              />
-                                              <IconButton
-                                                aria-label="選択肢を削除"
-                                                icon={<DeleteIcon />}
-                                                size="sm"
-                                                onClick={() => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const removed = newOptions.splice(optIdx, 1)[0];
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[removed]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    delete newFollowups[removed];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                            </HStack>
-                                          ))}
-                                          <Checkbox
-                                            isChecked={item.allow_freetext}
-                                            onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
-                                            alignSelf="flex-end"
-                                          >
-                                            フリーテキスト入力を許可
-                                          </Checkbox>
-                                          <Button
-                                            size="sm"
-                                            py={2}
-                                            onClick={() => {
-                                              const newOptions = [...(item.options || []), ''];
-                                              updateItem(idx, 'options', newOptions);
-                                            }}
-                                            isDisabled={item.options?.some(opt => !opt.trim())}
-                                            alignSelf="flex-end"
-                                          >
-                                            選択肢を追加
-                                          </Button>
-                                        </VStack>
-                                      </Box>
-                                    )}
-                                    {item.type === 'yesno' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
-                                        <VStack align="stretch">
-                                          {['yes', 'no'].map((opt) => (
-                                            <HStack key={opt}>
-                                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                                              <IconButton
-                                                aria-label="追質問を追加/編集"
-                                                icon={<AddIcon />}
-                                                size="sm"
-                                                colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                onClick={() => {
-                                                  openFollowups(
-                                                    (item.followups && item.followups[opt]) || [],
-                                                    (newItems, _stack) => {
-                                                      const f = { ...(item.followups || {}), [opt]: newItems };
-                                                      updateItem(idx, 'followups', f);
-                                                    },
-                                                    1
-                                                  );
-                                                }}
-                                              />
-                                            </HStack>
-                                          ))}
-                                        </VStack>
-                                      </Box>
-                                    )}
-                                    {item.type === 'slider' && (
-                                      <HStack>
-                                        <FormControl>
-                                          <FormLabel m={0}>最小値</FormLabel>
-                                          <NumberInput
-                                            value={item.min ?? 0}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'min', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                        <FormControl>
-                                          <FormLabel m={0}>最大値</FormLabel>
-                                          <NumberInput
-                                            value={item.max ?? 10}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'max', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                      </HStack>
-                                    )}
                                   
                                   </VStack>
                                 </Box>
                               </Td>
                             </Tr>
                           )}
+                          {renderFollowupRows(item.followups)}
                         </>
                       );
                     })}
@@ -1551,7 +1582,95 @@ export default function AdminTemplates() {
                     }}
                   />
                 </FormControl>
-                {/* 年齢・性別制限（入力方法の直下へ移動） */}
+                {/* 種別別の詳細設定（選択肢やスライダー設定） */}
+                {['multi'].includes(newItem.type) && (
+                  <FormControl>
+                    <FormLabel>選択肢</FormLabel>
+                    <VStack align="stretch">
+                      {newItem.options.map((opt, optIdx) => (
+                        <HStack key={optIdx}>
+                          <Input
+                            value={opt}
+                            onChange={(e) => {
+                              const newOptions = [...newItem.options];
+                              newOptions[optIdx] = e.target.value;
+                              setNewItem({ ...newItem, options: newOptions });
+                            }}
+                          />
+                          <IconButton
+                            aria-label="選択肢を削除"
+                            icon={<DeleteIcon />}
+                            size="sm"
+                            onClick={() => {
+                              const newOptions = [...newItem.options];
+                              newOptions.splice(optIdx, 1);
+                              setNewItem({ ...newItem, options: newOptions });
+                            }}
+                          />
+                        </HStack>
+                      ))}
+                      <Button
+                        size="sm"
+                        py={2}
+                        onClick={() => {
+                          const newOptions = [...newItem.options, ''];
+                          setNewItem({ ...newItem, options: newOptions });
+                        }}
+                      >
+                        選択肢を追加
+                      </Button>
+                    </VStack>
+                  </FormControl>
+                )}
+                {newItem.type === 'multi' && (
+                  <Checkbox
+                    isChecked={newItem.allow_freetext}
+                    onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
+                    alignSelf="flex-start"
+                  >
+                    フリーテキスト入力を許可
+                  </Checkbox>
+                )}
+                {newItem.type === 'slider' && (
+                  <HStack>
+                    <FormControl>
+                      <FormLabel>最小値</FormLabel>
+                      <NumberInput
+                        value={newItem.min}
+                        onChange={(v) => setNewItem({ ...newItem, min: v })}
+                      >
+                        <NumberInputField />
+                      </NumberInput>
+                    </FormControl>
+                    <FormControl>
+                      <FormLabel>最大値</FormLabel>
+                      <NumberInput
+                        value={newItem.max}
+                        onChange={(v) => setNewItem({ ...newItem, max: v })}
+                      >
+                        <NumberInputField />
+                      </NumberInput>
+                    </FormControl>
+                  </HStack>
+                )}
+                <HStack>
+                  <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
+                    必須
+                  </Checkbox>
+                  <Checkbox
+                    isChecked={newItem.use_initial}
+                    onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
+                  >
+                    初診に含める
+                  </Checkbox>
+                  <Checkbox
+                    isChecked={newItem.use_followup}
+                    onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
+                  >
+                    再診に含める
+                  </Checkbox>
+                </HStack>
+                {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
                 <Checkbox
                   isChecked={newItem.demographic_enabled}
                   onChange={(e) =>
@@ -1600,93 +1719,6 @@ export default function AdminTemplates() {
                     </HStack>
                   </>
                 )}
-                {/* 種別別の詳細設定（選択肢やスライダー設定） */}
-                {['multi'].includes(newItem.type) && (
-                  <FormControl>
-                    <FormLabel>選択肢</FormLabel>
-                    <VStack align="stretch">
-                      {newItem.options.map((opt, optIdx) => (
-                        <HStack key={optIdx}>
-                          <Input
-                            value={opt}
-                            onChange={(e) => {
-                              const newOptions = [...newItem.options];
-                              newOptions[optIdx] = e.target.value;
-                              setNewItem({ ...newItem, options: newOptions });
-                            }}
-                          />
-                          <IconButton
-                            aria-label="選択肢を削除"
-                            icon={<DeleteIcon />}
-                            size="sm"
-                            onClick={() => {
-                              const newOptions = [...newItem.options];
-                              newOptions.splice(optIdx, 1);
-                              setNewItem({ ...newItem, options: newOptions });
-                            }}
-                          />
-                        </HStack>
-                      ))}
-                      <Button
-                        size="sm"
-                        py={2}
-                        onClick={() => {
-                          const newOptions = [...newItem.options, ''];
-                          setNewItem({ ...newItem, options: newOptions });
-                        }}
-                      >
-                        選択肢を追加
-                      </Button>
-                    </VStack>
-                  </FormControl>
-                )}
-                {newItem.type === 'multi' && (
-                  <Checkbox
-                    isChecked={newItem.allow_freetext}
-                    onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
-                  >
-                    フリーテキスト入力を
-                  </Checkbox>
-                )}
-                {newItem.type === 'slider' && (
-                  <HStack>
-                    <FormControl>
-                      <FormLabel>最小値</FormLabel>
-                      <NumberInput
-                        value={newItem.min}
-                        onChange={(v) => setNewItem({ ...newItem, min: v })}
-                      >
-                        <NumberInputField />
-                      </NumberInput>
-                    </FormControl>
-                    <FormControl>
-                      <FormLabel>最大値</FormLabel>
-                      <NumberInput
-                        value={newItem.max}
-                        onChange={(v) => setNewItem({ ...newItem, max: v })}
-                      >
-                        <NumberInputField />
-                      </NumberInput>
-                    </FormControl>
-                  </HStack>
-                )}
-                <HStack>
-                  <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
-                    必須
-                  </Checkbox>
-                  <Checkbox
-                    isChecked={newItem.use_initial}
-                    onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
-                  >
-                    初診に含める
-                  </Checkbox>
-                  <Checkbox
-                    isChecked={newItem.use_followup}
-                    onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
-                  >
-                    再診に含める
-                  </Checkbox>
-                </HStack>
                 <HStack justifyContent="flex-end">
                   <Button
                     onClick={async () => {
@@ -1953,57 +1985,7 @@ export default function AdminTemplates() {
                         }}
                       />
                     </FormControl>
-                    {/* 年齢・性別制限（入力方法の直下へ配置） */}
-                    <Checkbox
-                      mt={2}
-                      isChecked={fi.demographic_enabled}
-                      onChange={(e) => updateFollowupItem(fIdx, 'demographic_enabled', e.target.checked)}
-                    >
-                      年齢・性別で表示を制限
-                    </Checkbox>
-                    {fi.demographic_enabled && (
-                      <HStack mt={2} spacing={4}>
-                        <Select
-                          value={fi.gender || 'both'}
-                          onChange={(e) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'gender',
-                              e.target.value === 'both' ? undefined : e.target.value
-                            )
-                          }
-                        >
-                          <option value="both">男女</option>
-                          <option value="male">男性</option>
-                          <option value="female">女性</option>
-                        </Select>
-                        <NumberInput
-                          value={fi.min_age ?? ''}
-                          onChange={(v) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'min_age',
-                              v ? Number(v) : undefined
-                            )
-                          }
-                        >
-                          <NumberInputField placeholder="最小年齢" />
-                        </NumberInput>
-                        <NumberInput
-                          value={fi.max_age ?? ''}
-                          onChange={(v) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'max_age',
-                              v ? Number(v) : undefined
-                            )
-                          }
-                        >
-                          <NumberInputField placeholder="最大年齢" />
-                        </NumberInput>
-                      </HStack>
-                    )}
-                    {/* type-specific UI の前に画像・年齢/性別を配置し、説明と必須/適用は後ろへ移動 */}
+                    {/* type-specific UI */}
                     {fi.type === 'slider' && (
                       <HStack mt={2} spacing={4}>
                         <FormControl>
@@ -2059,30 +2041,32 @@ export default function AdminTemplates() {
                                   }
                                 }}
                               />
-                              <IconButton
-                                aria-label="追質問を追加/編集"
-                                icon={<AddIcon />}
-                                size="sm"
-                                isDisabled={!opt.trim() || currentFollowup.depth >= 2}
-                                colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
-                                onClick={() => {
-                                  openFollowups(
-                                    (fi.followups && fi.followups[opt]) || [],
-                                    (newItems, stack) => {
-                                      const parent = stack[stack.length - 1];
-                                      const items = [...parent.items];
-                                      const f = {
-                                        ...(items[fIdx].followups || {}),
-                                        [opt]: newItems,
-                                      };
-                                      items[fIdx] = { ...items[fIdx], followups: f };
-                                      stack[stack.length - 1] = { ...parent, items };
-                                      markDirty();
-                                    },
-                                    currentFollowup.depth + 1
-                                  );
-                                }}
-                              />
+                              <Tooltip label="ネスト質問を追加">
+                                <IconButton
+                                  aria-label="追質問を追加/編集"
+                                  icon={<QuestionIcon />}
+                                  size="sm"
+                                  isDisabled={!opt.trim() || currentFollowup.depth >= 2}
+                                  colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
+                                  onClick={() => {
+                                    openFollowups(
+                                      (fi.followups && fi.followups[opt]) || [],
+                                      (newItems, stack) => {
+                                        const parent = stack[stack.length - 1];
+                                        const items = [...parent.items];
+                                        const f = {
+                                          ...(items[fIdx].followups || {}),
+                                          [opt]: newItems,
+                                        };
+                                        items[fIdx] = { ...items[fIdx], followups: f };
+                                        stack[stack.length - 1] = { ...parent, items };
+                                        markDirty();
+                                      },
+                                      currentFollowup.depth + 1
+                                    );
+                                  }}
+                                />
+                              </Tooltip>
                               <IconButton
                                 aria-label="選択肢を削除"
                                 icon={<DeleteIcon />}
@@ -2105,7 +2089,7 @@ export default function AdminTemplates() {
                             onChange={(e) =>
                               updateFollowupItem(fIdx, 'allow_freetext', e.target.checked)
                             }
-                            alignSelf="flex-end"
+                            alignSelf="flex-start"
                           >
                             フリーテキスト入力を許可
                           </Checkbox>
@@ -2131,30 +2115,32 @@ export default function AdminTemplates() {
                           {['yes', 'no'].map((opt) => (
                             <HStack key={opt}>
                               <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                              <IconButton
-                                aria-label="追質問を追加/編集"
-                                icon={<AddIcon />}
-                                size="sm"
-                                colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
-                                isDisabled={currentFollowup.depth >= 2}
-                                onClick={() => {
-                                  openFollowups(
-                                    (fi.followups && fi.followups[opt]) || [],
-                                    (newItems, stack) => {
-                                      const parent = stack[stack.length - 1];
-                                      const items = [...parent.items];
-                                      const f = {
-                                        ...(items[fIdx].followups || {}),
-                                        [opt]: newItems,
-                                      };
-                                      items[fIdx] = { ...items[fIdx], followups: f };
-                                      stack[stack.length - 1] = { ...parent, items };
-                                      markDirty();
-                                    },
-                                    currentFollowup.depth + 1
-                                  );
-                                }}
-                              />
+                              <Tooltip label="ネスト質問を追加">
+                                <IconButton
+                                  aria-label="追質問を追加/編集"
+                                  icon={<QuestionIcon />}
+                                  size="sm"
+                                  colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
+                                  isDisabled={currentFollowup.depth >= 2}
+                                  onClick={() => {
+                                    openFollowups(
+                                      (fi.followups && fi.followups[opt]) || [],
+                                      (newItems, stack) => {
+                                        const parent = stack[stack.length - 1];
+                                        const items = [...parent.items];
+                                        const f = {
+                                          ...(items[fIdx].followups || {}),
+                                          [opt]: newItems,
+                                        };
+                                        items[fIdx] = { ...items[fIdx], followups: f };
+                                        stack[stack.length - 1] = { ...parent, items };
+                                        markDirty();
+                                      },
+                                      currentFollowup.depth + 1
+                                    );
+                                  }}
+                                />
+                              </Tooltip>
                             </HStack>
                           ))}
                         </VStack>
@@ -2189,6 +2175,57 @@ export default function AdminTemplates() {
                         再診
                       </Checkbox>
                     </HStack>
+                    {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
+                    <Checkbox
+                      mt={2}
+                      isChecked={fi.demographic_enabled}
+                      onChange={(e) => updateFollowupItem(fIdx, 'demographic_enabled', e.target.checked)}
+                      alignSelf="flex-start"
+                    >
+                      年齢・性別で表示を制限
+                    </Checkbox>
+                    {fi.demographic_enabled && (
+                      <HStack mt={2} spacing={4}>
+                        <Select
+                          value={fi.gender || 'both'}
+                          onChange={(e) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'gender',
+                              e.target.value === 'both' ? undefined : e.target.value
+                            )
+                          }
+                        >
+                          <option value="both">男女</option>
+                          <option value="male">男性</option>
+                          <option value="female">女性</option>
+                        </Select>
+                        <NumberInput
+                          value={fi.min_age ?? ''}
+                          onChange={(v) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'min_age',
+                              v ? Number(v) : undefined
+                            )
+                          }
+                        >
+                          <NumberInputField placeholder="最小年齢" />
+                        </NumberInput>
+                        <NumberInput
+                          value={fi.max_age ?? ''}
+                          onChange={(v) =>
+                            updateFollowupItem(
+                              fIdx,
+                              'max_age',
+                              v ? Number(v) : undefined
+                            )
+                          }
+                        >
+                          <NumberInputField placeholder="最大年齢" />
+                        </NumberInput>
+                      </HStack>
+                    )}
                   </Box>
                 ))}
                 <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary">
