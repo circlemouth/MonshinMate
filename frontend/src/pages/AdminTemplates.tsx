@@ -1216,7 +1216,7 @@ export default function AdminTemplates() {
                                     </HStack>
                                     {/* 画像アップロード欄（入力方法の直下に移動） */}
                                     <FormControl>
-                                      <FormLabel m={0}>画像</FormLabel>
+                                      <FormLabel m={0}>質問時に表示する画像</FormLabel>
                                       {item.image && (
                                         <>
                                           <Image src={item.image} alt="" maxH="100px" mb={2} />
@@ -1919,7 +1919,7 @@ export default function AdminTemplates() {
                     </FormControl>
                     {/* 画像アップロード（入力方法の直下へ配置） */}
                     <FormControl mt={2}>
-                      <FormLabel m={0}>画像</FormLabel>
+                      <FormLabel m={0}>質問時に表示する画像</FormLabel>
                       {fi.image && (
                         <>
                           <Image src={fi.image} alt="" maxH="100px" mb={2} />
