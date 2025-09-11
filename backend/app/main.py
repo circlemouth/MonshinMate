@@ -1607,24 +1607,24 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
         return payload
 
 
-class CouchDbStatus(BaseModel):
-    """CouchDB の稼働状況。"""
+class DatabaseStatus(BaseModel):
+    """使用中のデータベース状態。"""
 
     status: str
 
 
-@app.get("/system/couchdb-status", response_model=CouchDbStatus)
-def get_couchdb_status() -> CouchDbStatus:
-    """CouchDB コンテナの稼働状況を返す。"""
+@app.get("/system/database-status", response_model=DatabaseStatus)
+def get_database_status() -> DatabaseStatus:
+    """データベースの使用状況を返す。"""
     if not COUCHDB_URL:
-        return CouchDbStatus(status="disabled")
+        return DatabaseStatus(status="sqlite")
     try:
         if couch_db is None:
             raise RuntimeError("couch_db not initialized")
         couch_db.info()
-        return CouchDbStatus(status="ok")
+        return DatabaseStatus(status="couchdb")
     except Exception:
-        return CouchDbStatus(status="ng")
+        return DatabaseStatus(status="error")
 
 
 # --- 管理者認証 API ---

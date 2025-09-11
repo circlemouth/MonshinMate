@@ -78,6 +78,8 @@ npm run dev
 - macOS/Linux: `./dev.sh` または `make dev`
 - Windows: `powershell -File dev.ps1`
 
+`dev.sh` はバックエンドとフロントエンドのみを起動します。CouchDB を利用する場合は別途 `docker compose up couchdb` などで起動し、`backend/.env` などで `COUCHDB_URL` や認証情報を設定してください。
+
 ## 環境変数（主要）
 - `ADMIN_PASSWORD`: 初期管理者パスワード（既定: `admin`）。初回起動判定にも使用。
 - `ADMIN_EMERGENCY_RESET_PASSWORD`: 非常用リセットパスワード。TOTP 無効時のみ UI のパスワードリセットで利用可。

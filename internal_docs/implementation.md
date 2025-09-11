@@ -786,7 +786,7 @@
 - [x] 管理画面ヘッダーに CouchDB の稼働状況アイコンを表示。
   - 追加: `frontend/src/components/CouchDbStatusIcon.tsx`
   - 変更: `frontend/src/App.tsx`, `docs/admin_user_manual.md`
-- [x] バックエンド API を追加: `/system/couchdb-status`
+- [x] バックエンド API を追加: `/system/couchdb-status`（後に削除）
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
 
 ## 96. モデル一覧取得時の自動疎通テスト（2025-09-03）
@@ -882,3 +882,15 @@
 - [x] 問診項目一覧で画像付き項目に画像アイコンを表示。
 - [x] UI 上の「ネスト質問」を「追加質問」に統一。
 - [x] 補足説明の直下に画像設定欄を移動（項目編集・追加・追加質問編集）。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 110. データベース種別バッジの拡張（2025-09-15）
+- [x] 管理画面ヘッダーのデータベースバッジを CouchDB/SQLite/DB接続エラーの3種表示に変更。
+  - 変更: `backend/app/main.py`, `backend/tests/test_database_status.py`, `frontend/src/components/DbStatusBadge.tsx`, `frontend/src/App.tsx`
+- [x] ドキュメント更新: `README.md`, `docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 111. 旧CouchDBステータスAPIの削除（2025-09-15）
+- [x] 後方互換のため残していた `/system/couchdb-status` エンドポイントを削除。
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
