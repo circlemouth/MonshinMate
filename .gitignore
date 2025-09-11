@@ -6,6 +6,7 @@ backend/.venv/
 .pytest_cache/
 .DS_Store
 .env
+backend/app/*.sqlite3
 
 # 注意: internal_docs/ は本リポジトリ（非公開）では Git 管理対象
 # 公開用エクスポートでは tools/export_public.sh が除外処理を行う
