@@ -238,37 +238,42 @@ export default function QuestionnaireForm() {
         const helperText = item.description || defaultHelperTexts[item.id];
         return (
           <Box key={item.id} bg="white" p={6} borderRadius="lg" boxShadow="sm">
-            <HStack align="flex-start" spacing={4}>
-              {item.image && (
-                <Image src={item.image} alt="" boxSize="100px" objectFit="contain" />
+            <FormControl
+              isRequired={item.required}
+              isInvalid={
+                attempted &&
+                item.required &&
+                (answers[item.id] === undefined ||
+                  answers[item.id] === '' ||
+                  (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
+              }
+            >
+              <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
+                {item.label}
+              </FormLabel>
+              {helperText && (
+                <FormHelperText id={`help-item-${item.id}`} mb={4}>
+                  {helperText}
+                </FormHelperText>
               )}
-              <FormControl
-                isRequired={item.required}
-                isInvalid={
-                  attempted &&
-                  item.required &&
-                  (answers[item.id] === undefined ||
-                    answers[item.id] === '' ||
-                    (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
-                }
-                flex="1"
-              >
-                <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
-                  {item.label}
-                </FormLabel>
-                {helperText && (
-                  <FormHelperText id={`help-item-${item.id}`} mb={4}>
-                    {helperText}
-                  </FormHelperText>
-                )}
-                {item.type === 'yesno' ? (
-                  <RadioGroup
-                    value={answers[item.id] || ''}
-                    onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
-                    aria-describedby={helperText ? `help-item-${item.id}` : undefined}
-                  >
-                    <VStack align="start" spacing={3}>
-                      <Radio value="yes" size="lg">はい</Radio>
+              {item.image && (
+                <Image
+                  src={item.image}
+                  alt=""
+                  w="100%"
+                  maxH="400px"
+                  objectFit="contain"
+                  mb={4}
+                />
+              )}
+              {item.type === 'yesno' ? (
+                <RadioGroup
+                  value={answers[item.id] || ''}
+                  onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+                  aria-describedby={helperText ? `help-item-${item.id}` : undefined}
+                >
+                  <VStack align="start" spacing={3}>
+                    <Radio value="yes" size="lg">はい</Radio>
                       <Radio value="no" size="lg">いいえ</Radio>
                     </VStack>
                   </RadioGroup>
@@ -308,25 +313,25 @@ export default function QuestionnaireForm() {
                         >
                           その他
                         </Checkbox>
-                    <Input
-                      mt={2}
-                      placeholder="自由記述"
-                      value={freeTexts[item.id] || ''}
-                      onChange={(e) => {
-                        const prev = freeTexts[item.id] || '';
-                        const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
-                        const val = e.target.value;
-                        const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
-                        setFreeTexts({ ...freeTexts, [item.id]: val });
-                        setAnswers({ ...answers, [item.id]: updated });
-                      }}
-                      autoComplete="off"
-                      name={`qi-free-${item.id}`}
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      isDisabled={!freeTextChecks[item.id]}
-                    />
+                        <Input
+                          mt={2}
+                          placeholder="自由記述"
+                          value={freeTexts[item.id] || ''}
+                          onChange={(e) => {
+                            const prev = freeTexts[item.id] || '';
+                            const selected = (answers[item.id] || []).filter((v: string) => v !== prev);
+                            const val = e.target.value;
+                            const updated = freeTextChecks[item.id] && val ? [...selected, val] : selected;
+                            setFreeTexts({ ...freeTexts, [item.id]: val });
+                            setAnswers({ ...answers, [item.id]: updated });
+                          }}
+                          autoComplete="off"
+                          name={`qi-free-${item.id}`}
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
+                          isDisabled={!freeTextChecks[item.id]}
+                        />
                       </Box>
                     )}
                   </>
@@ -370,7 +375,6 @@ export default function QuestionnaireForm() {
                 )}
                 <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
               </FormControl>
-            </HStack>
           </Box>
         );
       })}
