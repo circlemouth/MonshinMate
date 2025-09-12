@@ -35,8 +35,9 @@ import DateSelect from '../components/DateSelect';
     when?: { item_id: string; equals: string };
     allow_freetext?: boolean;
     description?: string;
+    gender_enabled?: boolean;
     gender?: string;
-    demographic_enabled?: boolean;
+    age_enabled?: boolean;
     min_age?: number;
     max_age?: number;
     min?: number;
@@ -172,8 +173,8 @@ export default function QuestionnaireForm() {
   const buildVisibleItems = (list: Item[]): Item[] => {
     const result: Item[] = [];
     const walk = (item: Item) => {
-      if (item.demographic_enabled) {
-        if (item.gender && item.gender !== 'both' && item.gender !== gender) return;
+      if (item.gender_enabled && item.gender && item.gender !== gender) return;
+      if (item.age_enabled) {
         if (item.min_age !== undefined && age !== undefined && age < item.min_age) return;
         if (item.max_age !== undefined && age !== undefined && age > item.max_age) return;
       }
