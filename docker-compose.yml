@@ -9,6 +9,12 @@ services:
       - COUCHDB_PASSWORD=admin
     volumes:
       - couchdb_data:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5984/_up || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
   backend:
     build:
       context: .
@@ -23,7 +29,8 @@ services:
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=admin
     depends_on:
-      - couchdb
+      couchdb:
+        condition: service_healthy
   frontend:
     build:
       context: .
