@@ -315,8 +315,8 @@ def on_startup() -> None:
             "allow_freetext": True,
             "required": False,
         },
-        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
-        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
     ]
     followup_items = [
         {
@@ -482,8 +482,9 @@ class QuestionnaireItem(BaseModel):
     description: str | None = None
     image: str | None = None
     when: WhenCondition | None = None
+    gender_enabled: bool = False
     gender: str | None = None
-    demographic_enabled: bool = False
+    age_enabled: bool = False
     min_age: int | None = None
     max_age: int | None = None
     min: float | None = None
@@ -577,44 +578,44 @@ def get_questionnaire_template(
             "llm_followup_max_questions": 5,
         }
         # 呼び出し互換のため、要求された ID をそのまま設定
-        items = []
-        for it in default_tpl["items"]:
-            if "demographic_enabled" not in it:
-                it["demographic_enabled"] = bool(it.get("gender"))
-            items.append(QuestionnaireItem(**it))
+        items = [QuestionnaireItem(**it) for it in default_tpl["items"]]
         if gender or age is not None:
-            items = [
-                it
-                for it in items
-                if not it.demographic_enabled
-                or (
-                    (not it.gender or it.gender == "both" or it.gender == gender)
-                    and (age is None or it.min_age is None or age >= it.min_age)
-                    and (age is None or it.max_age is None or age <= it.max_age)
-                )
-            ]
+            filtered: list[QuestionnaireItem] = []
+            for it in items:
+                ok = True
+                if it.gender_enabled:
+                    if not gender or not (not it.gender or it.gender == "both" or it.gender == gender):
+                        ok = False
+                if it.age_enabled and age is not None:
+                    if it.min_age is not None and age < it.min_age:
+                        ok = False
+                    if it.max_age is not None and age > it.max_age:
+                        ok = False
+                if ok:
+                    filtered.append(it)
+            items = filtered
         return Questionnaire(
             id=questionnaire_id,
             items=items,
             llm_followup_enabled=bool(default_tpl.get("llm_followup_enabled", True)),
             llm_followup_max_questions=int(default_tpl.get("llm_followup_max_questions", 5)),
         )
-    items = []
-    for it in tpl["items"]:
-        if "demographic_enabled" not in it:
-            it["demographic_enabled"] = bool(it.get("gender"))
-        items.append(QuestionnaireItem(**it))
+    items = [QuestionnaireItem(**it) for it in tpl["items"]]
     if gender or age is not None:
-        items = [
-            it
-            for it in items
-            if not it.demographic_enabled
-            or (
-                (not it.gender or it.gender == "both" or it.gender == gender)
-                and (age is None or it.min_age is None or age >= it.min_age)
-                and (age is None or it.max_age is None or age <= it.max_age)
-            )
-        ]
+        filtered: list[QuestionnaireItem] = []
+        for it in items:
+            ok = True
+            if it.gender_enabled:
+                if not gender or not (not it.gender or it.gender == "both" or it.gender == gender):
+                    ok = False
+            if it.age_enabled and age is not None:
+                if it.min_age is not None and age < it.min_age:
+                    ok = False
+                if it.max_age is not None and age > it.max_age:
+                    ok = False
+            if ok:
+                filtered.append(it)
+        items = filtered
     return Questionnaire(
         id=tpl["id"],
         items=items,
@@ -817,8 +818,8 @@ def reset_questionnaire(questionnaire_id: str) -> dict:
                 "allow_freetext": True,
                 "required": False,
             },
-            {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
-            {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
+            {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
+            {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
         ]
         followup_items = [
             {
@@ -1066,8 +1067,8 @@ def reset_default_template() -> dict:
             "allow_freetext": True,
             "required": False,
         },
-        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender": "female"},
-        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender": "female"},
+        {"id": "pregnancy", "label": "妊娠中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
+        {"id": "breastfeeding", "label": "授乳中ですか？", "type": "yesno", "required": False, "gender_enabled": True, "gender": "female"},
     ]
     followup_items = [
         {

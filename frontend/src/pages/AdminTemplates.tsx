@@ -61,14 +61,16 @@ import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
     use_followup: boolean;
     allow_freetext?: boolean;
     description?: string;
-    demographic_enabled?: boolean;
+    gender_enabled?: boolean;
     gender?: string;
+    age_enabled?: boolean;
     min_age?: number;
     max_age?: number;
     min?: number;
     max?: number;
     image?: string;
     followups?: Record<string, Item[]>;
+    age_mode?: 'max' | 'range' | 'min';
   }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -92,8 +94,10 @@ export default function AdminTemplates() {
     use_followup: boolean;
     allow_freetext: boolean;
     description: string;
-    demographic_enabled: boolean;
+    gender_enabled: boolean;
     gender: string;
+    age_enabled: boolean;
+    age_mode: 'max' | 'range' | 'min';
     min_age: string;
     max_age: string;
     image: string;
@@ -108,8 +112,10 @@ export default function AdminTemplates() {
     use_followup: true,
     allow_freetext: false,
     description: '',
-    demographic_enabled: false,
-    gender: 'both',
+    gender_enabled: false,
+    gender: 'male',
+    age_enabled: false,
+    age_mode: 'max',
     min_age: '',
     max_age: '',
     image: '',
@@ -264,7 +270,21 @@ export default function AdminTemplates() {
   const updateFollowupItem = (index: number, field: keyof Item, value: any) => {
     if (!currentFollowup) return;
     const updated = [...currentFollowup.items];
-    updated[index] = { ...updated[index], [field]: value } as Item;
+    if (field === 'age_mode') {
+      const item = { ...updated[index], age_mode: value } as Item;
+      if (value === 'max') item.min_age = undefined;
+      else if (value === 'min') item.max_age = undefined;
+      updated[index] = item;
+    } else {
+      updated[index] = { ...updated[index], [field]: value } as Item;
+      if (field === 'age_enabled' && !value) {
+        updated[index].min_age = undefined;
+        updated[index].max_age = undefined;
+      }
+      if (field === 'gender_enabled' && !value) {
+        updated[index].gender = undefined;
+      }
+    }
     setFollowupStack((prev) => {
       const stack = [...prev];
       stack[stack.length - 1] = { ...currentFollowup, items: updated };
@@ -313,8 +333,10 @@ export default function AdminTemplates() {
     use_followup: true,
     allow_freetext: false,
     description: '',
-    demographic_enabled: false,
-    gender: 'both',
+    gender_enabled: false,
+    gender: 'male',
+    age_enabled: false,
+    age_mode: 'max',
     min_age: undefined,
     max_age: undefined,
     image: undefined,
@@ -504,7 +526,18 @@ export default function AdminTemplates() {
       (init.items || []).forEach((it: any) =>
         map.set(it.id, {
           ...it,
-          demographic_enabled: it.demographic_enabled ?? (it.gender ? true : false),
+          gender_enabled: it.gender_enabled ?? (it.gender ? true : false),
+          age_enabled:
+            it.age_enabled ??
+            (it.min_age !== undefined || it.max_age !== undefined ? true : false),
+          age_mode:
+            it.min_age !== undefined && it.max_age !== undefined
+              ? 'range'
+              : it.min_age !== undefined
+                ? 'min'
+                : it.max_age !== undefined
+                  ? 'max'
+                  : 'max',
           use_initial: true,
           use_followup: false,
         })
@@ -512,7 +545,18 @@ export default function AdminTemplates() {
       (follow.items || []).forEach((it: any) => {
         const merged = {
           ...it,
-          demographic_enabled: it.demographic_enabled ?? (it.gender ? true : false),
+          gender_enabled: it.gender_enabled ?? (it.gender ? true : false),
+          age_enabled:
+            it.age_enabled ??
+            (it.min_age !== undefined || it.max_age !== undefined ? true : false),
+          age_mode:
+            it.min_age !== undefined && it.max_age !== undefined
+              ? 'range'
+              : it.min_age !== undefined
+                ? 'min'
+                : it.max_age !== undefined
+                  ? 'max'
+                  : 'max',
         };
         const exist = map.get(it.id);
         if (exist) {
@@ -559,17 +603,15 @@ export default function AdminTemplates() {
         use_followup: newItem.use_followup,
         allow_freetext: newItem.allow_freetext,
         description: newItem.description,
-        demographic_enabled: newItem.demographic_enabled,
-        gender:
-          newItem.demographic_enabled && newItem.gender !== 'both'
-            ? newItem.gender
-            : undefined,
+        gender_enabled: newItem.gender_enabled,
+        gender: newItem.gender_enabled ? newItem.gender : undefined,
+        age_enabled: newItem.age_enabled,
         min_age:
-          newItem.demographic_enabled && newItem.min_age
+          newItem.age_enabled && (newItem.age_mode === 'min' || newItem.age_mode === 'range')
             ? Number(newItem.min_age)
             : undefined,
         max_age:
-          newItem.demographic_enabled && newItem.max_age
+          newItem.age_enabled && (newItem.age_mode === 'max' || newItem.age_mode === 'range')
             ? Number(newItem.max_age)
             : undefined,
         image: newItem.image || undefined,
@@ -588,8 +630,10 @@ export default function AdminTemplates() {
       use_followup: true,
       allow_freetext: false,
       description: '',
-      demographic_enabled: false,
-      gender: 'both',
+      gender_enabled: false,
+      gender: 'male',
+      age_enabled: false,
+      age_mode: 'max',
       min_age: '',
       max_age: '',
       image: '',
@@ -601,7 +645,21 @@ export default function AdminTemplates() {
 
   const updateItem = (index: number, field: keyof Item, value: any) => {
     const updated = [...items];
-    updated[index] = { ...updated[index], [field]: value } as Item;
+    if (field === 'age_mode') {
+      const item = { ...updated[index], age_mode: value } as Item;
+      if (value === 'max') item.min_age = undefined;
+      else if (value === 'min') item.max_age = undefined;
+      updated[index] = item;
+    } else {
+      updated[index] = { ...updated[index], [field]: value } as Item;
+      if (field === 'age_enabled' && !value) {
+        updated[index].min_age = undefined;
+        updated[index].max_age = undefined;
+      }
+      if (field === 'gender_enabled' && !value) {
+        updated[index].gender = undefined;
+      }
+    }
     setItems(updated);
     markDirty();
   };
@@ -861,8 +919,8 @@ export default function AdminTemplates() {
   const previewItems = items.filter((item) => {
     if (previewVisitType === 'initial' && !item.use_initial) return false;
     if (previewVisitType === 'followup' && !item.use_followup) return false;
-    if (item.demographic_enabled) {
-      if (item.gender && item.gender !== 'both' && item.gender !== previewGender) return false;
+    if (item.gender_enabled && item.gender && item.gender !== previewGender) return false;
+    if (item.age_enabled) {
       if (item.min_age !== undefined && previewAge < item.min_age) return false;
       if (item.max_age !== undefined && previewAge > item.max_age) return false;
     }
@@ -894,8 +952,10 @@ export default function AdminTemplates() {
                 use_followup: true,
                 allow_freetext: false,
                 description: '',
-                demographic_enabled: false,
-                gender: 'both',
+                gender_enabled: false,
+                gender: 'male',
+                age_enabled: false,
+                age_mode: 'max',
                 min_age: '',
                 max_age: '',
                 image: '',
@@ -1449,65 +1509,106 @@ export default function AdminTemplates() {
                                         </FormControl>
                                       </HStack>
                                     )}
-                                    {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
+                                    {/* 性別制限 */}
                                     <Checkbox
-                                      isChecked={item.demographic_enabled}
-                                      onChange={(e) => updateItem(idx, 'demographic_enabled', e.target.checked)}
+                                      isChecked={item.gender_enabled}
+                                      onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
                                       alignSelf="flex-start"
                                     >
-                                      年齢・性別で表示を制限
+                                      性別で表示を制限
                                     </Checkbox>
-                                    {item.demographic_enabled && (
+                                    {item.gender_enabled && (
+                                      <HStack>
+                                        <Button
+                                          colorScheme={item.gender === 'male' ? 'teal' : undefined}
+                                          onClick={() => updateItem(idx, 'gender', 'male')}
+                                        >
+                                          男性
+                                        </Button>
+                                        <Button
+                                          colorScheme={item.gender === 'female' ? 'teal' : undefined}
+                                          onClick={() => updateItem(idx, 'gender', 'female')}
+                                        >
+                                          女性
+                                        </Button>
+                                      </HStack>
+                                    )}
+                                    {/* 年齢制限 */}
+                                    <Checkbox
+                                      isChecked={item.age_enabled}
+                                      onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
+                                      alignSelf="flex-start"
+                                    >
+                                      年齢で表示を制限
+                                    </Checkbox>
+                                    {item.age_enabled && (
                                       <>
-                                        <FormControl>
-                                          <FormLabel m={0}>対象性別</FormLabel>
-                                          <RadioGroup
-                                            value={item.gender || 'both'}
-                                            onChange={(val) =>
-                                              updateItem(idx, 'gender', val === 'both' ? undefined : val)
-                                            }
-                                          >
-                                            <HStack spacing={4}>
-                                              <Radio value="both">制限なし</Radio>
-                                              <Radio value="male">男性のみ</Radio>
-                                              <Radio value="female">女性のみ</Radio>
-                                            </HStack>
-                                          </RadioGroup>
-                                        </FormControl>
-                                        <HStack>
-                                          <FormControl>
-                                            <FormLabel m={0}>最低年齢</FormLabel>
-                                            <NumberInput
-                                              min={0}
-                                              value={item.min_age ?? ''}
-                                              onChange={(v) =>
-                                                updateItem(
-                                                  idx,
-                                                  'min_age',
-                                                  v ? Number(v) : undefined
-                                                )
-                                              }
-                                            >
-                                              <NumberInputField />
-                                            </NumberInput>
-                                          </FormControl>
+                                        <RadioGroup
+                                          value={item.age_mode || 'max'}
+                                          onChange={(val) => updateItem(idx, 'age_mode', val as any)}
+                                        >
+                                          <HStack spacing={4}>
+                                            <Radio value="max">何歳以下</Radio>
+                                            <Radio value="range">何歳から何歳</Radio>
+                                            <Radio value="min">何歳以上</Radio>
+                                          </HStack>
+                                        </RadioGroup>
+                                        {item.age_mode === 'range' && (
+                                          <HStack>
+                                            <FormControl>
+                                              <FormLabel m={0}>最低年齢</FormLabel>
+                                              <NumberInput
+                                                min={0}
+                                                value={item.min_age ?? ''}
+                                                onChange={(v) =>
+                                                  updateItem(idx, 'min_age', v ? Number(v) : undefined)
+                                                }
+                                              >
+                                                <NumberInputField />
+                                              </NumberInput>
+                                            </FormControl>
+                                            <FormControl>
+                                              <FormLabel m={0}>最高年齢</FormLabel>
+                                              <NumberInput
+                                                min={0}
+                                                value={item.max_age ?? ''}
+                                                onChange={(v) =>
+                                                  updateItem(idx, 'max_age', v ? Number(v) : undefined)
+                                                }
+                                              >
+                                                <NumberInputField />
+                                              </NumberInput>
+                                            </FormControl>
+                                          </HStack>
+                                        )}
+                                        {item.age_mode === 'max' && (
                                           <FormControl>
                                             <FormLabel m={0}>最高年齢</FormLabel>
                                             <NumberInput
                                               min={0}
                                               value={item.max_age ?? ''}
                                               onChange={(v) =>
-                                                updateItem(
-                                                  idx,
-                                                  'max_age',
-                                                  v ? Number(v) : undefined
-                                                )
+                                                updateItem(idx, 'max_age', v ? Number(v) : undefined)
                                               }
                                             >
                                               <NumberInputField />
                                             </NumberInput>
                                           </FormControl>
-                                        </HStack>
+                                        )}
+                                        {item.age_mode === 'min' && (
+                                          <FormControl>
+                                            <FormLabel m={0}>最低年齢</FormLabel>
+                                            <NumberInput
+                                              min={0}
+                                              value={item.min_age ?? ''}
+                                              onChange={(v) =>
+                                                updateItem(idx, 'min_age', v ? Number(v) : undefined)
+                                              }
+                                            >
+                                              <NumberInputField />
+                                            </NumberInput>
+                                          </FormControl>
+                                        )}
                                       </>
                                     )}
                                   
@@ -1707,42 +1808,75 @@ export default function AdminTemplates() {
                     再診に含める
                   </Checkbox>
                 </HStack>
-                {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
+                {/* 性別制限 */}
                 <Checkbox
-                  isChecked={newItem.demographic_enabled}
-                  onChange={(e) =>
-                    setNewItem({ ...newItem, demographic_enabled: e.target.checked })
-                  }
+                  isChecked={newItem.gender_enabled}
+                  onChange={(e) => setNewItem({ ...newItem, gender_enabled: e.target.checked })}
                   alignSelf="flex-start"
                 >
-                  年齢・性別で表示を制限
+                  性別で表示を制限
                 </Checkbox>
-                {newItem.demographic_enabled && (
+                {newItem.gender_enabled && (
+                  <HStack>
+                    <Button
+                      colorScheme={newItem.gender === 'male' ? 'teal' : undefined}
+                      onClick={() => setNewItem({ ...newItem, gender: 'male' })}
+                    >
+                      男性
+                    </Button>
+                    <Button
+                      colorScheme={newItem.gender === 'female' ? 'teal' : undefined}
+                      onClick={() => setNewItem({ ...newItem, gender: 'female' })}
+                    >
+                      女性
+                    </Button>
+                  </HStack>
+                )}
+                {/* 年齢制限 */}
+                <Checkbox
+                  isChecked={newItem.age_enabled}
+                  onChange={(e) => setNewItem({ ...newItem, age_enabled: e.target.checked })}
+                  alignSelf="flex-start"
+                >
+                  年齢で表示を制限
+                </Checkbox>
+                {newItem.age_enabled && (
                   <>
-                    <FormControl>
-                      <FormLabel>対象性別</FormLabel>
-                      <RadioGroup
-                        value={newItem.gender}
-                        onChange={(val) => setNewItem({ ...newItem, gender: val })}
-                      >
-                        <HStack spacing={4}>
-                          <Radio value="both">制限なし</Radio>
-                          <Radio value="male">男性のみ</Radio>
-                          <Radio value="female">女性のみ</Radio>
-                        </HStack>
-                      </RadioGroup>
-                    </FormControl>
-                    <HStack>
-                      <FormControl>
-                        <FormLabel>最低年齢</FormLabel>
-                        <NumberInput
-                          min={0}
-                          value={newItem.min_age}
-                          onChange={(v) => setNewItem({ ...newItem, min_age: v })}
-                        >
-                          <NumberInputField />
-                        </NumberInput>
-                      </FormControl>
+                    <RadioGroup
+                      value={newItem.age_mode}
+                      onChange={(val) => setNewItem({ ...newItem, age_mode: val as any })}
+                    >
+                      <HStack spacing={4}>
+                        <Radio value="max">何歳以下</Radio>
+                        <Radio value="range">何歳から何歳</Radio>
+                        <Radio value="min">何歳以上</Radio>
+                      </HStack>
+                    </RadioGroup>
+                    {newItem.age_mode === 'range' && (
+                      <HStack>
+                        <FormControl>
+                          <FormLabel>最低年齢</FormLabel>
+                          <NumberInput
+                            min={0}
+                            value={newItem.min_age}
+                            onChange={(v) => setNewItem({ ...newItem, min_age: v })}
+                          >
+                            <NumberInputField />
+                          </NumberInput>
+                        </FormControl>
+                        <FormControl>
+                          <FormLabel>最高年齢</FormLabel>
+                          <NumberInput
+                            min={0}
+                            value={newItem.max_age}
+                            onChange={(v) => setNewItem({ ...newItem, max_age: v })}
+                          >
+                            <NumberInputField />
+                          </NumberInput>
+                        </FormControl>
+                      </HStack>
+                    )}
+                    {newItem.age_mode === 'max' && (
                       <FormControl>
                         <FormLabel>最高年齢</FormLabel>
                         <NumberInput
@@ -1753,7 +1887,19 @@ export default function AdminTemplates() {
                           <NumberInputField />
                         </NumberInput>
                       </FormControl>
-                    </HStack>
+                    )}
+                    {newItem.age_mode === 'min' && (
+                      <FormControl>
+                        <FormLabel>最低年齢</FormLabel>
+                        <NumberInput
+                          min={0}
+                          value={newItem.min_age}
+                          onChange={(v) => setNewItem({ ...newItem, min_age: v })}
+                        >
+                          <NumberInputField />
+                        </NumberInput>
+                      </FormControl>
+                    )}
                   </>
                 )}
                 <HStack justifyContent="flex-end">
@@ -1769,8 +1915,10 @@ export default function AdminTemplates() {
                         use_followup: true,
                         allow_freetext: false,
                         description: '',
-                        demographic_enabled: false,
-                        gender: 'both',
+                        gender_enabled: false,
+                        gender: 'male',
+                        age_enabled: false,
+                        age_mode: 'max',
                         min_age: '',
                         max_age: '',
                         image: '',
@@ -2209,56 +2357,87 @@ export default function AdminTemplates() {
                         再診
                       </Checkbox>
                     </HStack>
-                    {/* 年齢・性別制限（項目編集エリアの最後に配置） */}
+                    {/* 性別制限 */}
                     <Checkbox
                       mt={2}
-                      isChecked={fi.demographic_enabled}
-                      onChange={(e) => updateFollowupItem(fIdx, 'demographic_enabled', e.target.checked)}
+                      isChecked={fi.gender_enabled}
+                      onChange={(e) => updateFollowupItem(fIdx, 'gender_enabled', e.target.checked)}
                       alignSelf="flex-start"
                     >
-                      年齢・性別で表示を制限
+                      性別で表示を制限
                     </Checkbox>
-                    {fi.demographic_enabled && (
+                    {fi.gender_enabled && (
                       <HStack mt={2} spacing={4}>
-                        <Select
-                          value={fi.gender || 'both'}
-                          onChange={(e) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'gender',
-                              e.target.value === 'both' ? undefined : e.target.value
-                            )
-                          }
+                        <Button
+                          size="sm"
+                          colorScheme={fi.gender === 'male' ? 'teal' : undefined}
+                          onClick={() => updateFollowupItem(fIdx, 'gender', 'male')}
                         >
-                          <option value="both">男女</option>
-                          <option value="male">男性</option>
-                          <option value="female">女性</option>
-                        </Select>
-                        <NumberInput
-                          value={fi.min_age ?? ''}
-                          onChange={(v) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'min_age',
-                              v ? Number(v) : undefined
-                            )
-                          }
+                          男性
+                        </Button>
+                        <Button
+                          size="sm"
+                          colorScheme={fi.gender === 'female' ? 'teal' : undefined}
+                          onClick={() => updateFollowupItem(fIdx, 'gender', 'female')}
                         >
-                          <NumberInputField placeholder="最小年齢" />
-                        </NumberInput>
-                        <NumberInput
-                          value={fi.max_age ?? ''}
-                          onChange={(v) =>
-                            updateFollowupItem(
-                              fIdx,
-                              'max_age',
-                              v ? Number(v) : undefined
-                            )
-                          }
-                        >
-                          <NumberInputField placeholder="最大年齢" />
-                        </NumberInput>
+                          女性
+                        </Button>
                       </HStack>
+                    )}
+                    {/* 年齢制限 */}
+                    <Checkbox
+                      mt={2}
+                      isChecked={fi.age_enabled}
+                      onChange={(e) => updateFollowupItem(fIdx, 'age_enabled', e.target.checked)}
+                      alignSelf="flex-start"
+                    >
+                      年齢で表示を制限
+                    </Checkbox>
+                    {fi.age_enabled && (
+                      <>
+                        <RadioGroup
+                          value={fi.age_mode || 'max'}
+                          onChange={(val) => updateFollowupItem(fIdx, 'age_mode', val as any)}
+                        >
+                          <HStack spacing={4}>
+                            <Radio value="max">何歳以下</Radio>
+                            <Radio value="range">何歳から何歳</Radio>
+                            <Radio value="min">何歳以上</Radio>
+                          </HStack>
+                        </RadioGroup>
+                        {fi.age_mode === 'range' && (
+                          <HStack>
+                            <NumberInput
+                              value={fi.min_age ?? ''}
+                              onChange={(v) => updateFollowupItem(fIdx, 'min_age', v ? Number(v) : undefined)}
+                            >
+                              <NumberInputField placeholder="最小年齢" />
+                            </NumberInput>
+                            <NumberInput
+                              value={fi.max_age ?? ''}
+                              onChange={(v) => updateFollowupItem(fIdx, 'max_age', v ? Number(v) : undefined)}
+                            >
+                              <NumberInputField placeholder="最大年齢" />
+                            </NumberInput>
+                          </HStack>
+                        )}
+                        {fi.age_mode === 'max' && (
+                          <NumberInput
+                            value={fi.max_age ?? ''}
+                            onChange={(v) => updateFollowupItem(fIdx, 'max_age', v ? Number(v) : undefined)}
+                          >
+                            <NumberInputField placeholder="最大年齢" />
+                          </NumberInput>
+                        )}
+                        {fi.age_mode === 'min' && (
+                          <NumberInput
+                            value={fi.min_age ?? ''}
+                            onChange={(v) => updateFollowupItem(fIdx, 'min_age', v ? Number(v) : undefined)}
+                          >
+                            <NumberInputField placeholder="最小年齢" />
+                          </NumberInput>
+                        )}
+                      </>
                     )}
                   </Box>
                 ))}

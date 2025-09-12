@@ -126,8 +126,9 @@
   - `summary` (str|null)
   - `finalized_at` (str|null)
 
-## GET /questionnaires/{id}/template?visit_type=initial|followup[&gender=male|female]
-- 概要: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。`gender` を指定した場合は該当性別の項目のみを返す。項目側の `gender` が未設定または `"both"` の場合は常に含まれる。
+## GET /questionnaires/{id}/template?visit_type=initial|followup[&gender=male|female][&age=30]
+- 概要: 指定テンプレート（id, visit_type）の問診テンプレートを返す。未登録時は既定テンプレを返す。
+  `gender` を指定した場合は該当性別の項目のみを返し、`age` を指定した場合は年齢条件を満たす項目のみを返す。
 - レスポンス:
   - `Questionnaire`: `{ id: string, items: QuestionnaireItem[], llm_followup_enabled: bool, llm_followup_max_questions: int }`
 
@@ -142,9 +143,12 @@
   - `id` (str): テンプレートID
   - `visit_type` (str): `initial` | `followup`
   - `items` (QuestionnaireItem[]): 項目配列
-  - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description?, gender?, image?, min?, max? }`
+  - `QuestionnaireItem` = `{ id, label, type, required?, options?, allow_freetext?, when?, description?, gender_enabled?, gender?, age_enabled?, min_age?, max_age?, image?, min?, max? }`
     - `type`: `"string"` | `"multi"` | `"yesno"` | `"date"` | `"slider"`
-    - `gender`: `"male"` | `"female"` | `"both"`（省略または `"both"` の場合は男女共通）
+    - `gender_enabled`: 性別による表示制限を行うか
+    - `gender`: `"male"` | `"female"`（`gender_enabled` が `true` のとき対象性別を指定）
+    - `age_enabled`: 年齢による表示制限を行うか
+    - `min_age`/`max_age`: 年齢下限・上限（`age_enabled` が `true` のとき使用）
     - `image`: 画像のデータURL文字列（任意）。削除する場合は `null` を送信するかフィールドを省略してください。
     - `min`/`max`: `type` が `"slider"` の場合に範囲を指定。省略時は `0` 〜 `10`。
   - `llm_followup_enabled` (bool): 固定フォーム終了後にLLMによる追加質問を行うか（LLM設定が有効な場合のみ有効）
