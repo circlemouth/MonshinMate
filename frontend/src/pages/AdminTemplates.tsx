@@ -561,7 +561,12 @@ export default function AdminTemplates() {
         };
         const exist = map.get(it.id);
         if (exist) {
-          map.set(it.id, { ...exist, ...merged, use_initial: exist.use_initial, use_followup: true });
+          const combined: any = { ...exist, ...merged, use_initial: exist.use_initial, use_followup: true };
+          // 画像など null/undefined が返る場合は既存値を優先（初診のみ設定しているケースを保持）
+          if ((merged as any).image == null && (exist as any).image != null) {
+            combined.image = (exist as any).image;
+          }
+          map.set(it.id, combined);
         } else {
           map.set(it.id, { ...merged, use_initial: false, use_followup: true });
         }
