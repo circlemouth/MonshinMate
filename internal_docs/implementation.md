@@ -895,3 +895,9 @@
 ## 111. 旧CouchDBステータスAPIの削除（2025-09-15）
 - [x] 後方互換のため残していた `/system/couchdb-status` エンドポイントを削除。
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
+
+## 112. 画像削除確認とプレビュー拡大対応（2025-09-16）
+- [x] 問診項目編集画面で画像削除時に確認ダイアログを表示し、プレビュー画像をモーダルで拡大表示できるようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
