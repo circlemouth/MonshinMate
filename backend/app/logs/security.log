@@ -229,3 +229,11 @@
 2025-09-12 05:59:42,482 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-09-12 05:59:47,975 INFO admin_login_success
 2025-09-12 05:59:48,209 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-19 19:48:56,996 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\GitHub\MonshinMate\backend\app\app.sqlite3
+2025-09-19 19:49:26,758 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-19 19:49:26,956 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-19 19:49:32,761 INFO admin_login_failed
+2025-09-19 19:49:35,503 INFO admin_login_success
+2025-09-19 19:49:35,709 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-19 19:49:39,864 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-19 19:49:40,074 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off

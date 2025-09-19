@@ -60,13 +60,13 @@ try {
             $client.Close()
         } catch { $reachable = $false }
         if (-not $reachable) {
-            Write-Host "[warn] COUCHDB_URL=$($env:COUCHDB_URL) に接続できません。SQLite にフォールバックします"
+            Write-Host "[warn] Unable to reach COUCHDB_URL=$($env:COUCHDB_URL); falling back to SQLite."
             $env:COUCHDB_URL = ''
             $env:COUCHDB_DB = ''
             $env:COUCHDB_USER = ''
             $env:COUCHDB_PASSWORD = ''
         } else {
-            Write-Host "[info] CouchDB に接続可能: $($env:COUCHDB_URL)"
+            Write-Host "[info] CouchDB reachable: $($env:COUCHDB_URL)"
         }
     }
 
