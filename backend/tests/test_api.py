@@ -356,7 +356,6 @@ def test_admin_session_search_filters() -> None:
     assert nohit_res.status_code == 200
     assert all(s["id"] != session_id for s in nohit_res.json())
 
-
 def test_admin_session_download() -> None:
     """問診結果を各形式でダウンロードできることを確認する。"""
     on_startup()
@@ -378,6 +377,8 @@ def test_admin_session_download() -> None:
         assert r.status_code == 200
         assert r.headers["content-type"].startswith(ctype)
         assert len(r.content) > 0
+        if fmt == "pdf":
+            assert r.content.startswith(b"%PDF")
 
 
 def test_admin_bulk_download() -> None:
