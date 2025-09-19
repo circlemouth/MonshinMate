@@ -896,9 +896,17 @@
 - [x] 後方互換のため残していた `/system/couchdb-status` エンドポイントを削除。
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
 
+
+
 ## 112. デフォルト問診テンプレートの自然言語ブラッシュアップ（2025-11-20）
 - [x] デフォルト問診テンプレート定義を `make_default_initial_items` / `make_default_followup_items` として関数化し、起動時・リセット時・フォールバック取得時の内容を一元管理。
 - [x] 初診テンプレートの質問文を実運用に沿った丁寧な表現へ更新し、症状の変化・きっかけ・生活への影響・家族歴などの補足項目を追加。
 - [x] 再診テンプレートを「連絡先変更」「前回からの症状の変化」「服薬状況」「副作用の有無」など再診時に確認したい内容へ刷新。
 - [x] 選択肢に含まれていた「その他」をすべて廃止し、自由記入欄で補足できるよう `allow_freetext` を併用する形に統一。
 - [x] 既定テンプレートを再投入する `/questionnaires/{id}/reset` と `/questionnaires/default/reset` も新関数を利用するよう調整。
+## 113. 画像削除確認とプレビュー拡大対応（2025-09-16）
+- [x] 問診項目編集画面で画像削除時に確認ダイアログを表示し、プレビュー画像をモーダルで拡大表示できるようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx`
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
+

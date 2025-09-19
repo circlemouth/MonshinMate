@@ -133,6 +133,8 @@ export default function AdminTemplates() {
   const [previewGender, setPreviewGender] = useState<'male' | 'female'>('male');
   const [previewAge, setPreviewAge] = useState<number>(30);
   const previewModal = useDisclosure();
+  const imagePreviewModal = useDisclosure();
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const isInitialMount = useRef(true);
   const [isLoading, setIsLoading] = useState(true);
   const [previewFreeTexts, setPreviewFreeTexts] = useState<Record<string, string>>({});
@@ -162,6 +164,24 @@ export default function AdminTemplates() {
     const name = url.split('/').pop();
     if (!name) return;
     await fetch(`/questionnaire-item-images/${name}`, { method: 'DELETE' });
+  };
+
+  const confirmAndDeleteImage = async (url?: string): Promise<boolean> => {
+    if (!url) return true;
+    const confirmed = window.confirm('添付画像を削除しますか？\n削除すると元に戻せません。');
+    if (!confirmed) return false;
+    await deleteItemImage(url);
+    return true;
+  };
+
+  const openImagePreview = (url: string) => {
+    setImagePreviewUrl(url);
+    imagePreviewModal.onOpen();
+  };
+
+  const closeImagePreview = () => {
+    setImagePreviewUrl(null);
+    imagePreviewModal.onClose();
   };
   const markDirty = () => {
     isDirtyRef.current = true;
@@ -1330,13 +1350,21 @@ export default function AdminTemplates() {
                                       <FormLabel m={0}>質問時に表示する画像</FormLabel>
                                       {item.image && (
                                         <>
-                                          <Image src={item.image} alt="" maxH="100px" mb={2} />
+                                          <Image
+                                            src={item.image}
+                                            alt=""
+                                            maxH="100px"
+                                            mb={2}
+                                            cursor="pointer"
+                                            onClick={() => openImagePreview(item.image!)}
+                                          />
                                           <Button
                                             size="xs"
                                             colorScheme="red"
                                             mb={2}
                                             onClick={async () => {
-                                              await deleteItemImage(item.image);
+                                              const removed = await confirmAndDeleteImage(item.image);
+                                              if (!removed) return;
                                               updateItem(idx, 'image', undefined);
                                             }}
                                           >
@@ -1351,7 +1379,8 @@ export default function AdminTemplates() {
                                         onChange={async (e) => {
                                           const file = e.target.files?.[0];
                                           if (!file) {
-                                            await deleteItemImage(item.image);
+                                            const removed = await confirmAndDeleteImage(item.image);
+                                            if (!removed) return;
                                             updateItem(idx, 'image', undefined);
                                             return;
                                           }
@@ -1642,13 +1671,21 @@ export default function AdminTemplates() {
                   <FormLabel>質問時に表示する画像</FormLabel>
                   {newItem.image && (
                     <>
-                      <Image src={newItem.image} alt="" maxH="100px" mb={2} />
+                      <Image
+                        src={newItem.image}
+                        alt=""
+                        maxH="100px"
+                        mb={2}
+                        cursor="pointer"
+                        onClick={() => openImagePreview(newItem.image)}
+                      />
                       <Button
                         size="xs"
                         colorScheme="red"
                         mb={2}
                         onClick={async () => {
-                          await deleteItemImage(newItem.image);
+                          const removed = await confirmAndDeleteImage(newItem.image);
+                          if (!removed) return;
                           setNewItem({ ...newItem, image: '' });
                         }}
                       >
@@ -1663,7 +1700,8 @@ export default function AdminTemplates() {
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (!file) {
-                        await deleteItemImage(newItem.image);
+                        const removed = await confirmAndDeleteImage(newItem.image);
+                        if (!removed) return;
                         setNewItem({ ...newItem, image: '' });
                         return;
                       }
@@ -1905,6 +1943,24 @@ export default function AdminTemplates() {
         </Box>
       )}
 
+      <Modal
+        isOpen={imagePreviewModal.isOpen}
+        onClose={closeImagePreview}
+        size="xl"
+        isCentered
+      >
+        <ModalOverlay />
+        <ModalContent maxW="600px">
+          <ModalHeader>画像プレビュー</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody display="flex" justifyContent="center">
+            {imagePreviewUrl && (
+              <Image src={imagePreviewUrl} alt="プレビュー画像" maxH="70vh" objectFit="contain" />
+            )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
       {/* プレビューモーダル */}
       <Modal isOpen={previewModal.isOpen} onClose={previewModal.onClose} size="xl" scrollBehavior="inside">
         <ModalOverlay />
@@ -1960,7 +2016,14 @@ export default function AdminTemplates() {
                     <Box key={item.id}>
                       <HStack align="flex-start" spacing={4}>
                         {item.image && (
-                          <Image src={item.image} alt="" boxSize="100px" objectFit="contain" />
+                          <Image
+                            src={item.image}
+                            alt=""
+                            boxSize="100px"
+                            objectFit="contain"
+                            cursor="pointer"
+                            onClick={() => openImagePreview(item.image!)}
+                          />
                         )}
                         <FormControl isRequired={item.required} flex="1">
                           <FormLabel>{item.label}</FormLabel>
@@ -2096,13 +2159,21 @@ export default function AdminTemplates() {
                       <FormLabel m={0}>質問時に表示する画像</FormLabel>
                       {fi.image && (
                         <>
-                          <Image src={fi.image} alt="" maxH="100px" mb={2} />
+                          <Image
+                            src={fi.image}
+                            alt=""
+                            maxH="100px"
+                            mb={2}
+                            cursor="pointer"
+                            onClick={() => openImagePreview(fi.image!)}
+                          />
                           <Button
                             size="xs"
                             colorScheme="red"
                             mb={2}
                             onClick={async () => {
-                              await deleteItemImage(fi.image);
+                              const removed = await confirmAndDeleteImage(fi.image);
+                              if (!removed) return;
                               updateFollowupItem(fIdx, 'image', undefined);
                             }}
                           >
@@ -2117,7 +2188,8 @@ export default function AdminTemplates() {
                         onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (!file) {
-                            await deleteItemImage(fi.image);
+                            const removed = await confirmAndDeleteImage(fi.image);
+                            if (!removed) return;
                             updateFollowupItem(fIdx, 'image', undefined);
                             return;
                           }
