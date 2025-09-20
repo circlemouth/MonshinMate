@@ -420,6 +420,29 @@ def test_admin_bulk_download() -> None:
         assert len(r_zip.content) > 0
 
 
+def test_pdf_layout_setting_toggle() -> None:
+    """PDFレイアウト設定の取得と更新が行える。"""
+
+    on_startup()
+    res = client.get("/system/pdf-layout")
+    assert res.status_code == 200
+    first = res.json()
+    assert first["mode"] in {"structured", "legacy"}
+
+    put_res = client.put("/system/pdf-layout", json={"mode": "legacy"})
+    assert put_res.status_code == 200
+    assert put_res.json()["mode"] == "legacy"
+
+    confirm = client.get("/system/pdf-layout")
+    assert confirm.status_code == 200
+    assert confirm.json()["mode"] == "legacy"
+
+    # 他テストに影響を与えないよう既定に戻す
+    revert = client.put("/system/pdf-layout", json={"mode": "structured"})
+    assert revert.status_code == 200
+    assert revert.json()["mode"] == "structured"
+
+
 def test_questionnaire_options() -> None:
     """選択肢付きテンプレートの保存と取得を確認する。"""
     on_startup()

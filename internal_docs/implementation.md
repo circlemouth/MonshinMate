@@ -910,3 +910,10 @@
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
 
+## 114. PDF出力レイアウト刷新と切り替え設定（2026-01-15）
+- [x] MarkdownベースのPDF変換を廃止し、`backend/app/pdf_renderer.py` でReportLab Platypusを用いたフォーム型レイアウトを実装。
+- [x] `/admin/sessions/*/download` および一括出力が新レイアウトを利用するよう `backend/app/main.py` を改修し、`PDFLayoutMode` によるレガシー切り替えを追加。
+- [x] `/system/pdf-layout` API を追加し、`backend/tests/test_api.py::test_pdf_layout_setting_toggle` で設定反映を検証。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `internal_docs/implementation.md`。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`
+
