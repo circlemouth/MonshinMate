@@ -24,10 +24,6 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import shutil
-from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.lib.pagesizes import A4
 import sqlite3
 from pydantic import BaseModel, Field
 import pyotp
@@ -73,6 +69,7 @@ from .db import (
 from .validator import Validator
 from .session_fsm import SessionFSM
 from .structured_context import StructuredContextManager
+from .pdf_renderer import PDFLayoutMode, render_session_pdf
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -1191,63 +1188,69 @@ def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) ->
     return lines
 
 
-def markdown_to_pdf(lines: list[str]) -> bytes:
-    """Markdown形式の行リストを簡易フォーマットでPDFに変換する。"""
-    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
-    pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    normal_font = "HeiseiMin-W3"
-    bold_font = "HeiseiKakuGo-W5"
-    y = 800
+def _visit_type_label(visit_type: str | None) -> str:
+    if visit_type == "initial":
+        return "初診"
+    if visit_type == "followup":
+        return "再診"
+    return str(visit_type or "不明")
 
-    def new_page() -> None:
-        nonlocal y
-        c.showPage()
-        y = 800
 
-    def write_line(text: str, font: str = normal_font, size: int = 12, x: int = 40) -> None:
-        nonlocal y
-        c.setFont(font, size)
-        c.drawString(x, y, text)
-        y -= size + 2
-        if y < 40:
-            new_page()
+def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, list[QuestionnaireItem]]:
+    """PDF/Markdown出力用に回答行とテンプレ項目を収集する。"""
 
-    for line in lines:
-        if line.startswith("## "):
-            write_line(line[3:], bold_font, 14)
-            y -= 2
-        elif line.startswith("# "):
-            write_line(line[2:], bold_font, 16)
-            y -= 4
-        elif line.startswith("- "):
-            content = line[2:]
-            if ": " in content:
-                label, value = content.split(": ", 1)
-                c.setFont(normal_font, 12)
-                c.drawString(60, y, "・")
-                x = 60 + c.stringWidth("・", normal_font, 12)
-                c.setFont(bold_font, 12)
-                c.drawString(x, y, label)
-                x += c.stringWidth(label, bold_font, 12)
-                c.setFont(normal_font, 12)
-                c.drawString(x, y, f": {value}")
-                y -= 14
-                if y < 40:
-                    new_page()
-            else:
-                c.setFont(normal_font, 12)
-                c.drawString(60, y, f"・ {content}")
-                y -= 14
-                if y < 40:
-                    new_page()
+    visit_type = s.get("visit_type")
+    tpl = db_get_template(s.get("questionnaire_id"), visit_type) or {}
+    items: list[QuestionnaireItem] = []
+    try:
+        raw_items = tpl.get("items") if isinstance(tpl, dict) else None
+        if raw_items:
+            items = [QuestionnaireItem(**it) for it in raw_items]
         else:
-            write_line(line)
+            default_items = (
+                make_default_initial_items()
+                if visit_type == "initial"
+                else make_default_followup_items()
+            )
+            items = [QuestionnaireItem(**it) for it in default_items]
+    except Exception:
+        items = []
 
-    c.save()
-    buf.seek(0)
-    return buf.getvalue()
+    answers = s.get("answers", {}) or {}
+
+    def fmt_answer(ans: Any) -> str:
+        if ans is None or ans == "":
+            return ""
+        if isinstance(ans, list):
+            return ", ".join(map(str, ans))
+        if isinstance(ans, dict):
+            return json.dumps(ans, ensure_ascii=False)
+        return str(ans)
+
+    rows: list[tuple[str, str]] = []
+    for item in items:
+        try:
+            rows.append((item.label, fmt_answer(answers.get(item.id))))
+        except Exception:
+            continue
+    for iid, qtext in (s.get("llm_question_texts") or {}).items():
+        rows.append((str(qtext), fmt_answer(answers.get(iid))))
+
+    vt_label = _visit_type_label(visit_type)
+    return rows, vt_label, items
+
+
+def _resolve_pdf_render_config() -> tuple[PDFLayoutMode, str]:
+    """PDF生成に利用するレイアウト設定と施設名を取得する。"""
+
+    stored = load_app_settings() or {}
+    mode_raw = stored.get("pdf_layout_mode") or PDFLayoutMode.STRUCTURED.value
+    try:
+        layout_mode = PDFLayoutMode(mode_raw)
+    except ValueError:
+        layout_mode = PDFLayoutMode.STRUCTURED
+    facility = stored.get("display_name") or "Monshinクリニック"
+    return layout_mode, facility
 
 
 class LLMTestRequest(BaseModel):
@@ -1319,6 +1322,12 @@ class DefaultQuestionnaireSettings(BaseModel):
 class ThemeColorSettings(BaseModel):
     """UIのテーマカラー設定。"""
     color: str
+
+
+class PDFLayoutSettings(BaseModel):
+    """PDFレイアウト切り替え設定。"""
+
+    mode: PDFLayoutMode
 
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
@@ -1420,6 +1429,35 @@ def set_theme_color(payload: ThemeColorSettings) -> ThemeColorSettings:
         return ThemeColorSettings(color=current["theme_color"])
     except Exception:
         logger.exception("set_theme_color_failed")
+        return payload
+
+
+@app.get("/system/pdf-layout", response_model=PDFLayoutSettings)
+def get_pdf_layout() -> PDFLayoutSettings:
+    """PDFのレイアウトモードを返す。未設定時は構造化レイアウト。"""
+
+    default_mode = PDFLayoutMode.STRUCTURED
+    try:
+        stored = load_app_settings() or {}
+        raw = stored.get("pdf_layout_mode")
+        mode = PDFLayoutMode(raw) if raw else default_mode
+    except Exception:
+        logger.exception("get_pdf_layout_failed")
+        mode = default_mode
+    return PDFLayoutSettings(mode=mode)
+
+
+@app.put("/system/pdf-layout", response_model=PDFLayoutSettings)
+def set_pdf_layout(payload: PDFLayoutSettings) -> PDFLayoutSettings:
+    """PDFのレイアウトモードを保存する。"""
+
+    try:
+        current = load_app_settings() or {}
+        current["pdf_layout_mode"] = payload.mode.value
+        save_app_settings(current)
+        return PDFLayoutSettings(mode=payload.mode)
+    except Exception:
+        logger.exception("set_pdf_layout_failed")
         return payload
 
 @app.get("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
@@ -2243,30 +2281,6 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         name = name.strip().replace(" ", "_")
         return name or "session"
 
-    def build_rows(s: dict) -> tuple[list[tuple[str, str]], str]:
-        tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
-        labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
-        answers = s.get("answers", {})
-
-        def fmt_answer(ans: Any) -> str:
-            if ans is None or ans == "":
-                return ""
-            if isinstance(ans, list):
-                return ", ".join(map(str, ans))
-            if isinstance(ans, dict):
-                return json.dumps(ans, ensure_ascii=False)
-            return str(ans)
-
-        rows: list[tuple[str, str]] = []
-        for iid, label in labels.items():
-            rows.append((label, fmt_answer(answers.get(iid))))
-        for iid, qtext in (s.get("llm_question_texts") or {}).items():
-            rows.append((qtext, fmt_answer(answers.get(iid))))
-        vt = s.get("visit_type")
-        vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
-        return rows, vt_label
-
-
     # CSV は「全件を1枚の集計CSV」で返す
     if fmt == "csv":
         sbuf = io.StringIO()
@@ -2277,7 +2291,7 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
             s = db_get_session(sid)
             if not s:
                 continue
-            rows, vt_label = build_rows(s)
+            rows, vt_label, _items = build_session_rows_and_items(s)
             answers_text_lines = [f"- {label}: {ans or '未回答'}" for label, ans in rows]
             answers_text = "\n".join(answers_text_lines)
             writer.writerow([
@@ -2299,20 +2313,31 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         )
 
     # md / pdf は ZIP にまとめて返す
+    layout_mode, facility_name = _resolve_pdf_render_config()
     zip_buf = io.BytesIO()
     with zipfile.ZipFile(zip_buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for sid in ids:
             s = db_get_session(sid)
             if not s:
                 continue
-            rows, vt_label = build_rows(s)
+            rows, vt_label, items = build_session_rows_and_items(s)
             base = sanitize_filename(f"{s.get('patient_name','')}_{s.get('dob','')}_{sid}")
             lines = build_markdown_lines(s, rows, vt_label)
             if fmt == "md":
                 content = "\n".join(lines).encode("utf-8")
                 zf.writestr(f"{base}.md", content)
             elif fmt == "pdf":
-                pdf_bytes = markdown_to_pdf(lines)
+                pdf_bytes = render_session_pdf(
+                    session=s,
+                    rows=rows,
+                    template_items=items,
+                    answers=s.get("answers", {}) or {},
+                    vt_label=vt_label,
+                    llm_question_texts=s.get("llm_question_texts") or {},
+                    summary=s.get("summary"),
+                    layout_mode=layout_mode,
+                    facility_name=facility_name,
+                )
                 zf.writestr(f"{base}.pdf", pdf_bytes)
 
     zip_buf.seek(0)
@@ -2330,28 +2355,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
     s = db_get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
-    labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
-    answers = s.get("answers", {})
-
-    def fmt_answer(ans: Any) -> str:
-        if ans is None or ans == "":
-            return ""
-        if isinstance(ans, list):
-            return ", ".join(map(str, ans))
-        if isinstance(ans, dict):
-            return json.dumps(ans, ensure_ascii=False)
-        return str(ans)
-
-    rows: list[tuple[str, str]] = []
-    for iid, label in labels.items():
-        rows.append((label, fmt_answer(answers.get(iid))))
-    for iid, qtext in (s.get("llm_question_texts") or {}).items():
-        rows.append((qtext, fmt_answer(answers.get(iid))))
-
-    vt = s.get("visit_type")
-    vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
-
+    rows, vt_label, items = build_session_rows_and_items(s)
     lines = build_markdown_lines(s, rows, vt_label)
     if fmt == "md":
         content = "\n".join(lines)
@@ -2373,7 +2377,18 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.csv"},
         )
     if fmt == "pdf":
-        pdf_bytes = markdown_to_pdf(lines)
+        layout_mode, facility_name = _resolve_pdf_render_config()
+        pdf_bytes = render_session_pdf(
+            session=s,
+            rows=rows,
+            template_items=items,
+            answers=s.get("answers", {}) or {},
+            vt_label=vt_label,
+            llm_question_texts=s.get("llm_question_texts") or {},
+            summary=s.get("summary"),
+            layout_mode=layout_mode,
+            facility_name=facility_name,
+        )
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
