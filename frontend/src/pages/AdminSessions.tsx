@@ -113,11 +113,32 @@ export default function AdminSessions() {
       preview.onOpen();
       const res = await fetch(`/admin/sessions/${id}`);
       const detail = await res.json();
-      setSelectedDetail(detail);
       const tpl = await fetch(
         `/questionnaires/${detail.questionnaire_id}/template?visit_type=${detail.visit_type}`
       ).then((r) => r.json());
-      setSelectedItems(tpl.items || []);
+      setSelectedDetail(detail);
+      const templateItems = tpl.items || [];
+      const questionTexts = detail.question_texts ?? {};
+      const baseEntries = templateItems.map((it: any) => ({
+        id: it.id,
+        label: questionTexts[it.id] ?? it.label,
+        answer: detail.answers?.[it.id],
+      }));
+      const templateIds = new Set(templateItems.map((it: any) => it.id));
+      const extraIds = Array.from(
+        new Set([
+          ...Object.keys(questionTexts),
+          ...Object.keys(detail.answers ?? {}),
+        ])
+      )
+        .filter((qid) => !templateIds.has(qid) && !qid.startsWith('llm_'))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const additionalEntries = extraIds.map((qid) => ({
+        id: qid,
+        label: questionTexts[qid] ?? qid,
+        answer: detail.answers?.[qid],
+      }));
+      setSelectedItems([...baseEntries, ...additionalEntries]);
     } finally {
       setLoading(false);
     }
@@ -294,12 +315,12 @@ export default function AdminSessions() {
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>
-                {selectedItems.map((it: any) => (
-                  <Box key={it.id} p={3} borderWidth="1px" borderRadius="md">
+                {selectedItems.map((entry: any) => (
+                  <Box key={entry.id} p={3} borderWidth="1px" borderRadius="md">
                     <Text fontWeight="bold" mb={1}>
-                      {it.label}
+                      {entry.label}
                     </Text>
-                    {formatAnswer(selectedDetail.answers?.[it.id])}
+                    {formatAnswer(entry.answer)}
                   </Box>
                 ))}
                 {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
@@ -310,7 +331,7 @@ export default function AdminSessions() {
                       .map(([qid, qtext]: any) => (
                         <Box key={qid} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
                           <Text fontWeight="bold" mb={1}>
-                            {qtext}
+                            {(selectedDetail.question_texts ?? {})[qid] ?? qtext}
                           </Text>
                           {formatAnswer(selectedDetail.answers?.[qid])}
                         </Box>

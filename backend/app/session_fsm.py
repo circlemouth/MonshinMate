@@ -55,6 +55,8 @@ class SessionFSM:
                 # セッションに llm_question_texts 辞書がなければ初期化する。
                 if not hasattr(self.session, "llm_question_texts") or self.session.llm_question_texts is None:
                     self.session.llm_question_texts = {}
+                if not hasattr(self.session, "question_texts") or getattr(self.session, "question_texts") is None:
+                    self.session.question_texts = {}
                 # すでに発行した llm_* の最大番号を求め、連番が重複しないようにする
                 def _extract_num(key: str) -> int:
                     try:
@@ -82,6 +84,10 @@ class SessionFSM:
                     )
                     # 表示した質問文をマッピングとして保持
                     self.session.llm_question_texts[qid] = t
+                    try:
+                        self.session.question_texts[qid] = t
+                    except Exception:
+                        pass
             except Exception:
                 logging.getLogger("llm").exception("generate_followups_failed")
                 self.session.pending_llm_questions = []

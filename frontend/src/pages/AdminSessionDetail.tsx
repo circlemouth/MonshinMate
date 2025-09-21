@@ -10,6 +10,7 @@ interface SessionDetail {
   visit_type: string;
   questionnaire_id: string;
   answers: Record<string, any>;
+  question_texts?: Record<string, string>;
   llm_question_texts?: Record<string, string>;
   summary?: string | null;
   finalized_at?: string | null;
@@ -78,6 +79,28 @@ export default function AdminSessionDetail() {
     return summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
   };
 
+  const questionTexts = detail.question_texts ?? {};
+  const baseEntries = items.map((it) => ({
+    id: it.id,
+    label: questionTexts[it.id] ?? it.label,
+    answer: detail.answers[it.id],
+  }));
+  const templateIds = new Set(items.map((it) => it.id));
+  const extraIds = Array.from(
+    new Set([
+      ...Object.keys(questionTexts),
+      ...Object.keys(detail.answers ?? {}),
+    ])
+  )
+    .filter((id) => !templateIds.has(id) && !id.startsWith('llm_'))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const additionalEntries = extraIds.map((id) => ({
+    id,
+    label: questionTexts[id] ?? id,
+    answer: detail.answers[id],
+  }));
+  const questionEntries = [...baseEntries, ...additionalEntries];
+
   return (
     <VStack align="stretch" spacing={6}>
       <HStack justifyContent="space-between">
@@ -112,12 +135,12 @@ export default function AdminSessionDetail() {
 
       <VStack align="stretch" spacing={4}>
         <Heading size="md">回答内容</Heading>
-        {items.map((it) => (
-          <Box key={it.id} p={4} borderWidth="1px" borderRadius="md">
+        {questionEntries.map((entry) => (
+          <Box key={entry.id} p={4} borderWidth="1px" borderRadius="md">
             <Text fontWeight="bold" mb={1}>
-              {it.label}
+              {entry.label}
             </Text>
-            {formatAnswer(detail.answers[it.id])}
+            {formatAnswer(entry.answer)}
           </Box>
         ))}
       </VStack>
@@ -130,7 +153,7 @@ export default function AdminSessionDetail() {
             .map(([qid, qtext]) => (
               <Box key={qid} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
                 <Text fontWeight="bold" mb={1}>
-                  {qtext}
+                  {questionTexts[qid] ?? qtext}
                 </Text>
                 {formatAnswer(detail.answers[qid])}
               </Box>

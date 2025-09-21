@@ -285,27 +285,49 @@ def _render_multi_answer(
         options = list(options)
     options = [str(opt) for opt in options]
     allow_freetext = bool(_item_attr(node.item, "allow_freetext", False))
-    selected = _normalize_multi_answer(answer)
+    selected_values = _normalize_multi_answer(answer)
     option_set = set(options)
-    selected_options = [opt for opt in selected if opt in option_set]
-    others = [opt for opt in selected if opt not in option_set]
+    selected_options = [opt for opt in selected_values if opt in option_set]
+    others = [opt for opt in selected_values if opt not in option_set]
 
-    table_data: list[list[Any]] = []
-    row: list[Any] = []
+    table_rows: list[list[tuple[Any, bool]]] = []
+    row_cells: list[tuple[Any, bool]] = []
     if options:
         for opt in options:
-            mark = "☑" if opt in selected_options else "☐"
-            row.append(Paragraph(f"{mark} {escape(opt)}", styles["value"]))
-            if len(row) == 2:
-                table_data.append(row)
-                row = []
-        if row:
-            while len(row) < 2:
-                row.append("")
-            table_data.append(row)
+            is_selected = opt in selected_options
+            mark = "☑" if is_selected else "☐"
+            cell_flowable: Any
+            if is_selected:
+                inner_width = max(value_width / 2 - 4, 20 * mm)
+                para = Paragraph(f"{mark} {escape(opt)}", styles["value"])
+                highlight = Table([[para]], colWidths=[inner_width])
+                highlight.setStyle(
+                    TableStyle(
+                        [
+                            ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
+                            ("LEFTPADDING", (0, 0), (-1, -1), 2),
+                            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                            ("TOPPADDING", (0, 0), (-1, -1), 2),
+                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+                        ]
+                    )
+                )
+                cell_flowable = highlight
+            else:
+                cell_flowable = Paragraph(f"{mark} {escape(opt)}", styles["value"])
+            row_cells.append((cell_flowable, is_selected))
+            if len(row_cells) == 2:
+                table_rows.append(row_cells)
+                row_cells = []
+        if row_cells:
+            while len(row_cells) < 2:
+                row_cells.append((Paragraph("", styles["value"]), False))
+            table_rows.append(row_cells)
     else:
-        text = ", ".join(selected) if selected else "未回答"
+        text = ", ".join(selected_values) if selected_values else "未回答"
         return _render_text_answer(text, styles, value_width)
+
+    table_data: list[list[Any]] = [[cell for cell, _ in row] for row in table_rows]
 
     checkbox_table = Table(
         table_data,
@@ -379,26 +401,26 @@ def _render_date_answer(answer: Any, styles: dict[str, ParagraphStyle], value_wi
 
 
 def _render_text_answer(answer: Any, styles: dict[str, ParagraphStyle], value_width: float) -> Flowable:
-    text = "未回答"
-    if isinstance(answer, str) and answer.strip():
-        text = escape(answer)
+    del value_width  # 内側テーブルを使用しないため未使用
+
+    def _format_text(value: str) -> str:
+        return escape(value).replace("\n", "<br/>")
+
+    rendered = "未回答"
+    if isinstance(answer, str):
+        stripped = answer.strip()
+        if stripped:
+            rendered = _format_text(answer)
+    elif isinstance(answer, list):
+        formatted_items = [_format_text(str(v)) for v in answer if str(v).strip()]
+        if formatted_items:
+            rendered = "<br/>".join(formatted_items)
     elif isinstance(answer, (int, float)):
-        text = escape(str(answer))
-    elif isinstance(answer, list) and answer:
-        text = escape(", ".join(str(v) for v in answer))
-    table = Table([[Paragraph(text, styles["value"])]] , colWidths=[value_width])
-    table.setStyle(
-        TableStyle(
-            [
-                ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]
-        )
-    )
-    return table
+        rendered = escape(str(answer))
+    elif answer not in (None, ""):
+        rendered = _format_text(str(answer))
+
+    return Paragraph(rendered or "未回答", styles["value"])
 
 
 def _make_question_table(
@@ -518,14 +540,15 @@ def _render_structured_pdf(
     styles = _create_styles()
     story: list[Flowable] = []
 
-    issued = session.get("finalized_at") or session.get("completed_at")
-    issued_text = _format_date(str(issued) if issued else datetime.now().isoformat())
+    completion_raw = session.get("completed_at")
+    completion_text = _format_date(str(completion_raw)) if completion_raw else ""
+    completion_display = completion_text or "未登録"
     header = Table(
         [
             [
                 Paragraph(escape(facility_name), styles["header_left"]),
                 Paragraph(
-                    f"発行日: {escape(issued_text)}<br/>セッションID: {escape(str(session.get('id', '')))}",
+                    f"問診票記入日: {escape(completion_display)}",
                     styles["header_right"],
                 ),
             ],
@@ -554,7 +577,6 @@ def _render_structured_pdf(
         ("生年月日", _format_date(session.get("dob")) or "未登録"),
         ("性別", _format_gender(session.get("gender"))),
         ("受診種別", vt_label),
-        ("テンプレートID", session.get("questionnaire_id") or ""),
     ]
     patient_table = Table(
         [[Paragraph(f"<b>{escape(label)}</b>", styles["base"]), Paragraph(escape(str(value)), styles["value"])] for label, value in patient_rows],
@@ -622,7 +644,32 @@ def _render_legacy_pdf(
     styles = _create_styles()
     story: list[Flowable] = []
 
-    story.append(Paragraph(f"<b>{escape(facility_name)}</b>", styles["bold"]))
+    completion_raw = session.get("completed_at")
+    completion_text = _format_date(str(completion_raw)) if completion_raw else ""
+    completion_display = completion_text or "未登録"
+    header = Table(
+        [
+            [
+                Paragraph(f"<b>{escape(facility_name)}</b>", styles["header_left"]),
+                Paragraph(f"問診票記入日: {escape(completion_display)}", styles["header_right"]),
+            ]
+        ],
+        colWidths=[doc.width * 0.55, doc.width * 0.45],
+        hAlign="LEFT",
+    )
+    header.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(header)
+    story.append(Spacer(0, 4 * mm))
     story.append(Paragraph("問診結果", styles["title"]))
     story.append(Spacer(0, 6 * mm))
     story.append(Paragraph("患者情報", styles["section"]))
@@ -631,7 +678,6 @@ def _render_legacy_pdf(
         f"生年月日: {escape(_format_date(session.get('dob')) or '未登録')}",
         f"性別: {escape(_format_gender(session.get('gender')))}",
         f"受診種別: {escape(vt_label)}",
-        f"テンプレートID: {escape(str(session.get('questionnaire_id') or ''))}",
     ]
     for line in info_lines:
         story.append(Paragraph(line, styles["value"]))
@@ -681,4 +727,3 @@ def render_session_pdf(
         summary,
         facility_name,
     )
-
