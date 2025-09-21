@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, ChangeEvent } from 'react';
 import {
   VStack,
   FormControl,
@@ -24,9 +24,6 @@ import {
   Heading,
   Text,
   Spinner,
-  Card,
-  CardHeader,
-  CardBody,
   SimpleGrid,
   NumberInput,
   NumberInputField,
@@ -49,6 +46,11 @@ import {
   FormHelperText,
   Image,
   Icon,
+  useToast,
+  Card,
+  CardHeader,
+  CardBody,
+  Divider,
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
 import { MdImage } from 'react-icons/md';
@@ -149,6 +151,36 @@ export default function AdminTemplates() {
   const [initialLlmMax, setInitialLlmMax] = useState<number>(5);
   const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
   const isDirtyRef = useRef<boolean>(false);
+  const toast = useToast();
+  const [exportPassword, setExportPassword] = useState('');
+  const [exportingSettings, setExportingSettings] = useState(false);
+  const [importPassword, setImportPassword] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importingSettings, setImportingSettings] = useState(false);
+
+  const loadTemplateList = (options?: { retainSelection?: boolean }) => {
+    const retainSelection = options?.retainSelection ?? false;
+    return Promise.all([
+      fetch('/questionnaires').then((res) => res.json()),
+      fetch('/system/default-questionnaire').then((res) => res.json()),
+    ]).then(([data, defaultData]) => {
+      const ids = Array.from(new Set((data || []).map((t: any) => t.id))).map((id) => ({ id }));
+      setTemplates(ids);
+      const defaultId = defaultData?.questionnaire_id || 'default';
+      setDefaultQuestionnaireId(defaultId);
+      setTemplateId((prev) => {
+        if (retainSelection && prev && ids.some((t) => t.id === prev)) {
+          return prev;
+        }
+        if (ids.some((t) => t.id === defaultId)) {
+          return defaultId;
+        }
+        return ids[0]?.id ?? null;
+      });
+      return ids;
+    });
+  };
 
   const uploadItemImage = async (file: File): Promise<string | undefined> => {
     const fd = new FormData();
@@ -172,6 +204,87 @@ export default function AdminTemplates() {
     if (!confirmed) return false;
     await deleteItemImage(url);
     return true;
+  };
+
+  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] ?? null;
+    setImportFile(file);
+  };
+
+  const handleExportSettings = async () => {
+    try {
+      setExportingSettings(true);
+      const res = await fetch('/admin/questionnaires/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: exportPassword || null }),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'failed to export');
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('Content-Disposition') ?? '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match ? decodeURIComponent(match[1]) : `questionnaire-settings-${Date.now()}.json`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast({ title: '設定ファイルを出力しました', status: 'success', duration: 3000 });
+    } catch (err) {
+      console.error(err);
+      toast({ title: '設定ファイルの出力に失敗しました', status: 'error', duration: 4000 });
+    } finally {
+      setExportingSettings(false);
+    }
+  };
+
+  const handleImportSettings = async () => {
+    if (!importFile) {
+      toast({ title: 'インポートするファイルを選択してください', status: 'warning', duration: 3000 });
+      return;
+    }
+    const formData = new FormData();
+    formData.append('file', importFile);
+    formData.append('mode', importMode);
+    if (importPassword) {
+      formData.append('password', importPassword);
+    }
+    try {
+      setImportingSettings(true);
+      const res = await fetch('/admin/questionnaires/import', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        let message = '設定ファイルのインポートに失敗しました';
+        try {
+          const data = await res.json();
+          if (data?.detail) message = data.detail;
+        } catch {
+          const text = await res.text();
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+      await loadTemplateList({ retainSelection: true });
+      setImportFile(null);
+      toast({ title: '設定ファイルを取り込みました', status: 'success', duration: 3000 });
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: err instanceof Error ? err.message : '設定ファイルのインポートに失敗しました',
+        status: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setImportingSettings(false);
+    }
   };
 
   const openImagePreview = (url: string) => {
@@ -413,15 +526,7 @@ export default function AdminTemplates() {
   const isInitialDefaultMount = useRef(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/questionnaires').then((res) => res.json()),
-      fetch('/system/default-questionnaire').then((res) => res.json()),
-    ]).then(([data, defaultData]) => {
-      const ids = Array.from(new Set(data.map((t: any) => t.id))).map((id) => ({ id }));
-      setTemplates(ids);
-      setTemplateId('default');
-      setDefaultQuestionnaireId(defaultData.questionnaire_id || 'default');
-    });
+    void loadTemplateList();
   }, []);
 
   useEffect(() => {
@@ -1942,6 +2047,88 @@ export default function AdminTemplates() {
           )}
         </Box>
       )}
+
+      <Card variant="outline">
+        <CardHeader pb={2}>
+          <Heading size="md">設定・データのエクスポート/インポート</Heading>
+          <Text fontSize="sm" color="gray.600">
+            定期的なバックアップや別環境への移行に利用できます。暗号化したい場合は任意のパスワードを指定してください。
+          </Text>
+        </CardHeader>
+        <CardBody pt={0}>
+          <VStack align="stretch" spacing={4}>
+            <Box>
+              <Heading size="sm" mb={1}>
+                設定ファイルの出力
+              </Heading>
+              <Text fontSize="xs" color="gray.600" mb={2}>
+                テンプレート・プロンプト・画像を含む設定一式をダウンロードします。
+              </Text>
+              <HStack align="flex-end" spacing={3} wrap="wrap">
+                <FormControl maxW="280px">
+                  <FormLabel fontSize="sm">エクスポート用パスワード（任意）</FormLabel>
+                  <Input
+                    type="password"
+                    value={exportPassword}
+                    onChange={(e) => setExportPassword(e.target.value)}
+                    placeholder="未入力で平文出力"
+                  />
+                  <FormHelperText fontSize="xs">未入力の場合は暗号化せずに保存します。</FormHelperText>
+                </FormControl>
+                <Button onClick={handleExportSettings} isLoading={exportingSettings} variant="outline">
+                  ダウンロード
+                </Button>
+              </HStack>
+            </Box>
+            <Divider />
+            <Box>
+              <Heading size="sm" mb={1}>
+                設定ファイルのインポート
+              </Heading>
+              <Text fontSize="xs" color="gray.600" mb={2}>
+                既存の設定に上書きするか、全て入れ替えるかを選択できます。
+              </Text>
+              <VStack align="stretch" spacing={3}>
+                <FormControl>
+                  <FormLabel fontSize="sm">インポートファイル</FormLabel>
+                  <Input type="file" accept=".json" onChange={handleImportFileChange} />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm">ファイルのパスワード（暗号化時）</FormLabel>
+                  <Input
+                    type="password"
+                    value={importPassword}
+                    onChange={(e) => setImportPassword(e.target.value)}
+                    placeholder="暗号化済みの場合のみ入力"
+                  />
+                </FormControl>
+                <FormControl maxW="260px">
+                  <FormLabel fontSize="sm">反映モード</FormLabel>
+                  <Select
+                    value={importMode}
+                    onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
+                  >
+                    <option value="merge">既存に上書き</option>
+                    <option value="replace">既存を削除して入れ替え</option>
+                  </Select>
+                  <FormHelperText fontSize="xs">
+                    入れ替えを選ぶと現在のテンプレートと画像が全て削除されます。
+                  </FormHelperText>
+                </FormControl>
+                <Button
+                  onClick={handleImportSettings}
+                  colorScheme="blue"
+                  isLoading={importingSettings}
+                  isDisabled={!importFile}
+                  alignSelf="flex-start"
+                >
+                  インポートを実行
+                </Button>
+              </VStack>
+            </Box>
+          </VStack>
+        </CardBody>
+      </Card>
 
       <Modal
         isOpen={imagePreviewModal.isOpen}
