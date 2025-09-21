@@ -875,6 +875,436 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
     finally:
         conn.close()
 
+# --- 設定/データのエクスポート・インポート支援関数 ---
+
+
+def export_questionnaire_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any]:
+    """問診テンプレートと関連設定をまとめて取得する。"""
+
+    conn = get_conn(db_path)
+    try:
+        tpl_rows = conn.execute(
+            """
+            SELECT id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions
+            FROM questionnaire_templates
+            ORDER BY id, visit_type
+            """
+        ).fetchall()
+        templates: list[dict[str, Any]] = []
+        for row in tpl_rows:
+            try:
+                items = json.loads(row.get("items_json") or "[]")
+            except Exception:
+                items = []
+            templates.append(
+                {
+                    "id": row["id"],
+                    "visit_type": row["visit_type"],
+                    "items": items,
+                    "llm_followup_enabled": bool(row.get("llm_followup_enabled", 1)),
+                    "llm_followup_max_questions": int(row.get("llm_followup_max_questions", 5)),
+                }
+            )
+
+        summary_rows = conn.execute(
+            """
+            SELECT id, visit_type, prompt_text, enabled
+            FROM summary_prompts
+            ORDER BY id, visit_type
+            """
+        ).fetchall()
+        summary_prompts = [
+            {
+                "id": row["id"],
+                "visit_type": row["visit_type"],
+                "prompt": row.get("prompt_text", ""),
+                "enabled": bool(row.get("enabled", 0)),
+            }
+            for row in summary_rows
+        ]
+
+        followup_rows = conn.execute(
+            """
+            SELECT id, visit_type, prompt_text, enabled
+            FROM followup_prompts
+            ORDER BY id, visit_type
+            """
+        ).fetchall()
+        followup_prompts = [
+            {
+                "id": row["id"],
+                "visit_type": row["visit_type"],
+                "prompt": row.get("prompt_text", ""),
+                "enabled": bool(row.get("enabled", 0)),
+            }
+            for row in followup_rows
+        ]
+    finally:
+        conn.close()
+
+    settings = load_app_settings(db_path) or {}
+    default_qid = settings.get("default_questionnaire_id")
+
+    return {
+        "templates": templates,
+        "summary_prompts": summary_prompts,
+        "followup_prompts": followup_prompts,
+        "default_questionnaire_id": default_qid,
+    }
+
+
+def import_questionnaire_settings(
+    data: dict[str, Any],
+    mode: str = "merge",
+    db_path: str = DEFAULT_DB_PATH,
+) -> dict[str, int]:
+    """問診テンプレートと関連設定を一括で保存する。"""
+
+    if mode not in {"merge", "replace"}:
+        raise ValueError("invalid mode")
+
+    templates = data.get("templates") or []
+    summary_prompts = data.get("summary_prompts") or []
+    followup_prompts = data.get("followup_prompts") or []
+    default_qid = data.get("default_questionnaire_id")
+
+    def _normalize_item(item: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(item)
+        if normalized.get("type") == "single":
+            normalized["type"] = "multi"
+        followups = normalized.get("followups")
+        if isinstance(followups, dict):
+            normalized_followups: dict[str, list[dict[str, Any]]] = {}
+            for key, fitems in followups.items():
+                if isinstance(fitems, list):
+                    normalized_followups[key] = [_normalize_item(fi) for fi in fitems]
+            normalized["followups"] = normalized_followups
+        return normalized
+
+    conn = get_conn(db_path)
+    try:
+        if mode == "replace":
+            conn.execute("DELETE FROM questionnaire_templates")
+            conn.execute("DELETE FROM summary_prompts")
+            conn.execute("DELETE FROM followup_prompts")
+
+        for tpl in templates:
+            tpl_id = tpl.get("id")
+            visit_type = tpl.get("visit_type")
+            if not tpl_id or not visit_type:
+                continue
+            items = tpl.get("items") or []
+            normalized_items = [_normalize_item(item) for item in items if isinstance(item, dict)]
+            items_json = json.dumps(normalized_items, ensure_ascii=False)
+            llm_enabled = 1 if tpl.get("llm_followup_enabled", True) else 0
+            llm_max = int(tpl.get("llm_followup_max_questions", 5) or 0)
+            conn.execute(
+                """
+                INSERT INTO questionnaire_templates (id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(id, visit_type) DO UPDATE SET
+                    items_json=excluded.items_json,
+                    llm_followup_enabled=excluded.llm_followup_enabled,
+                    llm_followup_max_questions=excluded.llm_followup_max_questions
+                """,
+                (tpl_id, visit_type, items_json, llm_enabled, llm_max),
+            )
+
+        for sp in summary_prompts:
+            tpl_id = sp.get("id")
+            visit_type = sp.get("visit_type")
+            if not tpl_id or not visit_type:
+                continue
+            prompt_text = sp.get("prompt", "")
+            enabled = 1 if sp.get("enabled") else 0
+            conn.execute(
+                """
+                INSERT INTO summary_prompts (id, visit_type, prompt_text, enabled)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id, visit_type) DO UPDATE SET
+                    prompt_text=excluded.prompt_text,
+                    enabled=excluded.enabled
+                """,
+                (tpl_id, visit_type, prompt_text, enabled),
+            )
+
+        for fp in followup_prompts:
+            tpl_id = fp.get("id")
+            visit_type = fp.get("visit_type")
+            if not tpl_id or not visit_type:
+                continue
+            prompt_text = fp.get("prompt", "")
+            enabled = 1 if fp.get("enabled") else 0
+            conn.execute(
+                """
+                INSERT INTO followup_prompts (id, visit_type, prompt_text, enabled)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(id, visit_type) DO UPDATE SET
+                    prompt_text=excluded.prompt_text,
+                    enabled=excluded.enabled
+                """,
+                (tpl_id, visit_type, prompt_text, enabled),
+            )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    if default_qid is not None:
+        current_settings = load_app_settings(db_path) or {}
+        current_settings["default_questionnaire_id"] = default_qid
+        save_app_settings(current_settings, db_path)
+
+    return {
+        "templates": len(templates),
+        "summary_prompts": len(summary_prompts),
+        "followup_prompts": len(followup_prompts),
+    }
+
+
+def export_sessions_data(
+    session_ids: list[str] | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    db_path: str = DEFAULT_DB_PATH,
+) -> list[dict[str, Any]]:
+    """セッション情報をまとめて取得する。"""
+
+    ids_set = set(session_ids or [])
+
+    if couch_db:
+        docs = [row.doc for row in couch_db.view("_all_docs", include_docs=True)]
+        result: list[dict[str, Any]] = []
+        for doc in docs:
+            sid = doc.get("_id")
+            if not sid:
+                continue
+            if ids_set and sid not in ids_set:
+                continue
+            finalized_at = doc.get("finalized_at")
+            if start_date and finalized_at and finalized_at < f"{start_date}T00:00:00":
+                continue
+            if end_date and finalized_at and finalized_at > f"{end_date}T23:59:59":
+                continue
+            payload = {
+                "id": sid,
+                "patient_name": doc.get("patient_name"),
+                "dob": doc.get("dob"),
+                "gender": doc.get("gender"),
+                "visit_type": doc.get("visit_type"),
+                "questionnaire_id": doc.get("questionnaire_id"),
+                "answers": doc.get("answers", {}),
+                "summary": doc.get("summary"),
+                "remaining_items": doc.get("remaining_items", []),
+                "completion_status": doc.get("completion_status"),
+                "attempt_counts": doc.get("attempt_counts", {}),
+                "additional_questions_used": doc.get("additional_questions_used", 0),
+                "max_additional_questions": doc.get("max_additional_questions", 0),
+                "followup_prompt": doc.get("followup_prompt"),
+                "finalized_at": finalized_at,
+                "llm_question_texts": doc.get("llm_question_texts") or {},
+            }
+            result.append(payload)
+        return result
+
+    conn = get_conn(db_path)
+    try:
+        query = "SELECT * FROM sessions"
+        conditions: list[str] = []
+        params: list[Any] = []
+        if ids_set:
+            placeholders = ",".join(["?"] * len(ids_set))
+            conditions.append(f"id IN ({placeholders})")
+            params.extend(ids_set)
+        if start_date:
+            conditions.append("DATE(finalized_at) >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(finalized_at) <= ?")
+            params.append(end_date)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        rows = conn.execute(query, params).fetchall()
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            sid = row["id"]
+            try:
+                answers = json.loads(row.get("answers_json") or "{}")
+            except Exception:
+                answers = {}
+            try:
+                remaining = json.loads(row.get("remaining_items_json") or "[]")
+            except Exception:
+                remaining = []
+            try:
+                attempts = json.loads(row.get("attempt_counts_json") or "{}")
+            except Exception:
+                attempts = {}
+            rrows = conn.execute(
+                "SELECT item_id, question_text FROM session_responses WHERE session_id=?",
+                (sid,),
+            ).fetchall()
+            llm_question_texts: dict[str, str] = {}
+            for r in rrows:
+                item_id = r.get("item_id")
+                qtext = r.get("question_text")
+                if (
+                    isinstance(item_id, str)
+                    and item_id.startswith("llm_")
+                    and qtext
+                ):
+                    llm_question_texts[item_id] = qtext
+            result.append(
+                {
+                    "id": sid,
+                    "patient_name": row.get("patient_name"),
+                    "dob": row.get("dob"),
+                    "gender": row.get("gender"),
+                    "visit_type": row.get("visit_type"),
+                    "questionnaire_id": row.get("questionnaire_id"),
+                    "answers": answers,
+                    "summary": row.get("summary"),
+                    "remaining_items": remaining,
+                    "completion_status": row.get("completion_status"),
+                    "attempt_counts": attempts,
+                    "additional_questions_used": row.get("additional_questions_used", 0),
+                    "max_additional_questions": row.get("max_additional_questions", 0),
+                    "followup_prompt": row.get("followup_prompt"),
+                    "finalized_at": row.get("finalized_at"),
+                    "llm_question_texts": llm_question_texts,
+                }
+            )
+        return result
+    finally:
+        conn.close()
+
+
+def import_sessions_data(
+    sessions: list[dict[str, Any]],
+    mode: str = "merge",
+    db_path: str = DEFAULT_DB_PATH,
+) -> dict[str, int]:
+    """セッション情報を一括で保存する。"""
+
+    if mode not in {"merge", "replace"}:
+        raise ValueError("invalid mode")
+
+    if couch_db:
+        if mode == "replace":
+            for row in couch_db.view("_all_docs"):
+                doc = couch_db.get(row.id)
+                if doc:
+                    couch_db.delete(doc)
+        for sess in sessions:
+            sid = sess.get("id")
+            if not sid:
+                continue
+            doc = {
+                "_id": sid,
+                "patient_name": sess.get("patient_name"),
+                "dob": sess.get("dob"),
+                "gender": sess.get("gender"),
+                "visit_type": sess.get("visit_type"),
+                "questionnaire_id": sess.get("questionnaire_id"),
+                "answers": sess.get("answers", {}),
+                "summary": sess.get("summary"),
+                "remaining_items": sess.get("remaining_items", []),
+                "completion_status": sess.get("completion_status"),
+                "attempt_counts": sess.get("attempt_counts", {}),
+                "additional_questions_used": sess.get("additional_questions_used", 0),
+                "max_additional_questions": sess.get("max_additional_questions", 0),
+                "followup_prompt": sess.get("followup_prompt"),
+                "finalized_at": sess.get("finalized_at"),
+                "llm_question_texts": sess.get("llm_question_texts") or {},
+            }
+            existing = couch_db.get(sid)
+            if existing:
+                doc["_rev"] = existing.rev
+            couch_db.save(doc)
+        return {"sessions": len(sessions)}
+
+    conn = get_conn(db_path)
+    try:
+        if mode == "replace":
+            conn.execute("DELETE FROM session_responses")
+            conn.execute("DELETE FROM sessions")
+
+        for sess in sessions:
+            sid = sess.get("id")
+            if not sid:
+                continue
+            answers = sess.get("answers") or {}
+            remaining = sess.get("remaining_items") or []
+            attempts = sess.get("attempt_counts") or {}
+            conn.execute(
+                """
+                INSERT INTO sessions (
+                    id, patient_name, dob, gender, visit_type, questionnaire_id,
+                    answers_json, summary, remaining_items_json, completion_status,
+                    attempt_counts_json, additional_questions_used, max_additional_questions,
+                    followup_prompt, finalized_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    patient_name=excluded.patient_name,
+                    dob=excluded.dob,
+                    gender=excluded.gender,
+                    visit_type=excluded.visit_type,
+                    questionnaire_id=excluded.questionnaire_id,
+                    answers_json=excluded.answers_json,
+                    summary=excluded.summary,
+                    remaining_items_json=excluded.remaining_items_json,
+                    completion_status=excluded.completion_status,
+                    attempt_counts_json=excluded.attempt_counts_json,
+                    additional_questions_used=excluded.additional_questions_used,
+                    max_additional_questions=excluded.max_additional_questions,
+                    followup_prompt=excluded.followup_prompt,
+                    finalized_at=excluded.finalized_at
+                """,
+                (
+                    sid,
+                    sess.get("patient_name"),
+                    sess.get("dob"),
+                    sess.get("gender"),
+                    sess.get("visit_type"),
+                    sess.get("questionnaire_id"),
+                    json.dumps(answers, ensure_ascii=False),
+                    sess.get("summary"),
+                    json.dumps(remaining, ensure_ascii=False),
+                    sess.get("completion_status"),
+                    json.dumps(attempts, ensure_ascii=False),
+                    int(sess.get("additional_questions_used", 0) or 0),
+                    int(sess.get("max_additional_questions", 0) or 0),
+                    sess.get("followup_prompt"),
+                    sess.get("finalized_at"),
+                ),
+            )
+            conn.execute("DELETE FROM session_responses WHERE session_id=?", (sid,))
+            ts = sess.get("finalized_at") or ""
+            llm_qtexts = sess.get("llm_question_texts") or {}
+            for item_id, ans in answers.items():
+                qtext = None
+                if isinstance(item_id, str) and item_id.startswith("llm_"):
+                    qtext = llm_qtexts.get(item_id)
+                conn.execute(
+                    """
+                    INSERT INTO session_responses (session_id, item_id, answer_json, question_text, ts)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        sid,
+                        item_id,
+                        json.dumps(ans, ensure_ascii=False),
+                        qtext,
+                        ts,
+                    ),
+                )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {"sessions": len(sessions)}
+
+
 # --- ユーザー/認証関連の関数 ---
 
 def list_audit_logs(limit: int = 100, db_path: str = DEFAULT_DB_PATH) -> list[dict[str, Any]]:

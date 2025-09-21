@@ -13,13 +13,16 @@ import zipfile
 import re
 import csv
 import json
+import base64
+import hashlib
+import secrets
 try:
     from dotenv import load_dotenv
 except Exception:  # ランタイム環境に dotenv が無い場合でも起動を継続
     def load_dotenv(*_args, **_kwargs):  # type: ignore
         return False
 
-from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -36,6 +39,8 @@ from .llm_gateway import (
     DEFAULT_FOLLOWUP_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
 )
+from cryptography.fernet import Fernet, InvalidToken
+
 from .db import (
     init_db,
     upsert_template,
@@ -65,6 +70,10 @@ from .db import (
     DEFAULT_DB_PATH,
     couch_db,
     COUCHDB_URL,
+    export_questionnaire_settings,
+    import_questionnaire_settings,
+    export_sessions_data,
+    import_sessions_data,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -104,6 +113,150 @@ DEFAULT_SUMMARY_PROMPT = (
     "主訴と発症時期などの重要事項を冒頭に記載し、その後に関連情報を読みやすく整理してください。"
     "推測や不要な前置きは避け、医療従事者がすぐ理解できる表現を用いてください。"
 )
+
+
+EXPORT_PBKDF_ITERATIONS = 390_000
+IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def _build_export_envelope(data: Any, export_type: str, password: str | None) -> dict[str, Any]:
+    """エクスポートデータを暗号化設定付きの包みにまとめる。"""
+
+    envelope: dict[str, Any] = {
+        "version": 1,
+        "type": export_type,
+        "exported_at": datetime.now(UTC).isoformat(),
+    }
+    if password:
+        salt = secrets.token_bytes(16)
+        key_material = hashlib.pbkdf2_hmac(
+            "sha256", password.encode("utf-8"), salt, EXPORT_PBKDF_ITERATIONS, dklen=32
+        )
+        fernet_key = base64.urlsafe_b64encode(key_material)
+        cipher = Fernet(fernet_key)
+        plaintext = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        ciphertext = cipher.encrypt(plaintext)
+        envelope["encryption"] = {
+            "algorithm": "fernet",
+            "kdf": "pbkdf2_hmac",
+            "salt": base64.b64encode(salt).decode("ascii"),
+            "iterations": EXPORT_PBKDF_ITERATIONS,
+        }
+        envelope["payload"] = base64.b64encode(ciphertext).decode("ascii")
+    else:
+        envelope["encryption"] = None
+        envelope["payload"] = data
+    return envelope
+
+
+def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str, Any]:
+    """エクスポートファイルを復号し、中身の種別とデータを返す。"""
+
+    try:
+        envelope = json.loads(raw_bytes.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="invalid_export_file")
+    if not isinstance(envelope, dict):
+        raise HTTPException(status_code=400, detail="invalid_export_file")
+    export_type = envelope.get("type")
+    encryption = envelope.get("encryption")
+    payload = envelope.get("payload")
+    if encryption:
+        if not password:
+            raise HTTPException(status_code=400, detail="password_required")
+        try:
+            salt = base64.b64decode(encryption.get("salt") or "")
+            iterations = int(encryption.get("iterations") or EXPORT_PBKDF_ITERATIONS)
+            key_material = hashlib.pbkdf2_hmac(
+                "sha256", password.encode("utf-8"), salt, iterations, dklen=32
+            )
+            cipher = Fernet(base64.urlsafe_b64encode(key_material))
+            decrypted = cipher.decrypt(base64.b64decode(payload or ""))
+            payload_data = json.loads(decrypted.decode("utf-8"))
+        except InvalidToken:
+            raise HTTPException(status_code=400, detail="invalid_password")
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_export_payload")
+    else:
+        payload_data = payload
+    return str(export_type or ""), payload_data
+
+
+def _collect_image_names_from_items(items: list[Any], bucket: set[str]) -> None:
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        image = item.get("image")
+        if isinstance(image, str):
+            if image.startswith("/questionnaire-item-images/files/") or image.startswith(
+                "questionnaire-item-images/files/"
+            ):
+                name = Path(image).name
+                if name:
+                    bucket.add(name)
+        followups = item.get("followups")
+        if isinstance(followups, dict):
+            for sub_items in followups.values():
+                if isinstance(sub_items, list):
+                    _collect_image_names_from_items(sub_items, bucket)
+
+
+def _collect_image_names_from_templates(templates: list[dict[str, Any]]) -> set[str]:
+    names: set[str] = set()
+    for tpl in templates:
+        items = tpl.get("items")
+        if isinstance(items, list):
+            _collect_image_names_from_items(items, names)
+    return names
+
+
+def _sanitize_image_filename(name: str) -> str:
+    sanitized = Path(name).name
+    if not sanitized or not IMAGE_FILENAME_PATTERN.fullmatch(sanitized):
+        raise ValueError("invalid image filename")
+    return sanitized
+
+
+def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
+    payloads: dict[str, str] = {}
+    for name in sorted(image_names):
+        try:
+            sanitized = _sanitize_image_filename(name)
+        except ValueError:
+            continue
+        path = IMAGE_DIR / sanitized
+        if not path.exists() or not path.is_file():
+            continue
+        payloads[sanitized] = base64.b64encode(path.read_bytes()).decode("ascii")
+    return payloads
+
+
+def _restore_images(image_payloads: Any, mode: str) -> int:
+    if not image_payloads:
+        return 0
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    if mode == "replace":
+        for child in IMAGE_DIR.glob("*"):
+            if child.is_file():
+                child.unlink()
+    restored = 0
+    if not isinstance(image_payloads, dict):
+        raise HTTPException(status_code=400, detail="invalid_image_payload")
+    for name, encoded in image_payloads.items():
+        if not isinstance(name, str) or not isinstance(encoded, str):
+            continue
+        try:
+            sanitized = _sanitize_image_filename(name)
+        except ValueError:
+            continue
+        try:
+            data = base64.b64decode(encoded)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_image_payload")
+        with (IMAGE_DIR / sanitized).open("wb") as fp:
+            fp.write(data)
+        restored += 1
+    return restored
 
 
 @app.middleware("http")
@@ -735,6 +888,20 @@ class QuestionnaireDuplicate(BaseModel):
     new_id: str
 
 
+class ExportRequest(BaseModel):
+    """暗号化付きエクスポート要求。"""
+
+    password: str | None = None
+
+
+class SessionsExportRequest(ExportRequest):
+    """セッションエクスポート用フィルタ。"""
+
+    session_ids: list[str] | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+
+
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
 def get_questionnaire_template(
     questionnaire_id: str, visit_type: str, gender: str | None = None, age: int | None = None
@@ -952,6 +1119,56 @@ def reset_default_template() -> dict:
     upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
     return {"status": "ok"}
 
+
+
+@app.post("/admin/questionnaires/export")
+def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingResponse:
+    """問診テンプレート設定一式をエクスポートする。"""
+
+    data = export_questionnaire_settings()
+    templates = data.get("templates") or []
+    image_names = _collect_image_names_from_templates(templates)
+    images = _load_image_payloads(image_names)
+    export_payload = dict(data)
+    export_payload["images"] = images
+    envelope = _build_export_envelope(export_payload, "questionnaire_settings", payload.password or None)
+    content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = f"questionnaire-settings-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/admin/questionnaires/import")
+async def import_questionnaire_settings_api(
+    file: UploadFile = File(...), password: str | None = Form(None), mode: str = Form("merge")
+) -> dict[str, Any]:
+    """問診テンプレート設定一式をインポートする。"""
+
+    raw = await file.read()
+    export_type, payload = _parse_import_envelope(raw, password or None)
+    if export_type != "questionnaire_settings":
+        raise HTTPException(status_code=400, detail="invalid_export_type")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid_export_payload")
+    mode_value = (mode or "merge").lower()
+    if mode_value not in {"merge", "replace"}:
+        raise HTTPException(status_code=400, detail="invalid_mode")
+    payload_data = dict(payload)
+    images_payload = payload_data.pop("images", {}) or {}
+    restored_images = _restore_images(images_payload, mode_value)
+    try:
+        stats = import_questionnaire_settings(payload_data, mode=mode_value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_mode")
+    return {
+        "status": "ok",
+        "imported": stats,
+        "images_restored": restored_images,
+        "mode": mode_value,
+    }
 
 
 @app.post("/questionnaire-item-images")
@@ -2223,6 +2440,64 @@ def finalize_session(
         "answers": session.answers,
         "finalized_at": session.finalized_at.isoformat(),
         "status": session.completion_status,
+    }
+
+
+@app.post("/admin/sessions/export")
+def export_sessions_api(payload: SessionsExportRequest) -> StreamingResponse:
+    """問診結果データをエクスポートする。"""
+
+    sessions_data = export_sessions_data(
+        session_ids=payload.session_ids,
+        start_date=payload.start_date,
+        end_date=payload.end_date,
+    )
+    export_payload = {
+        "sessions": sessions_data,
+        "count": len(sessions_data),
+        "filters": {
+            "session_ids": payload.session_ids or None,
+            "start_date": payload.start_date,
+            "end_date": payload.end_date,
+        },
+    }
+    envelope = _build_export_envelope(export_payload, "session_data", payload.password or None)
+    content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
+    filename = f"sessions-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@app.post("/admin/sessions/import")
+async def import_sessions_api(
+    file: UploadFile = File(...), password: str | None = Form(None), mode: str = Form("merge")
+) -> dict[str, Any]:
+    """問診結果データをインポートする。"""
+
+    raw = await file.read()
+    export_type, payload = _parse_import_envelope(raw, password or None)
+    if export_type != "session_data":
+        raise HTTPException(status_code=400, detail="invalid_export_type")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="invalid_export_payload")
+    sessions_payload = payload.get("sessions") or []
+    if not isinstance(sessions_payload, list):
+        raise HTTPException(status_code=400, detail="invalid_export_payload")
+    mode_value = (mode or "merge").lower()
+    if mode_value not in {"merge", "replace"}:
+        raise HTTPException(status_code=400, detail="invalid_mode")
+    try:
+        stats = import_sessions_data(sessions_payload, mode=mode_value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_mode")
+    return {
+        "status": "ok",
+        "imported": stats,
+        "mode": mode_value,
+        "count": len(sessions_payload),
     }
 
 
