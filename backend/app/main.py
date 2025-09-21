@@ -3,7 +3,7 @@
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
 from __future__ import annotations
-from typing import Any
+from typing import Any, Iterable
 from uuid import uuid4
 import time
 from datetime import datetime, timedelta, UTC
@@ -1434,6 +1434,10 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
         items = []
 
     answers = s.get("answers", {}) or {}
+    question_texts = {}
+    raw_qtexts = s.get("question_texts") or {}
+    if isinstance(raw_qtexts, dict):
+        question_texts = {str(k): v for k, v in raw_qtexts.items() if isinstance(v, str)}
 
     def fmt_answer(ans: Any) -> str:
         if ans is None or ans == "":
@@ -1445,13 +1449,29 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
         return str(ans)
 
     rows: list[tuple[str, str]] = []
+    appended_ids: set[str] = set()
     for item in items:
         try:
-            rows.append((item.label, fmt_answer(answers.get(item.id))))
+            item_id = str(item.id)
+            label = question_texts.get(item_id) or item.label
+            rows.append((label, fmt_answer(answers.get(item_id))))
+            appended_ids.add(item_id)
         except Exception:
             continue
-    for iid, qtext in (s.get("llm_question_texts") or {}).items():
-        rows.append((str(qtext), fmt_answer(answers.get(iid))))
+    llm_qtexts = s.get("llm_question_texts") or {}
+    if isinstance(llm_qtexts, dict):
+        for iid, qtext in llm_qtexts.items():
+            key = str(iid)
+            label = question_texts.get(key) or str(qtext)
+            rows.append((label, fmt_answer(answers.get(key))))
+            appended_ids.add(key)
+    # テンプレートに存在しないが回答が残っている項目も出力に含める
+    for iid in sorted({str(k) for k in answers.keys()}):
+        if iid in appended_ids:
+            continue
+        label = question_texts.get(iid) or iid
+        rows.append((label, fmt_answer(answers.get(iid))))
+        appended_ids.add(iid)
 
     vt_label = _visit_type_label(visit_type)
     return rows, vt_label, items
@@ -2151,6 +2171,54 @@ class SessionCreateRequest(BaseModel):
     answers: dict[str, Any]
     questionnaire_id: str | None = None
 
+
+def _collect_question_texts_from_items(items: Iterable[Any] | None) -> dict[str, str]:
+    """テンプレート項目からIDと質問文のマップを構築する。"""
+
+    mapping: dict[str, str] = {}
+    if not items:
+        return mapping
+
+    stack: list[Any] = list(items)
+    while stack:
+        item = stack.pop()
+        if item is None:
+            continue
+        item_id = None
+        label = None
+        try:
+            item_id = getattr(item, "id", None)
+        except Exception:
+            item_id = None
+        if item_id is None and isinstance(item, dict):
+            item_id = item.get("id")
+        try:
+            label = getattr(item, "label", None)
+        except Exception:
+            label = None
+        if label is None and isinstance(item, dict):
+            label = item.get("label")
+        if item_id and isinstance(label, str):
+            mapping[item_id] = label
+
+        followups = None
+        try:
+            followups = getattr(item, "followups", None)
+        except Exception:
+            followups = None
+        if followups is None and isinstance(item, dict):
+            followups = item.get("followups")
+        if isinstance(followups, dict):
+            for children in followups.values():
+                if not children:
+                    continue
+                if isinstance(children, (list, tuple, set)):
+                    stack.extend(list(children))
+                else:
+                    stack.append(children)
+    return mapping
+
+
 class Session(BaseModel):
     """セッションの内容を表すモデル。
 
@@ -2179,6 +2247,8 @@ class Session(BaseModel):
     # LLM が提示した追加質問の「質問文」を保持するマップ。
     # キーは `llm_1` のような item_id。
     llm_question_texts: dict[str, str] = Field(default_factory=dict)
+    # 保存時に使用する全問診項目ID -> 質問文のマップ。
+    question_texts: dict[str, str] = Field(default_factory=dict)
 
 
 class SessionCreateResponse(BaseModel):
@@ -2215,6 +2285,7 @@ class SessionDetail(BaseModel):
     visit_type: str
     questionnaire_id: str
     answers: dict[str, Any]
+    question_texts: dict[str, str] | None = None
     # LLM による追加質問の提示文マップ（例: {"llm_1": "いつから症状がありますか？"}）
     llm_question_texts: dict[str, str] | None = None
     summary: str | None = None
@@ -2268,6 +2339,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     items = [QuestionnaireItem(**it) for it in tpl["items"]]
     if req.gender:
         items = [it for it in items if not it.gender or it.gender == "both" or it.gender == req.gender]
+    question_texts = _collect_question_texts_from_items(items)
     Validator.validate_partial(items, req.answers)
     for k, v in list(req.answers.items()):
         # 空欄の回答は「該当なし」に統一
@@ -2293,6 +2365,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
             else 0
         ),
         followup_prompt=prompt_text,
+        question_texts=question_texts,
     )
     fsm = SessionFSM(session, llm_gateway)
     fsm.update_completion()
@@ -2532,6 +2605,7 @@ def admin_get_session(session_id: str) -> SessionDetail:
         visit_type=s["visit_type"],
         questionnaire_id=s["questionnaire_id"],
         answers=s.get("answers", {}),
+        question_texts=s.get("question_texts") or {},
         llm_question_texts=s.get("llm_question_texts") or {},
         summary=s.get("summary"),
         finalized_at=s.get("finalized_at"),

@@ -64,6 +64,53 @@ def _dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any
     return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
 
 
+def _extract_question_texts_from_items(items: Iterable[Any] | None) -> dict[str, str]:
+    """セッションが保持するテンプレ項目から質問文マップを生成する。"""
+
+    mapping: dict[str, str] = {}
+    if not items:
+        return mapping
+
+    stack: list[Any] = list(items)
+    while stack:
+        item = stack.pop()
+        if item is None:
+            continue
+        item_id = None
+        label = None
+        try:
+            item_id = getattr(item, "id", None)
+        except Exception:
+            item_id = None
+        if item_id is None and isinstance(item, dict):
+            item_id = item.get("id")
+        try:
+            label = getattr(item, "label", None)
+        except Exception:
+            label = None
+        if label is None and isinstance(item, dict):
+            label = item.get("label")
+        if item_id and isinstance(label, str):
+            mapping[item_id] = label
+
+        followups = None
+        try:
+            followups = getattr(item, "followups", None)
+        except Exception:
+            followups = None
+        if followups is None and isinstance(item, dict):
+            followups = item.get("followups")
+        if isinstance(followups, dict):
+            for children in followups.values():
+                if not children:
+                    continue
+                if isinstance(children, (list, tuple, set)):
+                    stack.extend(list(children))
+                else:
+                    stack.append(children)
+    return mapping
+
+
 def get_conn(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = _dict_factory
@@ -664,6 +711,34 @@ def delete_template(template_id: str, visit_type: str, db_path: str = DEFAULT_DB
 
 def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
     """セッション情報と回答を保存する。"""
+    raw_llm_qtexts = getattr(session, "llm_question_texts", {}) or {}
+    llm_qtexts: dict[str, str] = {}
+    for key, text in raw_llm_qtexts.items():
+        if isinstance(text, str):
+            llm_qtexts[str(key)] = text
+    try:
+        session.llm_question_texts = llm_qtexts  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+    question_texts: dict[str, str] = {}
+    existing_qtexts = getattr(session, "question_texts", {}) or {}
+    if isinstance(existing_qtexts, dict):
+        for key, text in existing_qtexts.items():
+            if isinstance(text, str):
+                question_texts[str(key)] = text
+    template_items = getattr(session, "template_items", None)
+    template_qtexts = _extract_question_texts_from_items(template_items)
+    for key, text in template_qtexts.items():
+        if isinstance(text, str):
+            question_texts.setdefault(str(key), text)
+    for key, text in llm_qtexts.items():
+        question_texts[key] = text
+    try:
+        session.question_texts = question_texts  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
     if couch_db:
         doc = {
             "_id": session.id,
@@ -681,7 +756,8 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             "max_additional_questions": session.max_additional_questions,
             "followup_prompt": session.followup_prompt,
             "finalized_at": session.finalized_at.isoformat() if session.finalized_at else None,
-            "llm_question_texts": getattr(session, "llm_question_texts", {}) or {},
+            "llm_question_texts": llm_qtexts,
+            "question_texts": question_texts,
         }
         if session.id in couch_db:
             existing = couch_db.get(session.id)
@@ -748,13 +824,13 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
 
         conn.execute("DELETE FROM session_responses WHERE session_id=?", (session.id,))
         ts = session.finalized_at.isoformat() if session.finalized_at else ""
-        # LLM 追加質問の提示文マッピング（存在しない場合は空）
-        llm_qtexts = getattr(session, "llm_question_texts", {}) or {}
         for item_id, ans in session.answers.items():
-            qtext = None
-            # 追加質問IDは `llm_` 接頭辞で管理している
-            if isinstance(item_id, str) and item_id.startswith("llm_"):
-                qtext = llm_qtexts.get(item_id)
+            stored_id = str(item_id)
+            qtext = question_texts.get(stored_id)
+            if qtext is None and stored_id != item_id:
+                qtext = question_texts.get(item_id)
+            if qtext is None and stored_id.startswith("llm_"):
+                qtext = llm_qtexts.get(stored_id)
             conn.execute(
                 """
                 INSERT INTO session_responses (session_id, item_id, answer_json, question_text, ts)
@@ -762,7 +838,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 """,
                 (
                     session.id,
-                    item_id,
+                    stored_id,
                     json.dumps(ans, ensure_ascii=False),
                     qtext,
                     ts,
@@ -845,6 +921,12 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         if not doc:
             return None
         doc["id"] = doc.pop("_id")
+        qtexts = doc.get("question_texts") or {}
+        if isinstance(qtexts, dict):
+            doc["question_texts"] = {str(k): v for k, v in qtexts.items() if isinstance(v, str)}
+        llm_qtexts = doc.get("llm_question_texts") or {}
+        if isinstance(llm_qtexts, dict):
+            doc["llm_question_texts"] = {str(k): v for k, v in llm_qtexts.items() if isinstance(v, str)}
         return doc
     conn = get_conn(db_path)
     try:
@@ -861,12 +943,17 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         answers = {r["item_id"]: json.loads(r["answer_json"]) for r in rrows}
         # LLM 追加質問の質問文マッピングも返却に含める（API レイヤでは必要に応じて利用）
         llm_qtexts: dict[str, str] = {}
+        question_texts: dict[str, str] = {}
         for r in rrows:
             iid = r.get("item_id")
             qtext = r.get("question_text")
-            if iid and isinstance(iid, str) and iid.startswith("llm_") and qtext:
-                llm_qtexts[iid] = qtext
+            if iid and qtext:
+                question_texts[str(iid)] = qtext
+                if isinstance(iid, str) and iid.startswith("llm_"):
+                    llm_qtexts[str(iid)] = qtext
         srow["answers"] = answers
+        if question_texts:
+            srow["question_texts"] = question_texts
         if llm_qtexts:
             srow["llm_question_texts"] = llm_qtexts
         srow["remaining_items"] = json.loads(srow.get("remaining_items_json") or "[]")

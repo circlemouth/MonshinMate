@@ -122,6 +122,7 @@
   - `visit_type` (str)
   - `questionnaire_id` (str)
   - `answers` (object)
+  - `question_texts` (object, 任意): 保存時点の問診項目IDと質問文のマップ（テンプレ変更後も元の文言を保持）
   - `llm_question_texts` (object, 任意): 追加質問ID（`llm_1` など）と提示した質問文のマップ
   - `summary` (str|null)
   - `finalized_at` (str|null)
