@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .personal_info import normalize_for_storage as personal_info_normalize
+
 
 class StructuredContextManager:
     """最小実装としてセッションの回答辞書を更新する。"""
@@ -10,6 +12,9 @@ class StructuredContextManager:
     @staticmethod
     def normalize_answer(answer: Any) -> Any:
         """空欄の回答を「該当なし」に正規化する。"""
+        personal_answer = personal_info_normalize(answer)
+        if personal_answer is not None:
+            return personal_answer
         if answer is None:
             return "該当なし"
         if isinstance(answer, str) and not answer.strip():

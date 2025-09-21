@@ -1,7 +1,6 @@
 import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio, Select, Flex, Box } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import ErrorSummary from '../components/ErrorSummary';
 import { track } from '../metrics';
 import { refreshLlmStatus } from '../utils/llmStatus';
 
@@ -126,17 +125,6 @@ export default function Entry() {
   return (
     <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
     <VStack spacing={4} align="stretch">
-      <ErrorSummary
-        errors={[
-          ...(attempted && !name ? ['氏名を入力してください'] : []),
-          ...(attempted && !gender ? ['性別を選択してください'] : []),
-          ...(attempted && !dob ? ['生年月日を入力してください'] : []),
-          ...(attempted && dob && dob > new Date().toISOString().slice(0, 10)
-            ? ['生年月日に未来の日付は指定できません']
-            : []),
-          ...(attempted && !visitType ? ['当院の受診は初めてか、選択してください'] : []),
-        ]}
-      />
       <FormControl isRequired isInvalid={attempted && !name}>
         <FormLabel htmlFor="patient_name">氏名</FormLabel>
         <Input
@@ -209,7 +197,15 @@ export default function Entry() {
         <FormErrorMessage>選択してください</FormErrorMessage>
       </FormControl>
       <Flex justifyContent="center">
-        <Button onClick={handleNext} colorScheme="primary" w="200px">
+        <Button
+          onClick={handleNext}
+          colorScheme="primary"
+          size="lg"
+          w={{ base: '100%', sm: '280px' }}
+          maxW="400px"
+          py={6}
+          fontSize="lg"
+        >
           問診を始める
         </Button>
       </Flex>

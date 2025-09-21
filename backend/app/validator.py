@@ -6,6 +6,11 @@ from typing import Any, Sequence
 
 from fastapi import HTTPException
 
+from .personal_info import (
+    sanitize_input as personal_info_sanitize,
+    is_complete as personal_info_is_complete,
+)
+
 
 class Validator:
     """問診回答の妥当性を検証する。"""
@@ -79,6 +84,11 @@ class Validator:
                         raise HTTPException(status_code=400, detail=f"{key} の選択肢に不正な値があります")
                     if invalid and allow_freetext and any(not v.strip() for v in invalid):
                         raise HTTPException(status_code=400, detail=f"{key} の自由記述が不正です")
+            elif item_type == "personal_info":
+                sanitized = personal_info_sanitize(value)
+                if sanitized is None:
+                    raise HTTPException(status_code=400, detail=f"{key} は正しく入力してください")
+                answers[key] = sanitized
 
     @staticmethod
     def missing_required(items: Sequence[Any], answers: dict[str, Any]) -> list[str]:
@@ -90,6 +100,13 @@ class Validator:
             if not required:
                 continue
             val = answers.get(item_id)
+            item_type = (
+                it.get("type") if isinstance(it, dict) else getattr(it, "type", None)
+            )
+            if item_type == "personal_info":
+                if not personal_info_is_complete(val):
+                    missing.append(item_id)
+                continue
             if val is None or (isinstance(val, str) and not val.strip()) or (
                 isinstance(val, list) and not val
             ):

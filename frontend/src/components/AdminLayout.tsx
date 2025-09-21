@@ -41,6 +41,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { label: 'LLM設定', to: '/admin/llm' },
       { label: 'セキュリティ', to: '/admin/security' },
       { label: '表示設定', to: '/admin/appearance' },
+      { label: 'バックアップ', to: '/admin/data-transfer' },
       { label: 'システム説明', to: '/admin/manual' },
       { label: 'ライセンス', to: '/admin/license' },
     ],

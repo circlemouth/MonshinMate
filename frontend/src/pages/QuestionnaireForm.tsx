@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { ChangeEvent, useEffect, useState } from 'react';
 import {
   VStack,
   FormControl,
@@ -19,12 +19,23 @@ import {
   SliderFilledTrack,
   SliderThumb,
   Text,
+  SimpleGrid,
+  useToast,
+  InputGroup,
+  InputRightElement,
+  Icon,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
-import ErrorSummary from '../components/ErrorSummary';
 import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
+import { SearchIcon } from '@chakra-ui/icons';
+import {
+  mergePersonalInfoValue,
+  personalInfoFields,
+  personalInfoMissingKeys,
+} from '../utils/personalInfo';
+import { fetchAddressByPostal } from '../utils/yubinbango';
 
   interface Item {
     id: string;
@@ -74,6 +85,8 @@ export default function QuestionnaireForm() {
   const dob = sessionStorage.getItem('dob') || '';
   const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
   const navigate = useNavigate();
+  const toast = useToast();
+  const [lookupTarget, setLookupTarget] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) {
@@ -90,6 +103,9 @@ export default function QuestionnaireForm() {
           data.items.forEach((it: Item) => {
             if (it.type === 'slider' && ans[it.id] === undefined) {
               ans[it.id] = it.min ?? 0;
+            }
+            if (it.type === 'personal_info') {
+              ans[it.id] = mergePersonalInfoValue(ans[it.id]);
             }
           });
           setAnswers(ans);
@@ -125,6 +141,50 @@ export default function QuestionnaireForm() {
 
   const [attempted, setAttempted] = useState(false);
 
+  const composeAddress = (addr: { region?: string; locality?: string; street?: string; extended?: string }) => {
+    const parts = [addr.region, addr.locality, addr.street, addr.extended].filter((part) => part && String(part).trim());
+    return parts.join('');
+  };
+
+  const handlePostalLookup = async (itemId: string) => {
+    const current = mergePersonalInfoValue(answers[itemId]);
+    const postal = current.postal_code;
+    if (!postal || postal.replace(/[^0-9]/g, '').length !== 7) {
+      toast({ status: 'warning', title: '郵便番号を正しく入力してください（7桁）' });
+      return;
+    }
+    setLookupTarget(itemId);
+    try {
+      const addr = await fetchAddressByPostal(postal);
+      const addressText = composeAddress(addr);
+      if (!addressText) {
+        throw new Error('住所情報が取得できませんでした');
+      }
+      setAnswers((prev) => {
+        const merged = mergePersonalInfoValue(prev[itemId]);
+        const nextValue = { ...merged, address: addressText };
+        const nextAnswers = { ...prev, [itemId]: nextValue };
+        sessionStorage.setItem('answers', JSON.stringify(nextAnswers));
+        return nextAnswers;
+      });
+      toast({ status: 'success', title: '住所を自動入力しました' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '住所検索に失敗しました';
+      toast({ status: 'error', title: '住所の補完に失敗しました', description: message });
+    } finally {
+      setLookupTarget(null);
+    }
+  };
+
+  const isMissingValue = (item: Item, value: any): boolean => {
+    if (item.type === 'personal_info') {
+      return personalInfoMissingKeys(mergePersonalInfoValue(value)).length > 0;
+    }
+    if (value === undefined || value === '') return true;
+    if (Array.isArray(value)) return value.length === 0;
+    return false;
+  };
+
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
     try {
@@ -146,10 +206,7 @@ export default function QuestionnaireForm() {
     // 必須チェック
     const requiredErrors = visibleItems
       .filter((item) => item.required)
-      .filter((item) => {
-        const val = answers[item.id];
-        return val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
-      });
+      .filter((item) => isMissingValue(item, answers[item.id]));
     if (requiredErrors.length > 0) {
       track('validation_failed', { page: 'Questionnaire', count: requiredErrors.length });
       return;
@@ -192,8 +249,8 @@ export default function QuestionnaireForm() {
   const visibleItems = buildVisibleItems(items);
 
   const missingRequired = visibleItems.some((item) => {
-    const val = answers[item.id];
-    return item.required && (val === undefined || val === '' || (Array.isArray(val) && val.length === 0));
+    if (!item.required) return false;
+    return isMissingValue(item, answers[item.id]);
   });
 
   const today = new Date().toISOString().slice(0, 10);
@@ -204,23 +261,12 @@ export default function QuestionnaireForm() {
     onset: 'わかる範囲で構いません（例：今朝から、1週間前から など）。',
   };
 
-  const errorsForSummary = attempted
-    ? visibleItems
-        .filter((item) => item.required)
-        .filter((item) => {
-          const val = answers[item.id];
-          return val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
-        })
-        .map((item) => `${item.label}を入力してください`)
-    : [];
-
   // エラー時は最初の未入力必須項目へフォーカス＆スクロール
   useEffect(() => {
     if (!attempted) return;
     const firstInvalid = visibleItems.find((item) => {
       if (!item.required) return false;
-      const val = answers[item.id];
-      return val === undefined || val === '' || (Array.isArray(val) && val.length === 0);
+      return isMissingValue(item, answers[item.id]);
     });
     if (firstInvalid) {
       const el = document.getElementById(`item-${firstInvalid.id}`) as HTMLElement | null;
@@ -234,20 +280,19 @@ export default function QuestionnaireForm() {
   return (
     <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
     <VStack spacing={6} align="stretch">
-      <ErrorSummary errors={errorsForSummary} />
       {visibleItems.map((item) => {
         const helperText = item.description || defaultHelperTexts[item.id];
+        const value = answers[item.id];
+        const personalValue = item.type === 'personal_info' ? mergePersonalInfoValue(value) : null;
+        const personalMissing = item.type === 'personal_info' ? personalInfoMissingKeys(personalValue) : [];
+        const showError = attempted && item.required && isMissingValue(item, value);
+        const lookupLoading = lookupTarget === item.id;
+        const postalDigits = personalValue ? personalValue.postal_code.replace(/[^0-9]/g, '') : '';
         return (
           <Box key={item.id} bg="white" p={6} borderRadius="lg" boxShadow="sm">
             <FormControl
               isRequired={item.required}
-              isInvalid={
-                attempted &&
-                item.required &&
-                (answers[item.id] === undefined ||
-                  answers[item.id] === '' ||
-                  (Array.isArray(answers[item.id]) && answers[item.id].length === 0))
-              }
+              isInvalid={showError}
             >
               <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
                 {item.label}
@@ -361,6 +406,64 @@ export default function QuestionnaireForm() {
                     value={answers[item.id] || ''}
                     onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
                   />
+                ) : item.type === 'personal_info' && personalValue ? (
+                  <VStack align="stretch" spacing={4}>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                      {personalInfoFields.map((field) => {
+                        const fieldMissing = attempted && item.required && personalMissing.includes(field.key);
+                        const commonProps = {
+                          value: personalValue[field.key],
+                          placeholder: field.placeholder,
+                          autoComplete: field.autoComplete,
+                          inputMode: field.inputMode,
+                          onChange: (e: ChangeEvent<HTMLInputElement>) => {
+                            const nextVal = e.target.value;
+                            setAnswers((prev) => {
+                              const merged = mergePersonalInfoValue(prev[item.id]);
+                              const updatedValue = { ...merged, [field.key]: nextVal };
+                              const nextAnswers = { ...prev, [item.id]: updatedValue };
+                              sessionStorage.setItem('answers', JSON.stringify(nextAnswers));
+                              return nextAnswers;
+                            });
+                          },
+                        };
+                        const input = field.key === 'postal_code' ? (
+                          <InputGroup>
+                            <Input
+                              {...commonProps}
+                              inputMode="numeric"
+                            />
+                            <InputRightElement width="auto" pr={1}>
+                              <Button
+                                size="sm"
+                                leftIcon={<Icon as={SearchIcon} />}
+                                onClick={() => handlePostalLookup(item.id)}
+                                isLoading={lookupLoading}
+                                isDisabled={lookupLoading || postalDigits.length !== 7}
+                                colorScheme="primary"
+                                variant="solid"
+                              >
+                                住所検索
+                              </Button>
+                            </InputRightElement>
+                          </InputGroup>
+                        ) : (
+                          <Input
+                            {...commonProps}
+                          />
+                        );
+                        return (
+                          <FormControl key={field.key} isRequired isInvalid={fieldMissing}>
+                            <FormLabel fontSize="sm">{field.label}</FormLabel>
+                            {input}
+                            {fieldMissing && (
+                              <FormErrorMessage>{field.label}を入力してください</FormErrorMessage>
+                            )}
+                          </FormControl>
+                        );
+                      })}
+                    </SimpleGrid>
+                  </VStack>
                 ) : (
                   <Input
                     id={`item-${item.id}`}
@@ -374,7 +477,14 @@ export default function QuestionnaireForm() {
                     spellCheck={false}
                   />
                 )}
-                <FormErrorMessage>{item.label}を入力してください</FormErrorMessage>
+                <FormErrorMessage>
+                  {item.type === 'personal_info' && personalValue
+                    ? personalInfoFields
+                        .filter((field) => personalMissing.includes(field.key))
+                        .map((field) => field.label)
+                        .join('・') || `${item.label}を入力してください`
+                    : `${item.label}を入力してください`}
+                </FormErrorMessage>
               </FormControl>
           </Box>
         );

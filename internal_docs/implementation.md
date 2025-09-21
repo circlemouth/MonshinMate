@@ -80,7 +80,7 @@
 - 完了条件
   - [x] `LLMSettings` に `base_url`/`api_key` を追加（任意項目）
   - [x] `provider=ollama` 時は `POST {base_url}/api/chat` を使用
-  - [x] `provider=lm_studio` 時は OpenAI互換 `POST {base_url}/v1/chat/completions` を使用
+  - [x] `provider=lm_studio` / `provider=openai` 時は OpenAI互換 `POST {base_url}/v1/chat/completions` を使用
   - [x] `/llm/settings/test` は `base_url` 未設定時は常に OK、設定時は疎通を確認
   - [x] 失敗時はログ出力の上、スタブ応答にフォールバック
   - [x] 追加質問生成で構造化出力を強制（LLMcommunication.md 準拠）

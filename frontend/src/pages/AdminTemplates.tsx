@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, ChangeEvent } from 'react';
+import { ChangeEvent, useEffect, useState, useRef } from 'react';
 import {
   VStack,
   FormControl,
@@ -47,15 +47,18 @@ import {
   Image,
   Icon,
   useToast,
-  Card,
-  CardHeader,
-  CardBody,
-  Divider,
+  InputGroup,
+  InputRightElement,
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon, SearchIcon } from '@chakra-ui/icons';
 import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
+import {
+  personalInfoFields,
+  mergePersonalInfoValue,
+} from '../utils/personalInfo';
+import { fetchAddressByPostal } from '../utils/yubinbango';
 
   interface Item {
     id: string;
@@ -131,6 +134,7 @@ export default function AdminTemplates() {
   const [isAddingNewItem, setIsAddingNewItem] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
+  const [previewLookupTarget, setPreviewLookupTarget] = useState<string | null>(null);
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
   const [previewGender, setPreviewGender] = useState<'male' | 'female'>('male');
   const [previewAge, setPreviewAge] = useState<number>(30);
@@ -152,12 +156,6 @@ export default function AdminTemplates() {
   const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
   const isDirtyRef = useRef<boolean>(false);
   const toast = useToast();
-  const [exportPassword, setExportPassword] = useState('');
-  const [exportingSettings, setExportingSettings] = useState(false);
-  const [importPassword, setImportPassword] = useState('');
-  const [importFile, setImportFile] = useState<File | null>(null);
-  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
-  const [importingSettings, setImportingSettings] = useState(false);
 
   const loadTemplateList = (options?: { retainSelection?: boolean }) => {
     const retainSelection = options?.retainSelection ?? false;
@@ -206,90 +204,38 @@ export default function AdminTemplates() {
     return true;
   };
 
-  const handleImportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setImportFile(file);
-  };
-
-  const handleExportSettings = async () => {
-    try {
-      setExportingSettings(true);
-      const res = await fetch('/admin/questionnaires/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: exportPassword || null }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || 'failed to export');
-      }
-      const blob = await res.blob();
-      const disposition = res.headers.get('Content-Disposition') ?? '';
-      const match = disposition.match(/filename="?([^";]+)"?/i);
-      const filename = match ? decodeURIComponent(match[1]) : `questionnaire-settings-${Date.now()}.json`;
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      toast({ title: '設定ファイルを出力しました', status: 'success', duration: 3000 });
-    } catch (err) {
-      console.error(err);
-      toast({ title: '設定ファイルの出力に失敗しました', status: 'error', duration: 4000 });
-    } finally {
-      setExportingSettings(false);
-    }
-  };
-
-  const handleImportSettings = async () => {
-    if (!importFile) {
-      toast({ title: 'インポートするファイルを選択してください', status: 'warning', duration: 3000 });
-      return;
-    }
-    const formData = new FormData();
-    formData.append('file', importFile);
-    formData.append('mode', importMode);
-    if (importPassword) {
-      formData.append('password', importPassword);
-    }
-    try {
-      setImportingSettings(true);
-      const res = await fetch('/admin/questionnaires/import', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) {
-        let message = '設定ファイルのインポートに失敗しました';
-        try {
-          const data = await res.json();
-          if (data?.detail) message = data.detail;
-        } catch {
-          const text = await res.text();
-          if (text) message = text;
-        }
-        throw new Error(message);
-      }
-      await loadTemplateList({ retainSelection: true });
-      setImportFile(null);
-      toast({ title: '設定ファイルを取り込みました', status: 'success', duration: 3000 });
-    } catch (err) {
-      console.error(err);
-      toast({
-        title: err instanceof Error ? err.message : '設定ファイルのインポートに失敗しました',
-        status: 'error',
-        duration: 5000,
-      });
-    } finally {
-      setImportingSettings(false);
-    }
-  };
-
   const openImagePreview = (url: string) => {
     setImagePreviewUrl(url);
     imagePreviewModal.onOpen();
+  };
+
+  const handlePreviewPostalLookup = async (itemId: string) => {
+    const current = mergePersonalInfoValue(previewAnswers[itemId]);
+    const postal = current.postal_code;
+    if (!postal || postal.replace(/[^0-9]/g, '').length !== 7) {
+      toast({ status: 'warning', title: '郵便番号を正しく入力してください（7桁）' });
+      return;
+    }
+    setPreviewLookupTarget(itemId);
+    try {
+      const addr = await fetchAddressByPostal(postal);
+      const parts = [addr.region, addr.locality, addr.street, addr.extended]
+        .filter((part) => part && String(part).trim())
+        .join('');
+      if (!parts) {
+        throw new Error('住所情報が取得できませんでした');
+      }
+      setPreviewAnswers((prev) => ({
+        ...prev,
+        [itemId]: { ...mergePersonalInfoValue(prev[itemId]), address: parts },
+      }));
+      toast({ status: 'success', title: '住所を自動入力しました' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '住所検索に失敗しました';
+      toast({ status: 'error', title: '住所の補完に失敗しました', description: message });
+    } finally {
+      setPreviewLookupTarget(null);
+    }
   };
 
   const closeImagePreview = () => {
@@ -1505,6 +1451,7 @@ export default function AdminTemplates() {
                                           <option value="yesno">はい/いいえ</option>
                                           <option value="date">日付</option>
                                           <option value="slider">スライドバー</option>
+                                          <option value="personal_info">患者基本情報セット</option>
                                         </Select>
                                       </FormControl>
                                       <IconButton
@@ -1652,6 +1599,16 @@ export default function AdminTemplates() {
                                           </NumberInput>
                                         </FormControl>
                                       </HStack>
+                                    )}
+                                    {item.type === 'personal_info' && (
+                                      <Box>
+                                        <FormLabel m={0} mb={2}>含まれる入力欄</FormLabel>
+                                        <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
+                                          {personalInfoFields.map((field) => (
+                                            <Text key={field.key}>・{field.label}</Text>
+                                          ))}
+                                        </VStack>
+                                      </Box>
                                     )}
                                     {/* 性別制限（チェックボックス + プッシュボタン） */}
                                     <FormControl alignSelf="flex-start">
@@ -1843,6 +1800,7 @@ export default function AdminTemplates() {
                     <option value="yesno">はい/いいえ</option>
                     <option value="date">日付</option>
                     <option value="slider">スライドバー</option>
+                    <option value="personal_info">患者基本情報セット</option>
                   </Select>
                 </FormControl>
                 {/* 種別別の詳細設定（選択肢やスライダー設定） */}
@@ -1915,6 +1873,16 @@ export default function AdminTemplates() {
                       </NumberInput>
                     </FormControl>
                   </HStack>
+                )}
+                {newItem.type === 'personal_info' && (
+                  <Box>
+                    <FormLabel>含まれる入力欄</FormLabel>
+                    <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
+                      {personalInfoFields.map((field) => (
+                        <Text key={field.key}>・{field.label}</Text>
+                      ))}
+                    </VStack>
+                  </Box>
                 )}
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
@@ -2047,88 +2015,6 @@ export default function AdminTemplates() {
           )}
         </Box>
       )}
-
-      <Card variant="outline">
-        <CardHeader pb={2}>
-          <Heading size="md">設定・データのエクスポート/インポート</Heading>
-          <Text fontSize="sm" color="gray.600">
-            定期的なバックアップや別環境への移行に利用できます。暗号化したい場合は任意のパスワードを指定してください。
-          </Text>
-        </CardHeader>
-        <CardBody pt={0}>
-          <VStack align="stretch" spacing={4}>
-            <Box>
-              <Heading size="sm" mb={1}>
-                設定ファイルの出力
-              </Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
-                テンプレート・プロンプト・画像を含む設定一式をダウンロードします。
-              </Text>
-              <HStack align="flex-end" spacing={3} wrap="wrap">
-                <FormControl maxW="280px">
-                  <FormLabel fontSize="sm">エクスポート用パスワード（任意）</FormLabel>
-                  <Input
-                    type="password"
-                    value={exportPassword}
-                    onChange={(e) => setExportPassword(e.target.value)}
-                    placeholder="未入力で平文出力"
-                  />
-                  <FormHelperText fontSize="xs">未入力の場合は暗号化せずに保存します。</FormHelperText>
-                </FormControl>
-                <Button onClick={handleExportSettings} isLoading={exportingSettings} variant="outline">
-                  ダウンロード
-                </Button>
-              </HStack>
-            </Box>
-            <Divider />
-            <Box>
-              <Heading size="sm" mb={1}>
-                設定ファイルのインポート
-              </Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
-                既存の設定に上書きするか、全て入れ替えるかを選択できます。
-              </Text>
-              <VStack align="stretch" spacing={3}>
-                <FormControl>
-                  <FormLabel fontSize="sm">インポートファイル</FormLabel>
-                  <Input type="file" accept=".json" onChange={handleImportFileChange} />
-                </FormControl>
-                <FormControl>
-                  <FormLabel fontSize="sm">ファイルのパスワード（暗号化時）</FormLabel>
-                  <Input
-                    type="password"
-                    value={importPassword}
-                    onChange={(e) => setImportPassword(e.target.value)}
-                    placeholder="暗号化済みの場合のみ入力"
-                  />
-                </FormControl>
-                <FormControl maxW="260px">
-                  <FormLabel fontSize="sm">反映モード</FormLabel>
-                  <Select
-                    value={importMode}
-                    onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
-                  >
-                    <option value="merge">既存に上書き</option>
-                    <option value="replace">既存を削除して入れ替え</option>
-                  </Select>
-                  <FormHelperText fontSize="xs">
-                    入れ替えを選ぶと現在のテンプレートと画像が全て削除されます。
-                  </FormHelperText>
-                </FormControl>
-                <Button
-                  onClick={handleImportSettings}
-                  colorScheme="blue"
-                  isLoading={importingSettings}
-                  isDisabled={!importFile}
-                  alignSelf="flex-start"
-                >
-                  インポートを実行
-                </Button>
-              </VStack>
-            </Box>
-          </VStack>
-        </CardBody>
-      </Card>
 
       <Modal
         isOpen={imagePreviewModal.isOpen}
@@ -2285,6 +2171,61 @@ export default function AdminTemplates() {
                               value={previewAnswers[item.id] || ''}
                               onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
                             />
+                          ) : item.type === 'personal_info' ? (
+                            (() => {
+                              const current = mergePersonalInfoValue(previewAnswers[item.id]);
+                              const lookupLoading = previewLookupTarget === item.id;
+                              const postalDigits = current.postal_code.replace(/[^0-9]/g, '');
+                              return (
+                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                                  {personalInfoFields.map((field) => {
+                                    const onChange = (e: ChangeEvent<HTMLInputElement>) => {
+                                      const next = { ...current, [field.key]: e.target.value };
+                                      setPreviewAnswers({ ...previewAnswers, [item.id]: next });
+                                    };
+                                    const input = field.key === 'postal_code'
+                                      ? (
+                                        <InputGroup>
+                                          <Input
+                                            placeholder={field.placeholder}
+                                            value={current[field.key]}
+                                            onChange={onChange}
+                                            inputMode="numeric"
+                                            autoComplete={field.autoComplete}
+                                          />
+                                          <InputRightElement width="auto" pr={1}>
+                                            <Button
+                                              size="sm"
+                                              leftIcon={<Icon as={SearchIcon} />}
+                                              onClick={() => handlePreviewPostalLookup(item.id)}
+                                              isLoading={lookupLoading}
+                                              isDisabled={lookupLoading || postalDigits.length !== 7}
+                                              colorScheme="primary"
+                                            >
+                                              住所検索
+                                            </Button>
+                                          </InputRightElement>
+                                        </InputGroup>
+                                      )
+                                      : (
+                                        <Input
+                                          placeholder={field.placeholder}
+                                          value={current[field.key]}
+                                          onChange={onChange}
+                                          autoComplete={field.autoComplete}
+                                          inputMode={field.inputMode}
+                                        />
+                                      );
+                                    return (
+                                      <FormControl key={field.key}>
+                                        <FormLabel fontSize="sm">{field.label}</FormLabel>
+                                        {input}
+                                      </FormControl>
+                                    );
+                                  })}
+                                </SimpleGrid>
+                              );
+                            })()
                           ) : (
                             <Input
                               onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
@@ -2397,6 +2338,7 @@ export default function AdminTemplates() {
                         <option value="yesno">はい/いいえ</option>
                         <option value="date">日付</option>
                         <option value="slider">スライドバー</option>
+                        <option value="personal_info">患者基本情報セット</option>
                       </Select>
                     </FormControl>
                     {/* type-specific UI */}
@@ -2433,6 +2375,16 @@ export default function AdminTemplates() {
                           </NumberInput>
                         </FormControl>
                       </HStack>
+                    )}
+                    {fi.type === 'personal_info' && (
+                      <Box mt={2}>
+                        <FormLabel m={0} mb={2}>含まれる入力欄</FormLabel>
+                        <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
+                          {personalInfoFields.map((field) => (
+                            <Text key={field.key}>・{field.label}</Text>
+                          ))}
+                        </VStack>
+                      </Box>
                     )}
                     {fi.type === 'multi' && (
                       <Box mt={2}>

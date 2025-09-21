@@ -32,9 +32,7 @@ def test_default_template_contains_items() -> None:
     ids = {item["id"] for item in res.json()["items"]}
     # 氏名(name)・生年月日(dob)はセッション作成時に別途入力するためテンプレートから除外
     expected = {
-        "postal_code",
-        "address",
-        "phone",
+        "patient_contact",
         "chief_complaint",
         "symptom_location",
         "onset",
@@ -77,6 +75,26 @@ def test_llm_settings_get_and_update() -> None:
     assert updated["enabled"] is True
     chat_res = client.post("/llm/chat", json={"message": "hi"})
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
+
+    # OpenAI 互換エンドポイントに切り替え、手入力モデル名が保存されるか確認
+    openai_payload = {
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+        "temperature": 0.3,
+        "system_prompt": "openai",
+        "enabled": True,
+        "base_url": "https://api.openai.com",
+        "api_key": "sk-test",
+    }
+    res = client.put("/llm/settings", json=openai_payload)
+    assert res.status_code == 200
+    res = client.get("/llm/settings")
+    openai_settings = res.json()
+    assert openai_settings["provider"] == "openai"
+    assert openai_settings["model"] == "gpt-4.1-mini"
+    assert openai_settings["base_url"] == "https://api.openai.com"
+    openai_chat = client.post("/llm/chat", json={"message": "hello"})
+    assert openai_chat.json()["reply"].startswith("LLM応答[openai:gpt-4.1-mini")
 
 
 def test_llm_settings_test_endpoint() -> None:

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VStack, Heading, Text, Box, Button, HStack } from '@chakra-ui/react';
 import { ArrowBackIcon } from '@chakra-ui/icons';
+import { formatPersonalInfoLines } from '../utils/personalInfo';
 
 interface SessionDetail {
   id: string;
@@ -50,7 +51,18 @@ export default function AdminSessionDetail() {
 
   if (!detail) return null; // ローディング表示を追加しても良い
 
-  const formatAnswer = (answer: any) => {
+  const formatAnswer = (itemId: string, answer: any) => {
+    const itemMeta = items.find((it) => it.id === itemId);
+    if (itemMeta?.type === 'personal_info') {
+      const lines = formatPersonalInfoLines(answer);
+      return (
+        <VStack align="stretch" spacing={1}>
+          {lines.map((line) => (
+            <Text key={line}>{line}</Text>
+          ))}
+        </VStack>
+      );
+    }
     if (answer === null || answer === undefined || answer === '') {
       return <Text color="gray.500">未回答</Text>;
     }
@@ -140,7 +152,7 @@ export default function AdminSessionDetail() {
             <Text fontWeight="bold" mb={1}>
               {entry.label}
             </Text>
-            {formatAnswer(entry.answer)}
+            {formatAnswer(entry.id, entry.answer)}
           </Box>
         ))}
       </VStack>
@@ -155,7 +167,7 @@ export default function AdminSessionDetail() {
                 <Text fontWeight="bold" mb={1}>
                   {questionTexts[qid] ?? qtext}
                 </Text>
-                {formatAnswer(detail.answers[qid])}
+                {formatAnswer(qid, detail.answers[qid])}
               </Box>
             ))}
         </VStack>

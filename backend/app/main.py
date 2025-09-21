@@ -79,6 +79,7 @@ from .validator import Validator
 from .session_fsm import SessionFSM
 from .structured_context import StructuredContextManager
 from .pdf_renderer import PDFLayoutMode, render_session_pdf
+from .personal_info import format_multiline as format_personal_info_multiline
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -284,25 +285,11 @@ def make_default_initial_items() -> list[dict[str, Any]]:
 
     return [
         {
-            "id": "postal_code",
-            "label": "郵便番号（例：123-4567）",
-            "type": "string",
+            "id": "patient_contact",
+            "label": "患者さまの基本情報を入力してください",
+            "type": "personal_info",
             "required": True,
-            "description": "ハイフンあり・なしどちらでも構いません。",
-        },
-        {
-            "id": "address",
-            "label": "住所（市区町村・番地・建物名まで）",
-            "type": "string",
-            "required": True,
-            "description": "連絡に必要なため、正確にご記入ください。",
-        },
-        {
-            "id": "phone",
-            "label": "日中に連絡のつく電話番号",
-            "type": "string",
-            "required": True,
-            "description": "ハイフンはあってもなくても構いません。",
+            "description": "患者名・よみがな・郵便番号・住所・電話番号をまとめてご入力ください。",
         },
         {
             "id": "chief_complaint",
@@ -1454,7 +1441,13 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
         try:
             item_id = str(item.id)
             label = question_texts.get(item_id) or item.label
-            rows.append((label, fmt_answer(answers.get(item_id))))
+            answer_value = answers.get(item_id)
+            item_type = getattr(item, "type", None)
+            if item_type == "personal_info":
+                display_answer = format_personal_info_multiline(answer_value)
+            else:
+                display_answer = fmt_answer(answer_value)
+            rows.append((label, display_answer))
             appended_ids.add(item_id)
         except Exception:
             continue

@@ -37,6 +37,17 @@ export default function AdminLlm() {
     if (!Number.isFinite(n)) return 0.2;
     return Math.min(2, Math.max(0, n));
   };
+  const defaultBaseUrl = (provider: string): string => {
+    switch (provider) {
+      case 'ollama':
+        return 'http://localhost:11434';
+      case 'openai':
+        return 'https://api.openai.com';
+      case 'lm_studio':
+      default:
+        return 'http://localhost:1234';
+    }
+  };
   const [settings, setSettings] = useState<Settings>({
     provider: 'ollama',
     model: '',
@@ -44,7 +55,7 @@ export default function AdminLlm() {
     system_prompt: '',
     enabled: false, // 既定は「LLMを使用しない」
     // 初期表示はバックエンド既定（Ollama: 11434）に合わせる
-    base_url: 'http://localhost:11434',
+    base_url: defaultBaseUrl('ollama'),
     api_key: '',
   });
   const [message, setMessage] = useState<string>('');
@@ -123,13 +134,17 @@ export default function AdminLlm() {
         }),
       });
       if (res.ok) {
-        const data = await res.json();
-        setModels(data);
-        if (data.length > 0) {
-          setMessage(`${data.length}件のモデルを読み込みました`);
-          if (settings.model && !data.includes(settings.model)) {
-            nextModel = data[0];
-            setSettings({ ...settings, model: nextModel });
+        const data: string[] = await res.json();
+        const unique = Array.from(new Set((data || []).filter((m) => typeof m === 'string' && m.trim())));
+        const suggestions = settings.model && !unique.includes(settings.model)
+          ? [settings.model, ...unique]
+          : unique;
+        setModels(suggestions);
+        if (unique.length > 0) {
+          setMessage(`${unique.length}件のモデルを読み込みました`);
+          if (!settings.model) {
+            nextModel = unique[0];
+            setSettings((prev) => ({ ...prev, model: nextModel }));
           }
         } else {
           setMessage('モデルが見つかりません');
@@ -186,27 +201,28 @@ export default function AdminLlm() {
             value={settings.provider}
             onChange={(e) => {
               const next = e.target.value;
-              const prev = settings.provider;
-              const defaultFor = (p: string) => (p === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234');
-              // 既存が空、または前プロバイダの既定であれば、プロバイダ変更時に既定URLへ更新
-              const shouldSetDefault = !settings.base_url || settings.base_url === defaultFor(prev);
-              setSettings({
-                ...settings,
-                provider: next,
-                model: '',
-                base_url: shouldSetDefault ? defaultFor(next) : settings.base_url,
+              setSettings((prev) => {
+                const shouldSetDefault = !prev.base_url || prev.base_url === defaultBaseUrl(prev.provider);
+                return {
+                  ...prev,
+                  provider: next,
+                  model: '',
+                  base_url: shouldSetDefault ? defaultBaseUrl(next) : prev.base_url,
+                };
               });
+              setModels([]);
             }}
           >
             <option value="ollama">Ollama</option>
             <option value="lm_studio">LM Studio</option>
+            <option value="openai">OpenAI (互換API含む)</option>
           </Select>
         </FormControl>
       )}
       <FormControl isDisabled={!settings.enabled}>
         <FormLabel>ベースURL（任意・リモート接続時）</FormLabel>
         <Input
-          placeholder={`例: ${settings.provider === 'ollama' ? 'http://localhost:11434' : 'http://localhost:1234'}`}
+          placeholder={`例: ${defaultBaseUrl(settings.provider)}`}
           value={settings.base_url ?? ''}
           onChange={(e) => setSettings({ ...settings, base_url: e.target.value })}
         />
@@ -229,17 +245,17 @@ export default function AdminLlm() {
 
       <FormControl isDisabled={!settings.enabled} isInvalid={settings.enabled && !canSave}>
         <FormLabel>モデル名</FormLabel>
-        <Select
+        <Input
+          list="llm-model-suggestions"
           value={settings.model}
           onChange={(e) => setSettings({ ...settings, model: e.target.value })}
-          placeholder={models.length === 0 ? '先にモデル一覧を取得してください' : 'モデルを選択'}
-        >
+          placeholder={models.length === 0 ? 'モデル名を直接入力するか、一覧を取得してください' : 'モデル名を入力または選択'}
+        />
+        <datalist id="llm-model-suggestions">
           {models.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
+            <option key={m} value={m} />
           ))}
-        </Select>
+        </datalist>
         {settings.enabled && !canSave && (
           <Text color="red.500" fontSize="sm" mt={1}>LLM有効時はモデル名が必須です</Text>
         )}

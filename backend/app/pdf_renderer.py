@@ -28,6 +28,14 @@ from reportlab.platypus import (
 )
 from xml.sax.saxutils import escape
 
+from .personal_info import (
+    FIELD_DEFS as PERSONAL_INFO_FIELDS,
+    coerce_to_strings as personal_info_coerce,
+    has_any_value as personal_info_has_any,
+    EMPTY_PLACEHOLDER as PERSONAL_INFO_EMPTY,
+    NORMALIZED_EMPTY as PERSONAL_INFO_NORMALIZED,
+)
+
 if TYPE_CHECKING:  # pragma: no cover - 型チェック専用
     from .main import QuestionnaireItem
 
@@ -125,6 +133,10 @@ def _has_answer(value: Any) -> bool:
         return bool(stripped) or value in {"0", "0.0"}
     if isinstance(value, (int, float)):
         return True
+    if isinstance(value, dict):
+        if personal_info_coerce(value) is not None:
+            return personal_info_has_any(value)
+        return bool(value)
     if isinstance(value, list):
         filtered = [v for v in value if isinstance(v, (str, int, float)) and str(v).strip()]
         return bool(filtered)
@@ -259,6 +271,8 @@ def _make_value_flowable(
         return _render_number_answer(answer, styles, value_width)
     if item_type == "date":
         return _render_date_answer(answer, styles, value_width)
+    if item_type == "personal_info":
+        return _render_personal_info_answer(answer, styles, value_width)
     return _render_text_answer(answer, styles, value_width)
 
 
@@ -377,6 +391,48 @@ def _render_number_answer(answer: Any, styles: dict[str, ParagraphStyle], value_
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                 ("TOPPADDING", (0, 0), (-1, -1), 4),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
+def _render_personal_info_answer(
+    answer: Any,
+    styles: dict[str, ParagraphStyle],
+    value_width: float,
+) -> Flowable:
+    data = personal_info_coerce(answer)
+    if data is None:
+        return _render_text_answer(answer, styles, value_width)
+    rows: list[list[Paragraph]] = []
+    for key, label in PERSONAL_INFO_FIELDS:
+        text = data[key].strip()
+        display_text = text if text and text != PERSONAL_INFO_NORMALIZED else PERSONAL_INFO_EMPTY
+        display = escape(display_text)
+        rows.append(
+            [
+                Paragraph(f"<b>{escape(label)}</b>", styles["base"]),
+                Paragraph(display.replace("\n", "<br/>"), styles["value"]),
+            ]
+        )
+    label_col = min(42 * mm, value_width * 0.4)
+    table = Table(
+        rows,
+        colWidths=[label_col, max(value_width - label_col, value_width * 0.5)],
+        hAlign="LEFT",
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.3, colors.grey),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.grey),
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f0f0")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ]
         )
     )

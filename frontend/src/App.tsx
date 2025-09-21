@@ -22,6 +22,7 @@ import AdminAppearance from './pages/AdminAppearance';
 import AdminManual from './pages/AdminManual';
 import AdminLicense from './pages/AdminLicense';
 import AdminLicenseDeps from './pages/AdminLicenseDeps';
+import AdminDataTransfer from './pages/AdminDataTransfer';
 import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
@@ -192,6 +193,7 @@ export default function App() {
           <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
           <Route path="/admin" element={<Navigate to="/admin/templates" replace />} />
           <Route path="/admin/appearance" element={<AdminLayout><AdminAppearance /></AdminLayout>} />
+          <Route path="/admin/data-transfer" element={<AdminLayout><AdminDataTransfer /></AdminLayout>} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
           <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
