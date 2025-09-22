@@ -244,7 +244,6 @@ class LLMGateway:
         max_questions: int,
         prompt: str | None = None,
         lock_key: str | None = None,
-        retry: int = 1,
     ) -> list[str]:
         """ユーザー回答全体を基に追加質問を生成する。"""
         s = self.settings
@@ -335,7 +334,7 @@ class LLMGateway:
                         if isinstance(arr, list):
                             return [str(x) for x in arr][:max_questions]
                     raise RuntimeError("invalid structured response from lm studio")
-            # ロック内で実行し、失敗時は1回だけリトライ
+            # ロック内で実行し、失敗時は例外を呼び出し側へ返す
             try:
                 if lock:
                     with lock:
@@ -343,16 +342,7 @@ class LLMGateway:
                 return _attempt()
             except Exception as e:  # noqa: BLE001
                 logging.getLogger("llm").warning("generate_followups attempt failed: %s", e)
-                if retry > 0:
-                    time.sleep(0.4)
-                    try:
-                        if lock:
-                            with lock:
-                                return _attempt()
-                        return _attempt()
-                    except Exception as e2:  # noqa: BLE001
-                        logging.getLogger("llm").exception("generate_followups retry failed: %s", e2)
-                # リトライも失敗した場合は呼び出し側でスキップさせるため送出
+                # 呼び出し側でフォールバック処理を行うため例外を再送出
                 raise
         # スタブ実装：固定的な質問を返す
         return [f"追加質問{idx + 1}" for idx in range(max_questions)]

@@ -27,6 +27,7 @@ import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
+import { useYubinbangoAutoLoad } from './utils/yubinbango';
 
 
 // Layouts
@@ -40,6 +41,8 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoading, isInitialPassword, showTotpSetup, isAuthenticated, logout } = useAuth();
+  // Preload address lookup script early to avoid user-facing delays
+  useYubinbangoAutoLoad();
 
   useEffect(() => {
     flushQueue();

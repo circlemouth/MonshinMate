@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 import pyotp
 import qrcode
 from jose import JWTError, jwt
+import httpx
 
 from .llm_gateway import (
     LLMGateway,
@@ -289,7 +290,6 @@ def make_default_initial_items() -> list[dict[str, Any]]:
             "label": "患者さまの基本情報を入力してください",
             "type": "personal_info",
             "required": True,
-            "description": "患者名・よみがな・郵便番号・住所・電話番号をまとめてご入力ください。",
         },
         {
             "id": "chief_complaint",
@@ -802,6 +802,43 @@ def root() -> dict:
         dict: 挨拶文を含む辞書。
     """
     return {"message": "ようこそ"}
+
+
+# --- Postal code lookup (server-side proxy to ZipCloud) ---
+class AddressLookupResponse(BaseModel):
+    region: str = ""
+    locality: str = ""
+    street: str = ""
+    extended: str = ""
+
+
+@app.get("/address/lookup", response_model=AddressLookupResponse)
+async def address_lookup(postal: str = Query(..., description="郵便番号（7桁、ハイフン可）")):
+    normalized = re.sub(r"[^0-9]", "", postal)[:7]
+    if len(normalized) != 7:
+        raise HTTPException(status_code=400, detail="invalid_postal")
+    url = "https://zipcloud.ibsnet.co.jp/api/search"
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(url, params={"zipcode": normalized})
+    except Exception:
+        raise HTTPException(status_code=502, detail="lookup_failed")
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail="upstream_error")
+    try:
+        data = r.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="invalid_upstream_json")
+    if data.get("status") != 200 or not data.get("results"):
+        msg = data.get("message") or "not_found"
+        raise HTTPException(status_code=404, detail=msg)
+    res = data["results"][0]
+    return AddressLookupResponse(
+        region=res.get("address1", ""),
+        locality=res.get("address2", ""),
+        street=res.get("address3", ""),
+        extended="",
+    )
 
 
 class WhenCondition(BaseModel):

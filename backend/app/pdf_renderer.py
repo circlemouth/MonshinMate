@@ -310,25 +310,9 @@ def _render_multi_answer(
         for opt in options:
             is_selected = opt in selected_options
             mark = "☑" if is_selected else "☐"
-            cell_flowable: Any
-            if is_selected:
-                inner_width = max(value_width / 2 - 4, 20 * mm)
-                para = Paragraph(f"{mark} {escape(opt)}", styles["value"])
-                highlight = Table([[para]], colWidths=[inner_width])
-                highlight.setStyle(
-                    TableStyle(
-                        [
-                            ("BOX", (0, 0), (-1, -1), 1.0, colors.black),
-                            ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                            ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-                            ("TOPPADDING", (0, 0), (-1, -1), 2),
-                            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                        ]
-                    )
-                )
-                cell_flowable = highlight
-            else:
-                cell_flowable = Paragraph(f"{mark} {escape(opt)}", styles["value"])
+            # 選択肢のボックス囲みを廃止し、選択された項目はボールド表示にする
+            cell_style = styles["bold"] if is_selected else styles["value"]
+            cell_flowable = Paragraph(f"{mark} {escape(opt)}", cell_style)
             row_cells.append((cell_flowable, is_selected))
             if len(row_cells) == 2:
                 table_rows.append(row_cells)
@@ -625,14 +609,18 @@ def _render_structured_pdf(
     )
     story.append(header)
     story.append(Spacer(0, 4 * mm))
-    story.append(Paragraph("問診票", styles["title"]))
+    # 表題に受診種別を併記（例: 問診票（再診））
+    title_label = "問診票"
+    if vt_label:
+        title_label = f"{title_label}（{vt_label}）"
+    story.append(Paragraph(escape(title_label), styles["title"]))
     story.append(Spacer(0, 5 * mm))
 
+    # 受診種別欄は削除
     patient_rows = [
         ("患者氏名", session.get("patient_name") or "未登録"),
         ("生年月日", _format_date(session.get("dob")) or "未登録"),
         ("性別", _format_gender(session.get("gender"))),
-        ("受診種別", vt_label),
     ]
     patient_table = Table(
         [[Paragraph(f"<b>{escape(label)}</b>", styles["base"]), Paragraph(escape(str(value)), styles["value"])] for label, value in patient_rows],
@@ -726,14 +714,18 @@ def _render_legacy_pdf(
     )
     story.append(header)
     story.append(Spacer(0, 4 * mm))
-    story.append(Paragraph("問診結果", styles["title"]))
+    # 表題に受診種別を併記（例: 問診結果（再診））
+    legacy_title = "問診結果"
+    if vt_label:
+        legacy_title = f"{legacy_title}（{vt_label}）"
+    story.append(Paragraph(escape(legacy_title), styles["title"]))
     story.append(Spacer(0, 6 * mm))
     story.append(Paragraph("患者情報", styles["section"]))
+    # 受診種別の行は削除し、タイトルへ併記
     info_lines = [
         f"患者名: {escape(session.get('patient_name') or '未登録')}",
         f"生年月日: {escape(_format_date(session.get('dob')) or '未登録')}",
         f"性別: {escape(_format_gender(session.get('gender')))}",
-        f"受診種別: {escape(vt_label)}",
     ]
     for line in info_lines:
         story.append(Paragraph(line, styles["value"]))

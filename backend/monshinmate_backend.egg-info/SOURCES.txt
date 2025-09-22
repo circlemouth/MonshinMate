@@ -14,6 +14,7 @@ app/db.py
 app/llm_gateway.py
 app/main.py
 app/pdf_renderer.py
+app/personal_info.py
 app/session_fsm.py
 app/structured_context.py
 app/validator.py

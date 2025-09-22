@@ -4,6 +4,40 @@
 
 Set-StrictMode -Version Latest
 
+# Clear read-only attributes under frontend/node_modules when OneDrive locks files
+function Clear-ReadOnlyAttributes {
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$Path
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $readOnlyFlag = [System.IO.FileAttributes]::ReadOnly
+
+    try {
+        $rootItem = Get-Item -LiteralPath $Path -ErrorAction Stop
+        if ($rootItem.Attributes -band $readOnlyFlag) {
+            $rootItem.Attributes = $rootItem.Attributes -band (-bnot $readOnlyFlag)
+        }
+    } catch {
+        Write-Verbose "clear-readonly(root): $_"
+    }
+
+    Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            if ($_.Attributes -band $readOnlyFlag) {
+                $_.Attributes = $_.Attributes -band (-bnot $readOnlyFlag)
+            }
+        } catch {
+            Write-Verbose "clear-readonly(child): $_"
+        }
+    }
+}
+
+
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $VenvDir = Join-Path $RootDir 'venv'
 
@@ -77,6 +111,12 @@ try {
 
     Write-Host "[start] frontend: http://localhost:5173"
     Push-Location (Join-Path $RootDir 'frontend')
+    $nodeModulesPath = 'node_modules'
+    if (Test-Path -LiteralPath $nodeModulesPath) {
+        Write-Host "[setup] Clearing read-only flags in frontend/node_modules."
+        Clear-ReadOnlyAttributes -Path $nodeModulesPath
+    }
+
     if (Get-Command pnpm -ErrorAction SilentlyContinue) {
         Write-Host "[setup] Installing frontend dependencies (pnpm)."
         pnpm install

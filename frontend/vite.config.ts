@@ -51,6 +51,7 @@ export default defineConfig({
       '/healthz': 'http://localhost:8001',
       '/readyz': 'http://localhost:8001',
       '/metrics': 'http://localhost:8001',
+      '/address': 'http://localhost:8001',
       '/admin/auth': 'http://localhost:8001',
       '/admin/password': 'http://localhost:8001',
       '/admin/login': 'http://localhost:8001',
