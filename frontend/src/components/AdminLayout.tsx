@@ -36,6 +36,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const navItems = useMemo(
     () => [
+      { label: 'メイン', to: '/admin/main' },
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
@@ -71,7 +72,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               管理メニュー
             </Text>
             {navItems.map((item) => {
-              const active = current === item.to;
+              const active = current === item.to || current.startsWith(`${item.to}/`);
               return (
                 <Button
                   key={item.to}

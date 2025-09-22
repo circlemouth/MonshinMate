@@ -13,6 +13,7 @@ docker compose up -d
 - CouchDB 管理画面: http://localhost:5984/_utils
   - `docker-compose.yml` では CouchDB の認証情報を `COUCHDB_USER` と `COUCHDB_PASSWORD` で指定する。
   - `backend/.env` には `COUCHDB_URL=http://couchdb:5984/` が既定で含まれており、そのまま compose 内の CouchDB に接続できる。CouchDB を使わない場合はこの行をコメントアウトするか削除する。`backend/.env copy.example` も同内容のテンプレートであり、必要に応じてコピーして使用する。
+  - 各サービスに `restart: unless-stopped` を設定しているため、ホスト側で Docker が再起動した場合も自動的に立ち上がります。手動で停止したい場合は `docker compose stop` もしくは `docker compose down` を実行してください。
 - `_users` データベースが存在しない場合、バックエンド起動時に自動作成されるため、
   初回起動時の認証キャッシュエラーが解消される。
 
