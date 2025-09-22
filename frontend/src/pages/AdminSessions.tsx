@@ -22,6 +22,7 @@ import {
   FormLabel,
   Input,
   Button,
+  IconButton,
   HStack,
   Tooltip,
   Checkbox,
@@ -40,7 +41,7 @@ import {
   AlertDialogBody,
   AlertDialogFooter,
 } from '@chakra-ui/react';
-import { FiFile, FiFileText, FiTable } from 'react-icons/fi';
+import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi';
 
 interface SessionSummary {
   id: string;
@@ -435,7 +436,6 @@ export default function AdminSessions() {
             <Th>生年月日</Th>
             <Th>受診種別</Th>
             <Th>問診日</Th>
-            <Th>出力</Th>
             <Th>操作</Th>
           </Tr>
         </Thead>
@@ -453,27 +453,44 @@ export default function AdminSessions() {
               <Td>{visitTypeLabel(s.visit_type)}</Td>
               <Td>{(s.finalized_at ? s.finalized_at.split('T')[0] : '-')}</Td>
               <Td onClick={(e) => e.stopPropagation()}>
-                <Menu isLazy>
-                  <MenuButton as={Button} size="sm" variant="outline" leftIcon={<FiFile />}>出力</MenuButton>
-                  <MenuList>
-                    <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
-                    <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
-                    <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
-                  </MenuList>
-                </Menu>
-              </Td>
-              <Td onClick={(e) => e.stopPropagation()}>
-                <HStack spacing={2}>
-                  <Button size="sm" colorScheme="red" variant="outline" onClick={() => setConfirmState({ type: 'row', id: s.id })}>
-                    削除
-                  </Button>
+                <HStack spacing={3}>
+                  <Menu isLazy>
+                    <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
+                      <MenuButton
+                        as={IconButton}
+                        size="md"
+                        variant="outline"
+                        icon={<FiDownload />}
+                        aria-label="問診結果を出力"
+                        minW="44px"
+                        minH="44px"
+                      />
+                    </Tooltip>
+                    <MenuList>
+                      <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
+                      <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
+                      <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
+                    </MenuList>
+                  </Menu>
+                  <Tooltip label="削除" placement="bottom" hasArrow openDelay={150}>
+                    <IconButton
+                      size="md"
+                      variant="outline"
+                      colorScheme="red"
+                      icon={<FiTrash />}
+                      aria-label="問診結果を削除"
+                      minW="44px"
+                      minH="44px"
+                      onClick={() => setConfirmState({ type: 'row', id: s.id })}
+                    />
+                  </Tooltip>
                 </HStack>
               </Td>
             </Tr>
           ))}
           {sessions.length === 0 && (
             <Tr>
-              <Td colSpan={7}>
+              <Td colSpan={6}>
                 <Text fontSize="sm" color="gray.500" textAlign="center">
                   条件に一致する問診データがありません。
                 </Text>

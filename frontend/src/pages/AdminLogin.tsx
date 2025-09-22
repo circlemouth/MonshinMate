@@ -51,7 +51,7 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
       setFailedAttempts(0);
       await checkAuthStatus(true); // AuthContextの状態を更新
       onSuccess?.();
-      navigate('/admin/templates');
+      navigate('/admin/main', { replace: true });
 
     } catch (e: any) {
       setError(e.message);
@@ -81,7 +81,7 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
       sessionStorage.setItem('adminLoggedIn', '1');
       await checkAuthStatus(true); // AuthContextの状態を更新
       onSuccess?.();
-      navigate('/admin/templates');
+      navigate('/admin/main', { replace: true });
     } catch (e: any) {
       setError(e.message);
     } finally {

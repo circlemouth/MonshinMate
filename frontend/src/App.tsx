@@ -33,9 +33,7 @@ import AdminMain from './pages/AdminMain';
 
 // Layouts
 import AdminLayout from './components/AdminLayout';
-import LlmStatusBadge from './components/LlmStatusBadge';
 import FontSizeControl from './components/FontSizeControl';
-import DbStatusBadge from './components/DbStatusBadge';
 import { refreshLlmStatus } from './utils/llmStatus';
 
 export default function App() {
@@ -182,28 +180,20 @@ export default function App() {
           <Heading size="lg">{isAdminPage ? '管理画面' : displayName}</Heading>
           <Spacer />
           {isAdminPage ? (
-            <>
-              <DbStatusBadge />
-              <LlmStatusBadge />
-              <Button
-                as={RouterLink}
-                to="/"
-                onClick={logout}
-                colorScheme="primary"
-                variant="outline"
-                size="sm"
-              >
-                問診画面に戻る
-              </Button>
-            </>
+            <Button
+              as={RouterLink}
+              to="/"
+              onClick={logout}
+              colorScheme="primary"
+              variant="outline"
+              size="sm"
+            >
+              問診画面に戻る
+            </Button>
           ) : (
-            <>
-              <DbStatusBadge />
-              <LlmStatusBadge />
-              <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
-                管理画面
-              </Button>
-            </>
+            <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
+              管理画面
+            </Button>
           )}
         </Flex>
       )}
