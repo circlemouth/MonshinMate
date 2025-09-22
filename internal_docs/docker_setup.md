@@ -8,7 +8,7 @@
 docker compose build
 docker compose up -d
 ```
-- フロントエンド: http://localhost:5173
+- フロントエンド: http://localhost:5173（環境変数 FRONTEND_HTTP_PORT で変更可能）
 - バックエンド: http://localhost:8001
 - CouchDB 管理画面: http://localhost:5984/_utils
   - `docker-compose.yml` では CouchDB の認証情報を `COUCHDB_USER` と `COUCHDB_PASSWORD` で指定する。

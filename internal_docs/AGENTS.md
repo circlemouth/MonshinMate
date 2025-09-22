@@ -56,7 +56,8 @@ npm run dev
 ```bash
 docker compose up -d
 ```
-- `backend` はポート 8001、`frontend` は 5173、`couchdb` は 5984 を公開する。
+- `backend` はポート 8001、`frontend` は `FRONTEND_HTTP_PORT`（デフォルト 5173）、`couchdb` は 5984 を公開する。
+  - Docker Compose で公開されるフロントエンドのホスト側ポートは環境変数 `FRONTEND_HTTP_PORT` で指定できる（未設定時は 5173）。
 - 管理画面（Fauxton）は `http://localhost:5984/_utils`。既定ユーザーは compose で `admin/admin` をセット。
 
 ## 6. 作業プロセス

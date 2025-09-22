@@ -75,6 +75,8 @@ from .db import (
     import_questionnaire_settings,
     export_sessions_data,
     import_sessions_data,
+    delete_session as db_delete_session,
+    delete_sessions as db_delete_sessions,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -104,6 +106,15 @@ app.mount(
     "/questionnaire-item-images/files",
     StaticFiles(directory=str(IMAGE_DIR)),
     name="questionnaire-item-images",
+)
+
+# System logo/icon storage
+LOGO_DIR = Path(__file__).resolve().parent / "system_logo"
+LOGO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount(
+    "/system-logo/files",
+    StaticFiles(directory=str(LOGO_DIR)),
+    name="system-logo",
 )
 
 logger = logging.getLogger("api")
@@ -804,41 +815,7 @@ def root() -> dict:
     return {"message": "ようこそ"}
 
 
-# --- Postal code lookup (server-side proxy to ZipCloud) ---
-class AddressLookupResponse(BaseModel):
-    region: str = ""
-    locality: str = ""
-    street: str = ""
-    extended: str = ""
-
-
-@app.get("/address/lookup", response_model=AddressLookupResponse)
-async def address_lookup(postal: str = Query(..., description="郵便番号（7桁、ハイフン可）")):
-    normalized = re.sub(r"[^0-9]", "", postal)[:7]
-    if len(normalized) != 7:
-        raise HTTPException(status_code=400, detail="invalid_postal")
-    url = "https://zipcloud.ibsnet.co.jp/api/search"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(url, params={"zipcode": normalized})
-    except Exception:
-        raise HTTPException(status_code=502, detail="lookup_failed")
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail="upstream_error")
-    try:
-        data = r.json()
-    except Exception:
-        raise HTTPException(status_code=502, detail="invalid_upstream_json")
-    if data.get("status") != 200 or not data.get("results"):
-        msg = data.get("message") or "not_found"
-        raise HTTPException(status_code=404, detail=msg)
-    res = data["results"][0]
-    return AddressLookupResponse(
-        region=res.get("address1", ""),
-        locality=res.get("address2", ""),
-        street=res.get("address3", ""),
-        extended="",
-    )
+# removed: Postal code lookup (ZipCloud proxy)
 
 
 class WhenCondition(BaseModel):
@@ -1596,6 +1573,18 @@ class PDFLayoutSettings(BaseModel):
 
     mode: PDFLayoutMode
 
+
+class LogoCrop(BaseModel):
+    x: float
+    y: float
+    w: float
+    h: float
+
+
+class LogoSettings(BaseModel):
+    url: str | None = None
+    crop: LogoCrop | None = None
+
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
     """システムの表示名（ヘッダーに出す名称）を返す。未設定時は既定値。"""
@@ -1697,6 +1686,63 @@ def set_theme_color(payload: ThemeColorSettings) -> ThemeColorSettings:
     except Exception:
         logger.exception("set_theme_color_failed")
         return payload
+
+
+@app.get("/system/logo", response_model=LogoSettings)
+def get_system_logo() -> LogoSettings:
+    """ロゴ/アイコン設定を返す。"""
+    try:
+        stored = load_app_settings() or {}
+        url = stored.get("logo_url")
+        crop_raw = stored.get("logo_crop")
+        crop = None
+        if isinstance(crop_raw, dict):
+            try:
+                crop = LogoCrop(**crop_raw)
+            except Exception:
+                crop = None
+        return LogoSettings(url=url, crop=crop)
+    except Exception:
+        logger.exception("get_system_logo_failed")
+        return LogoSettings(url=None, crop=None)
+
+
+@app.put("/system/logo", response_model=LogoSettings)
+def set_system_logo(payload: LogoSettings) -> LogoSettings:
+    """ロゴのURLおよびクロップ設定を保存する。どちらか一方のみの更新も許可。"""
+    try:
+        current = load_app_settings() or {}
+        if payload.url is not None:
+            current["logo_url"] = payload.url
+        if payload.crop is not None:
+            current["logo_crop"] = payload.crop.model_dump()
+        save_app_settings(current)
+        out = LogoSettings(
+            url=current.get("logo_url"),
+            crop=LogoCrop(**current["logo_crop"]) if isinstance(current.get("logo_crop"), dict) else None,
+        )
+        return out
+    except Exception:
+        logger.exception("set_system_logo_failed")
+        return payload
+
+
+@app.post("/system-logo")
+def upload_system_logo(file: UploadFile = File(...)) -> dict:
+    """システムロゴ画像をアップロードし、参照URLを返す。"""
+    # reuse questionnaire image filename sanitizer
+    filename = Path(file.filename or "").name
+    try:
+        sanitized = _sanitize_image_filename(filename)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid filename")
+    dest = LOGO_DIR / sanitized
+    try:
+        with dest.open("wb") as fp:
+            fp.write(file.file.read())
+    except Exception:
+        raise HTTPException(status_code=500, detail="failed to save logo")
+    return {"url": f"/system-logo/files/{sanitized}"}
 
 
 @app.get("/system/pdf-layout", response_model=PDFLayoutSettings)
@@ -2774,6 +2820,28 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.pdf"},
         )
     raise HTTPException(status_code=400, detail="unsupported format")
+
+
+@app.delete("/admin/sessions/{session_id}")
+def admin_delete_session(session_id: str) -> dict[str, Any]:
+    """指定セッションを削除する。"""
+    deleted = db_delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"status": "ok", "deleted": 1}
+
+
+@app.post("/admin/sessions/bulk/delete")
+def admin_bulk_delete(ids: list[str] = Query(default=[])) -> dict[str, Any]:
+    """複数セッションを一括削除する。
+
+    - `ids` クエリで対象セッションIDを複数指定する。
+    - 削除件数を返す。
+    """
+    if not ids:
+        raise HTTPException(status_code=400, detail="ids is required")
+    count = db_delete_sessions(ids)
+    return {"status": "ok", "deleted": int(count)}
 
 
 # --- 観測用メトリクス（最小実装） ---

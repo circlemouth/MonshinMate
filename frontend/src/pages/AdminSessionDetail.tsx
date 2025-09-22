@@ -136,11 +136,9 @@ export default function AdminSessionDetail() {
           <Text>
             <strong>受診種別:</strong> {visitTypeLabel(detail.visit_type)}
           </Text>
+          {/* テンプレートIDの表示は削除 */}
           <Text>
-            <strong>テンプレートID:</strong> {detail.questionnaire_id}
-          </Text>
-          <Text>
-            <strong>確定日時:</strong> {detail.finalized_at || '-'}
+            <strong>問診日:</strong> {detail.finalized_at ? detail.finalized_at.split('T')[0] : '-'}
           </Text>
         </VStack>
       </Box>

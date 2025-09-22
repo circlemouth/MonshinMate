@@ -27,7 +27,7 @@ import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
-import { useYubinbangoAutoLoad } from './utils/yubinbango';
+// removed: yubinbango preload
 
 
 // Layouts
@@ -41,8 +41,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoading, isInitialPassword, showTotpSetup, isAuthenticated, logout } = useAuth();
-  // Preload address lookup script early to avoid user-facing delays
-  useYubinbangoAutoLoad();
+  // removed: postal-code address lookup preload
 
   useEffect(() => {
     flushQueue();
@@ -79,6 +78,7 @@ export default function App() {
   }, [location.pathname]);
 
   const [displayName, setDisplayName] = useState('Monshinクリニック');
+  const [logo, setLogo] = useState<{ url: string | null; crop: { x: number; y: number; w: number; h: number } | null }>({ url: null, crop: null });
 
   // システム表示名の取得と更新イベント購読
   useEffect(() => {
@@ -89,6 +89,11 @@ export default function App() {
           const d = await r.json();
           if (d?.display_name) setDisplayName(d.display_name);
         }
+        const lr = await fetch('/system/logo');
+        if (lr.ok) {
+          const ld = await lr.json();
+          setLogo({ url: ld?.url ?? null, crop: ld?.crop ?? null });
+        }
       } catch {}
     };
     fetchName();
@@ -97,7 +102,15 @@ export default function App() {
       if (typeof name === 'string' && name) setDisplayName(name);
     };
     window.addEventListener('systemDisplayNameUpdated' as any, onUpdated);
-    return () => window.removeEventListener('systemDisplayNameUpdated' as any, onUpdated);
+    const onLogoUpdated = (e: any) => {
+      const d = e?.detail || {};
+      setLogo({ url: d.url ?? null, crop: d.crop ?? null });
+    };
+    window.addEventListener('systemLogoUpdated' as any, onLogoUpdated);
+    return () => {
+      window.removeEventListener('systemDisplayNameUpdated' as any, onUpdated);
+      window.removeEventListener('systemLogoUpdated' as any, onLogoUpdated);
+    };
   }, []);
 
   const { isOpen: isLoginOpen, onOpen: openLogin, onClose: closeLogin } = useDisclosure();
@@ -151,6 +164,20 @@ export default function App() {
     >
       {!isChatPage && (
         <Flex as="header" mb={4} align="center">
+          {/* Logo/Icon */}
+          {logo.url && (
+            <Box w="28px" h="28px" borderRadius="full" overflow="hidden" bg="gray.100" mr={2}>
+              <img
+                src={logo.url}
+                alt="logo"
+                style={(() => {
+                  const c = logo.crop || { x: 0, y: 0, w: 1, h: 1 };
+                  const transform = `translate(${-c.x * 100}%, ${-c.y * 100}%) scale(${1 / (c.w || 1)})`;
+                  return { width: '100%', height: 'auto', transform, transformOrigin: 'top left', display: 'block' };
+                })()}
+              />
+            </Box>
+          )}
           <Heading size="lg">{isAdminPage ? '管理画面' : displayName}</Heading>
           <Spacer />
           {isAdminPage ? (

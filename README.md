@@ -33,7 +33,7 @@ docker compose up -d
 ```
 
 2) アクセス
-- フロントエンド: `http://localhost:5173`
+- フロントエンド: `http://localhost:5173`（環境変数 `FRONTEND_HTTP_PORT` で変更可能）
 - バックエンド API: `http://localhost:8001`
 - CouchDB 管理画面: `http://localhost:5984/_utils`（compose 既定は user/pass 共に `admin`）
 
@@ -70,7 +70,7 @@ uvicorn app.main:app --reload --port 8001
 cd frontend
 npm install
 npm run dev
-# http://localhost:5173 を開く
+# http://localhost:5173 を開く（`FRONTEND_HTTP_PORT` で調整可）
 ```
 開発サーバから API へは `frontend/vite.config.ts` のプロキシ設定で `http://localhost:8001` に転送します（既定で設定済み）。
 

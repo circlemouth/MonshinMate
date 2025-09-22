@@ -20,22 +20,19 @@ import {
   SliderThumb,
   Text,
   SimpleGrid,
-  useToast,
-  InputGroup,
-  InputRightElement,
-  Icon,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
-import { SearchIcon } from '@chakra-ui/icons';
+import ImageAnnotator from '../components/ImageAnnotator';
+// removed: postal-code address lookup UI
 import {
   mergePersonalInfoValue,
   personalInfoFields,
   personalInfoMissingKeys,
 } from '../utils/personalInfo';
-import { fetchAddressByPostal } from '../utils/yubinbango';
+// removed: postal-code address lookup logic
 
   interface Item {
     id: string;
@@ -85,8 +82,8 @@ export default function QuestionnaireForm() {
   const dob = sessionStorage.getItem('dob') || '';
   const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
   const navigate = useNavigate();
-  const toast = useToast();
-  const [lookupTarget, setLookupTarget] = useState<string | null>(null);
+  // removed: toast hook (no address lookup)
+  // removed: postal-code lookup state
 
   useEffect(() => {
     if (!sessionId) {
@@ -103,6 +100,9 @@ export default function QuestionnaireForm() {
           data.items.forEach((it: Item) => {
             if (it.type === 'slider' && ans[it.id] === undefined) {
               ans[it.id] = it.min ?? 0;
+            }
+            if (it.type === 'image_annotation' && ans[it.id] === undefined) {
+              ans[it.id] = { points: [], paths: [] };
             }
             if (it.type === 'personal_info') {
               ans[it.id] = mergePersonalInfoValue(ans[it.id]);
@@ -141,44 +141,21 @@ export default function QuestionnaireForm() {
 
   const [attempted, setAttempted] = useState(false);
 
-  const composeAddress = (addr: { region?: string; locality?: string; street?: string; extended?: string }) => {
-    const parts = [addr.region, addr.locality, addr.street, addr.extended].filter((part) => part && String(part).trim());
-    return parts.join('');
-  };
-
-  const handlePostalLookup = async (itemId: string) => {
-    const current = mergePersonalInfoValue(answers[itemId]);
-    const postal = current.postal_code;
-    if (!postal || postal.replace(/[^0-9]/g, '').length !== 7) {
-      toast({ status: 'warning', title: '郵便番号を正しく入力してください（7桁）' });
-      return;
-    }
-    setLookupTarget(itemId);
-    try {
-      const addr = await fetchAddressByPostal(postal);
-      const addressText = composeAddress(addr);
-      if (!addressText) {
-        throw new Error('住所情報が取得できませんでした');
-      }
-      setAnswers((prev) => {
-        const merged = mergePersonalInfoValue(prev[itemId]);
-        const nextValue = { ...merged, address: addressText };
-        const nextAnswers = { ...prev, [itemId]: nextValue };
-        sessionStorage.setItem('answers', JSON.stringify(nextAnswers));
-        return nextAnswers;
-      });
-      toast({ status: 'success', title: '住所を自動入力しました' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '住所検索に失敗しました';
-      toast({ status: 'error', title: '住所の補完に失敗しました', description: message });
-    } finally {
-      setLookupTarget(null);
-    }
-  };
+  // removed: postal-code lookup handler and helper
 
   const isMissingValue = (item: Item, value: any): boolean => {
     if (item.type === 'personal_info') {
       return personalInfoMissingKeys(mergePersonalInfoValue(value)).length > 0;
+    }
+    if (item.type === 'image_annotation') {
+      if (!value) return true;
+      try {
+        const pts = Array.isArray(value.points) ? value.points : [];
+        const paths = Array.isArray(value.paths) ? value.paths : [];
+        return pts.length === 0 && paths.length === 0;
+      } catch {
+        return true;
+      }
     }
     if (value === undefined || value === '') return true;
     if (Array.isArray(value)) return value.length === 0;
@@ -286,8 +263,7 @@ export default function QuestionnaireForm() {
         const personalValue = item.type === 'personal_info' ? mergePersonalInfoValue(value) : null;
         const personalMissing = item.type === 'personal_info' ? personalInfoMissingKeys(personalValue) : [];
         const showError = attempted && item.required && isMissingValue(item, value);
-        const lookupLoading = lookupTarget === item.id;
-        const postalDigits = personalValue ? personalValue.postal_code.replace(/[^0-9]/g, '') : '';
+        // removed: postal-code lookup loading state and digit check
         return (
           <Box key={item.id} bg="white" p={6} borderRadius="lg" boxShadow="sm">
             <FormControl
@@ -302,7 +278,7 @@ export default function QuestionnaireForm() {
                   {helperText}
                 </FormHelperText>
               )}
-              {item.image && (
+              {item.type !== 'image_annotation' && item.image && (
                 <Image
                   src={item.image}
                   alt=""
@@ -427,27 +403,7 @@ export default function QuestionnaireForm() {
                             });
                           },
                         };
-                        const input = field.key === 'postal_code' ? (
-                          <InputGroup>
-                            <Input
-                              {...commonProps}
-                              inputMode="numeric"
-                            />
-                            <InputRightElement width="auto" pr={1}>
-                              <Button
-                                size="sm"
-                                leftIcon={<Icon as={SearchIcon} />}
-                                onClick={() => handlePostalLookup(item.id)}
-                                isLoading={lookupLoading}
-                                isDisabled={lookupLoading || postalDigits.length !== 7}
-                                colorScheme="primary"
-                                variant="solid"
-                              >
-                                住所検索
-                              </Button>
-                            </InputRightElement>
-                          </InputGroup>
-                        ) : (
+                        const input = (
                           <Input
                             {...commonProps}
                           />
@@ -464,6 +420,13 @@ export default function QuestionnaireForm() {
                       })}
                     </SimpleGrid>
                   </VStack>
+                ) : item.type === 'image_annotation' && item.image ? (
+                  // 画像注釈コンポーネント
+                  <ImageAnnotator
+                    src={item.image}
+                    value={answers[item.id]}
+                    onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
+                  />
                 ) : (
                   <Input
                     id={`item-${item.id}`}

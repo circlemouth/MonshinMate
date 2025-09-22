@@ -1,10 +1,28 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 
 // 開発時にバックエンド(8001)へプロキシする設定
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  // 環境変数から許可ホストを設定（例: ALLOWED_HOSTS="example.com,.corp.local"）
+  // 特別値: "*" または "true" で全ホスト許可
+  const rawAllowed = env.ALLOWED_HOSTS || env.VITE_ALLOWED_HOSTS;
+  let allowedHosts: true | string[] | undefined;
+  if (rawAllowed) {
+    const list = rawAllowed
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (list.length === 1 && (list[0] === '*' || list[0].toLowerCase() === 'true')) {
+      allowedHosts = true;
+    } else if (list.length > 0) {
+      allowedHosts = list;
+    }
+  }
+
+  return {
   plugins: [
     react(),
     {
@@ -42,11 +60,16 @@ export default defineConfig({
     },
   ],
   server: {
+    // 外部アクセス許可（例: Tailscale 等のドメインからの接続）
+    host: true,
+    // 環境変数で許可ホストを制御（未設定時は Vite 既定動作）
+    allowedHosts,
     proxy: {
       '/questionnaires': 'http://localhost:8001',
       '/sessions': 'http://localhost:8001',
       '/llm': 'http://localhost:8001',
       '/questionnaire-item-images': 'http://localhost:8001',
+      '/system-logo': 'http://localhost:8001',
       '/system': 'http://localhost:8001',
       '/healthz': 'http://localhost:8001',
       '/readyz': 'http://localhost:8001',
@@ -59,4 +82,5 @@ export default defineConfig({
       '/admin/sessions': 'http://localhost:8001',
     },
   },
+  };
 });

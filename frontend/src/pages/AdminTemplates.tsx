@@ -47,10 +47,9 @@ import {
   Image,
   Icon,
   useToast,
-  InputGroup,
-  InputRightElement,
+  // removed: postal lookup UI wrappers
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon, SearchIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
 import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
@@ -58,7 +57,7 @@ import {
   personalInfoFields,
   mergePersonalInfoValue,
 } from '../utils/personalInfo';
-import { fetchAddressByPostal } from '../utils/yubinbango';
+// removed: postal-code address lookup logic
 
   interface Item {
     id: string;
@@ -134,7 +133,7 @@ export default function AdminTemplates() {
   const [isAddingNewItem, setIsAddingNewItem] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
-  const [previewLookupTarget, setPreviewLookupTarget] = useState<string | null>(null);
+  // removed: postal-code lookup state in preview
   const [previewVisitType, setPreviewVisitType] = useState<'initial' | 'followup'>('initial');
   const [previewGender, setPreviewGender] = useState<'male' | 'female'>('male');
   const [previewAge, setPreviewAge] = useState<number>(30);
@@ -209,34 +208,7 @@ export default function AdminTemplates() {
     imagePreviewModal.onOpen();
   };
 
-  const handlePreviewPostalLookup = async (itemId: string) => {
-    const current = mergePersonalInfoValue(previewAnswers[itemId]);
-    const postal = current.postal_code;
-    if (!postal || postal.replace(/[^0-9]/g, '').length !== 7) {
-      toast({ status: 'warning', title: '郵便番号を正しく入力してください（7桁）' });
-      return;
-    }
-    setPreviewLookupTarget(itemId);
-    try {
-      const addr = await fetchAddressByPostal(postal);
-      const parts = [addr.region, addr.locality, addr.street, addr.extended]
-        .filter((part) => part && String(part).trim())
-        .join('');
-      if (!parts) {
-        throw new Error('住所情報が取得できませんでした');
-      }
-      setPreviewAnswers((prev) => ({
-        ...prev,
-        [itemId]: { ...mergePersonalInfoValue(prev[itemId]), address: parts },
-      }));
-      toast({ status: 'success', title: '住所を自動入力しました' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '住所検索に失敗しました';
-      toast({ status: 'error', title: '住所の補完に失敗しました', description: message });
-    } finally {
-      setPreviewLookupTarget(null);
-    }
-  };
+  // removed: postal-code lookup handler in preview
 
   const closeImagePreview = () => {
     setImagePreviewUrl(null);
@@ -787,6 +759,36 @@ export default function AdminTemplates() {
 
   const saveTemplate = async () => {
     if (!templateId) return;
+    // Validate: image_annotation requires image
+    const missingImageErrors: string[] = [];
+    const checkItem = (it: Item) => {
+      const enabledInAny = !!(it.use_initial || it.use_followup);
+      if (enabledInAny && it.type === 'image_annotation' && !(it.image && it.image.trim())) {
+        missingImageErrors.push(`「${it.label}」に画像が設定されていません`);
+      }
+      if (it.followups) {
+        Object.values(it.followups).forEach((children) => {
+          (children || []).forEach((child) => {
+            const childEnabled = !!(child.use_initial || child.use_followup || true); // followups are conditional; validate regardless
+            if (childEnabled && child.type === 'image_annotation' && !(child.image && child.image.trim())) {
+              missingImageErrors.push(`追質問「${child.label}」に画像が設定されていません`);
+            }
+          });
+        });
+      }
+    };
+    items.forEach(checkItem);
+    if (missingImageErrors.length > 0) {
+      setSaveStatus('error');
+      toast({
+        title: '画像が必要です',
+        description: missingImageErrors[0],
+        status: 'error',
+        isClosable: true,
+      });
+      return;
+    }
+
     setSaveStatus('saving');
     try {
       const initialItems = items
@@ -1440,6 +1442,9 @@ export default function AdminTemplates() {
                                           if (url) updateItem(idx, 'image', url);
                                         }}
                                       />
+                                      {item.type === 'image_annotation' && !item.image && (
+                                        <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+                                      )}
                                     </FormControl>
                                     {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
                                     <HStack justifyContent="space-between">
@@ -1452,6 +1457,7 @@ export default function AdminTemplates() {
                                           <option value="date">日付</option>
                                           <option value="slider">スライドバー</option>
                                           <option value="personal_info">患者基本情報セット</option>
+                                          <option value="image_annotation">画像注釈（タップ・線）</option>
                                         </Select>
                                       </FormControl>
                                       <IconButton
@@ -1772,6 +1778,9 @@ export default function AdminTemplates() {
                       if (url) setNewItem({ ...newItem, image: url });
                     }}
                   />
+                  {newItem.type === 'image_annotation' && !newItem.image && (
+                    <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+                  )}
                 </FormControl>
                 <FormControl>
                   <FormLabel>入力方法</FormLabel>
@@ -1801,6 +1810,7 @@ export default function AdminTemplates() {
                     <option value="date">日付</option>
                     <option value="slider">スライドバー</option>
                     <option value="personal_info">患者基本情報セット</option>
+                    <option value="image_annotation">画像注釈（タップ・線）</option>
                   </Select>
                 </FormControl>
                 {/* 種別別の詳細設定（選択肢やスライダー設定） */}
@@ -2174,8 +2184,7 @@ export default function AdminTemplates() {
                           ) : item.type === 'personal_info' ? (
                             (() => {
                               const current = mergePersonalInfoValue(previewAnswers[item.id]);
-                              const lookupLoading = previewLookupTarget === item.id;
-                              const postalDigits = current.postal_code.replace(/[^0-9]/g, '');
+                              // removed: postal-code lookup state and digit check
                               return (
                                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
                                   {personalInfoFields.map((field) => {
@@ -2183,39 +2192,15 @@ export default function AdminTemplates() {
                                       const next = { ...current, [field.key]: e.target.value };
                                       setPreviewAnswers({ ...previewAnswers, [item.id]: next });
                                     };
-                                    const input = field.key === 'postal_code'
-                                      ? (
-                                        <InputGroup>
-                                          <Input
-                                            placeholder={field.placeholder}
-                                            value={current[field.key]}
-                                            onChange={onChange}
-                                            inputMode="numeric"
-                                            autoComplete={field.autoComplete}
-                                          />
-                                          <InputRightElement width="auto" pr={1}>
-                                            <Button
-                                              size="sm"
-                                              leftIcon={<Icon as={SearchIcon} />}
-                                              onClick={() => handlePreviewPostalLookup(item.id)}
-                                              isLoading={lookupLoading}
-                                              isDisabled={lookupLoading || postalDigits.length !== 7}
-                                              colorScheme="primary"
-                                            >
-                                              住所検索
-                                            </Button>
-                                          </InputRightElement>
-                                        </InputGroup>
-                                      )
-                                      : (
-                                        <Input
-                                          placeholder={field.placeholder}
-                                          value={current[field.key]}
-                                          onChange={onChange}
-                                          autoComplete={field.autoComplete}
-                                          inputMode={field.inputMode}
-                                        />
-                                      );
+                                    const input = (
+                                      <Input
+                                        placeholder={field.placeholder}
+                                        value={current[field.key]}
+                                        onChange={onChange}
+                                        autoComplete={field.autoComplete}
+                                        inputMode={field.inputMode}
+                                      />
+                                    );
                                     return (
                                       <FormControl key={field.key}>
                                         <FormLabel fontSize="sm">{field.label}</FormLabel>
@@ -2226,6 +2211,13 @@ export default function AdminTemplates() {
                                 </SimpleGrid>
                               );
                             })()
+                          ) : item.type === 'image_annotation' ? (
+                            <Box>
+                              <Text color="gray.500" mb={2}>画像にタップ/線でマーキング（プレビュー）</Text>
+                              {item.image && (
+                                <Image src={item.image} alt="" maxH="200px" objectFit="contain" />
+                              )}
+                            </Box>
                           ) : (
                             <Input
                               onChange={(e) => setPreviewAnswers({ ...previewAnswers, [item.id]: e.target.value })}
@@ -2309,24 +2301,27 @@ export default function AdminTemplates() {
                           </Button>
                         </>
                       )}
-                      <Input
-                        key={fi.image || `empty-${fi.id}`}
-                        type="file"
-                        accept="image/*"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) {
-                            const removed = await confirmAndDeleteImage(fi.image);
-                            if (!removed) return;
-                            updateFollowupItem(fIdx, 'image', undefined);
-                            return;
-                          }
-                          await deleteItemImage(fi.image);
-                          const url = await uploadItemImage(file);
-                          if (url) updateFollowupItem(fIdx, 'image', url);
-                        }}
-                      />
-                    </FormControl>
+                    <Input
+                      key={fi.image || `empty-${fi.id}`}
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) {
+                          const removed = await confirmAndDeleteImage(fi.image);
+                          if (!removed) return;
+                          updateFollowupItem(fIdx, 'image', undefined);
+                          return;
+                        }
+                        await deleteItemImage(fi.image);
+                        const url = await uploadItemImage(file);
+                        if (url) updateFollowupItem(fIdx, 'image', url);
+                      }}
+                    />
+                    {fi.type === 'image_annotation' && !fi.image && (
+                      <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+                    )}
+                  </FormControl>
                     <FormControl mt={2} maxW="200px">
                       <FormLabel m={0}>入力方法</FormLabel>
                       <Select
@@ -2339,6 +2334,7 @@ export default function AdminTemplates() {
                         <option value="date">日付</option>
                         <option value="slider">スライドバー</option>
                         <option value="personal_info">患者基本情報セット</option>
+                        <option value="image_annotation">画像注釈（タップ・線）</option>
                       </Select>
                     </FormControl>
                     {/* type-specific UI */}

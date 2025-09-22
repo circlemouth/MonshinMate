@@ -38,6 +38,6 @@ services:
     depends_on:
       - backend
     ports:
-      - "5173:80"
+      - "${FRONTEND_HTTP_PORT:-5173}:80"
 volumes:
   couchdb_data:

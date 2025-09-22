@@ -1029,6 +1029,58 @@ def export_questionnaire_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, A
     finally:
         conn.close()
 
+
+def delete_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> bool:
+    """指定セッションを削除する。
+
+    戻り値は削除が実行されデータが存在したかどうか。
+    付随する回答は外部キー制約 ON DELETE CASCADE により削除される。
+    CouchDB が有効な場合は CouchDB から削除する。
+    """
+    if couch_db:
+        try:
+            doc = couch_db.get(session_id)
+            if not doc:
+                return False
+            couch_db.delete(doc)
+            return True
+        except Exception:
+            return False
+    conn = get_conn(db_path)
+    try:
+        cur = conn.execute("DELETE FROM sessions WHERE id=?", (session_id,))
+        conn.commit()
+        return cur.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_sessions(ids: Iterable[str], db_path: str = DEFAULT_DB_PATH) -> int:
+    """複数セッションを一括削除する。削除件数を返す。"""
+    id_list = [i for i in ids if i]
+    if not id_list:
+        return 0
+    if couch_db:
+        deleted = 0
+        for sid in id_list:
+            try:
+                doc = couch_db.get(sid)
+                if not doc:
+                    continue
+                couch_db.delete(doc)
+                deleted += 1
+            except Exception:
+                pass
+        return deleted
+    placeholders = ",".join(["?"] * len(id_list))
+    conn = get_conn(db_path)
+    try:
+        cur = conn.execute(f"DELETE FROM sessions WHERE id IN ({placeholders})", id_list)
+        conn.commit()
+        return cur.rowcount or 0
+    finally:
+        conn.close()
+
     settings = load_app_settings(db_path) or {}
     default_qid = settings.get("default_questionnaire_id")
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Table,
   Thead,
@@ -28,6 +28,17 @@ import {
   Flex,
   Spacer,
   useToast,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
+  Tag,
+  AlertDialog,
+  AlertDialogOverlay,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogBody,
+  AlertDialogFooter,
 } from '@chakra-ui/react';
 import { FiFile, FiFileText, FiTable } from 'react-icons/fi';
 
@@ -55,6 +66,8 @@ export default function AdminSessions() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(0);
+  const [confirmState, setConfirmState] = useState<{ type: 'bulk-selected' | 'bulk-displayed' | 'row'; id?: string } | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
 
   const loadSessions = (filters: {
     patientName?: string;
@@ -70,8 +83,14 @@ export default function AdminSessions() {
     const qs = params.toString();
     fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
       .then((r) => r.json())
-      .then((data) => {
-        setSessions(data);
+      .then((data: SessionSummary[]) => {
+        // 並び替え: 問診日時（finalized_at）の新しい順
+        const sorted = [...data].sort((a, b) => {
+          const av = a.finalized_at || '';
+          const bv = b.finalized_at || '';
+          return av < bv ? 1 : av > bv ? -1 : 0;
+        });
+        setSessions(sorted);
         // 一覧が更新されたら選択状態をクリア
         setSelectedSessionIds([]);
         setPage(0);
@@ -271,6 +290,58 @@ export default function AdminSessions() {
 
   const formatSummaryText = (summary: string) => summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
 
+  const reloadWithCurrentFilters = () => {
+    loadSessions({ patientName, dob, startDate, endDate });
+  };
+
+  // row deletion handled via AlertDialog -> deleteSessionNoConfirm
+
+  const bulkDeleteDisplayedNoConfirm = async () => {
+    if (displayedSessionIds.length === 0) return;
+    try {
+      const qs = displayedSessionIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
+      const res = await fetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
+      if (!res.ok) throw new Error('failed');
+      const body = await res.json().catch(() => ({} as any));
+      const deleted = body?.deleted ?? displayedSessionIds.length;
+      toast({ title: `${deleted}件削除しました`, status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      reloadWithCurrentFilters();
+    } catch (err) {
+      console.error(err);
+      toast({ title: '一括削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+    }
+  };
+
+  const bulkDeleteSelectedNoConfirm = async () => {
+    const ids = getTargetIds();
+    if (ids.length === 0) return;
+    try {
+      const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
+      const res = await fetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
+      if (!res.ok) throw new Error('failed');
+      const body = await res.json().catch(() => ({} as any));
+      const deleted = body?.deleted ?? ids.length;
+      toast({ title: `${deleted}件削除しました`, status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      setSelectedSessionIds([]);
+      reloadWithCurrentFilters();
+    } catch (err) {
+      console.error(err);
+      toast({ title: '一括削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+    }
+  };
+
+  const deleteSessionNoConfirm = async (id: string) => {
+    try {
+      const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('failed');
+      toast({ title: '削除しました', status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      reloadWithCurrentFilters();
+    } catch (err) {
+      console.error(err);
+      toast({ title: '削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+    }
+  };
+
   return (
     <>
       <VStack align="stretch" spacing={4} mb={4}>
@@ -296,43 +367,49 @@ export default function AdminSessions() {
           <Button onClick={handleSearch}>検索</Button>
           <Button onClick={handleReset}>リセット</Button>
         </HStack>
-        <HStack spacing={2}>
-          <Text fontSize="sm" color="gray.600">一括出力（選択されたデータのみ）</Text>
-          <Tooltip label="PDF一括ダウンロード" placement="top" hasArrow openDelay={150}>
-            <Button
-              size="sm"
-              colorScheme="blue"
-              leftIcon={<FiFile />}
-              onClick={() => handleBulkDownload('pdf')}
-              isDisabled={!hasSelection}
-            >
-              PDF
-            </Button>
-          </Tooltip>
-          <Tooltip label="Markdown一括コピー" placement="top" hasArrow openDelay={150}>
-            <Button
-              size="sm"
-              colorScheme="blue"
-              leftIcon={<FiFileText />}
-              onClick={() => handleBulkDownload('md')}
-              isDisabled={!hasSelection}
-              isLoading={copyingMarkdownTarget === 'bulk'}
-            >
-              Markdown
-            </Button>
-          </Tooltip>
-          <Tooltip label="CSV一括ダウンロード" placement="top" hasArrow openDelay={150}>
-            <Button
-              size="sm"
-              colorScheme="blue"
-              leftIcon={<FiTable />}
-              onClick={() => handleBulkDownload('csv')}
-              isDisabled={!hasSelection}
-            >
-              CSV
-            </Button>
-          </Tooltip>
-        </HStack>
+        <Flex align="center" justify="space-between" wrap="wrap" gap={2}>
+          <HStack spacing={3}>
+            <Tag colorScheme={hasSelection ? 'blue' : 'gray'}>
+              {hasSelection ? `選択 ${selectedSessionIds.length} 件` : '未選択'}
+            </Tag>
+            {(patientName || dob || startDate || endDate) && (
+              <Text fontSize="sm" color="gray.600">
+                フィルタ:
+                {patientName && ` 氏名:${patientName}`}
+                {dob && ` 生年月日:${dob}`}
+                {startDate && ` 開始:${startDate}`}
+                {endDate && ` 終了:${endDate}`}
+              </Text>
+            )}
+          </HStack>
+          <HStack spacing={2}>
+            <Menu isLazy>
+              <MenuButton as={Button} size="sm" leftIcon={<FiFile />} isDisabled={!hasSelection}>
+                一括出力
+              </MenuButton>
+              <MenuList>
+                <MenuItem onClick={() => handleBulkDownload('pdf')}>PDFをダウンロード</MenuItem>
+                <MenuItem onClick={() => handleBulkDownload('md')} isDisabled={copyingMarkdownTarget === 'bulk'}>
+                  Markdownをコピー
+                </MenuItem>
+                <MenuItem onClick={() => handleBulkDownload('csv')}>CSVをダウンロード</MenuItem>
+              </MenuList>
+            </Menu>
+            <Menu isLazy>
+              <MenuButton as={Button} size="sm" colorScheme="red">
+                一括削除
+              </MenuButton>
+              <MenuList>
+                <MenuItem onClick={() => setConfirmState({ type: 'bulk-selected' })} isDisabled={!hasSelection}>
+                  選択を削除
+                </MenuItem>
+                <MenuItem onClick={() => setConfirmState({ type: 'bulk-displayed' })}>
+                  表示中を削除
+                </MenuItem>
+              </MenuList>
+            </Menu>
+          </HStack>
+        </Flex>
       </VStack>
       <Table>
         <Thead>
@@ -357,8 +434,9 @@ export default function AdminSessions() {
             <Th>患者名</Th>
             <Th>生年月日</Th>
             <Th>受診種別</Th>
-            <Th>確定日時</Th>
+            <Th>問診日</Th>
             <Th>出力</Th>
+            <Th>操作</Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -373,60 +451,29 @@ export default function AdminSessions() {
               <Td>{s.patient_name}</Td>
               <Td>{s.dob}</Td>
               <Td>{visitTypeLabel(s.visit_type)}</Td>
-              <Td>{s.finalized_at || '-'}</Td>
+              <Td>{(s.finalized_at ? s.finalized_at.split('T')[0] : '-')}</Td>
               <Td onClick={(e) => e.stopPropagation()}>
-                <HStack spacing={1}>
-                  {/* 出力形式のホバーツールチップを追加 */}
-                  <Tooltip label="PDF形式" placement="top" hasArrow openDelay={150}>
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      variant="outline"
-                      leftIcon={<FiFile />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank');
-                      }}
-                    >
-                      PDF
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Markdown形式をコピー" placement="top" hasArrow openDelay={150}>
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      variant="outline"
-                      leftIcon={<FiFileText />}
-                      isLoading={copyingMarkdownTarget === `row-${s.id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyMarkdownForSession(s.id, 'row');
-                      }}
-                    >
-                      Markdown
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="CSV形式" placement="top" hasArrow openDelay={150}>
-                    <Button
-                      size="sm"
-                      colorScheme="blue"
-                      variant="outline"
-                      leftIcon={<FiTable />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank');
-                      }}
-                    >
-                      CSV
-                    </Button>
-                  </Tooltip>
+                <Menu isLazy>
+                  <MenuButton as={Button} size="sm" variant="outline" leftIcon={<FiFile />}>出力</MenuButton>
+                  <MenuList>
+                    <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
+                    <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
+                    <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
+                  </MenuList>
+                </Menu>
+              </Td>
+              <Td onClick={(e) => e.stopPropagation()}>
+                <HStack spacing={2}>
+                  <Button size="sm" colorScheme="red" variant="outline" onClick={() => setConfirmState({ type: 'row', id: s.id })}>
+                    削除
+                  </Button>
                 </HStack>
               </Td>
             </Tr>
           ))}
           {sessions.length === 0 && (
             <Tr>
-              <Td colSpan={6}>
+              <Td colSpan={7}>
                 <Text fontSize="sm" color="gray.500" textAlign="center">
                   条件に一致する問診データがありません。
                 </Text>
@@ -543,11 +590,9 @@ export default function AdminSessions() {
                     <Text>
                       <strong>受診種別:</strong> {visitTypeLabel(selectedDetail.visit_type)}
                     </Text>
+                    {/* テンプレートIDの表示は削除 */}
                     <Text>
-                      <strong>テンプレートID:</strong> {selectedDetail.questionnaire_id}
-                    </Text>
-                    <Text>
-                      <strong>確定日時:</strong> {selectedDetail.finalized_at || '-'}
+                      <strong>問診日:</strong> {selectedDetail.finalized_at ? selectedDetail.finalized_at.split('T')[0] : '-'}
                     </Text>
                   </VStack>
                 </Box>
@@ -588,6 +633,40 @@ export default function AdminSessions() {
           </ModalBody>
         </ModalContent>
       </Modal>
+
+      {/* 削除確認ダイアログ */}
+      <AlertDialog
+        isOpen={!!confirmState}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setConfirmState(null)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader>削除の確認</AlertDialogHeader>
+            <AlertDialogBody>
+              {confirmState?.type === 'bulk-selected' && `選択中の ${selectedSessionIds.length} 件を削除します。よろしいですか？`}
+              {confirmState?.type === 'bulk-displayed' && `このページに表示中の ${displayedSessionIds.length} 件を削除します。よろしいですか？`}
+              {confirmState?.type === 'row' && `この問診結果を削除します。よろしいですか？`}
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={cancelRef} onClick={() => setConfirmState(null)} variant="ghost">
+                キャンセル
+              </Button>
+              <Button colorScheme="red" ml={3}
+                onClick={async () => {
+                  if (confirmState?.type === 'bulk-selected') await bulkDeleteSelectedNoConfirm();
+                  else if (confirmState?.type === 'bulk-displayed') await bulkDeleteDisplayedNoConfirm();
+                  else if (confirmState?.type === 'row' && confirmState.id) await deleteSessionNoConfirm(confirmState.id);
+                  setConfirmState(null);
+                }}
+              >
+                削除する
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </>
   );
 }
