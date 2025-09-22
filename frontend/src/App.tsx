@@ -27,6 +27,7 @@ import AdminInitialPassword from './pages/AdminInitialPassword';
 import AdminTotpSetup from './pages/AdminTotpSetup';
 import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
+import AdminMain from './pages/AdminMain';
 // removed: yubinbango preload
 
 
@@ -118,7 +119,7 @@ export default function App() {
   // 管理画面ボタン押下時にログイン用モーダルを開く
   const handleAdminClick = () => {
     if (isAuthenticated) {
-      navigate('/admin/templates');
+      navigate('/admin/main');
     } else {
       openLogin();
     }
@@ -221,7 +222,8 @@ export default function App() {
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin/initial-password" element={<AdminInitialPassword />} />
           <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
-          <Route path="/admin" element={<Navigate to="/admin/templates" replace />} />
+          <Route path="/admin" element={<Navigate to="/admin/main" replace />} />
+          <Route path="/admin/main" element={<AdminLayout><AdminMain /></AdminLayout>} />
           <Route path="/admin/appearance" element={<AdminLayout><AdminAppearance /></AdminLayout>} />
           <Route path="/admin/data-transfer" element={<AdminLayout><AdminDataTransfer /></AdminLayout>} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
