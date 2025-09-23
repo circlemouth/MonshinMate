@@ -135,6 +135,17 @@ export default function AdminMain() {
     return map[source] ?? source;
   };
 
+  const visitTypeLabel = (type: string) => {
+    switch (type) {
+      case 'initial':
+        return '初診';
+      case 'followup':
+        return '再診';
+      default:
+        return type || '-';
+    }
+  };
+
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
     setSessionError(null);
@@ -144,20 +155,17 @@ export default function AdminMain() {
         throw new Error('failed to load sessions');
       }
       const data: SessionSummary[] = await res.json();
-      const followups = data
-        .filter((s) => s.visit_type === 'followup')
-        .sort((a, b) => {
-          const av = a.finalized_at || '';
-          const bv = b.finalized_at || '';
-          if (av === bv) return 0;
-          return av < bv ? 1 : -1;
-        })
-        .slice(0, 10);
-      setSessions(followups);
+      const sorted = [...data].sort((a, b) => {
+        const av = a.finalized_at || '';
+        const bv = b.finalized_at || '';
+        if (av === bv) return 0;
+        return av < bv ? 1 : -1;
+      });
+      setSessions(sorted.slice(0, 10));
     } catch (err) {
       console.error(err);
       setSessions([]);
-      setSessionError('再診問診データの取得に失敗しました。');
+      setSessionError('問診データの取得に失敗しました。');
     } finally {
       setSessionsLoading(false);
     }
@@ -342,9 +350,17 @@ export default function AdminMain() {
 
   return (
     <VStack align="stretch" spacing={10} py={6} px={{ base: 0, md: 2 }}>
-      <Box>
+      <Box
+        bg="white"
+        _dark={{ bg: 'gray.900' }}
+        borderRadius="lg"
+        borderWidth="1px"
+        borderColor="border.subtle"
+        boxShadow="sm"
+        p={4}
+      >
         <Heading size="lg" mb={4}>
-          再診問診（最新10件）
+          問診結果（最新10件）
         </Heading>
         {sessionsLoading ? (
           <HStack spacing={3} align="center">
@@ -359,75 +375,79 @@ export default function AdminMain() {
           </Text>
         ) : sessions.length === 0 ? (
           <Text fontSize="sm" color="fg.muted">
-            再診の問診データがまだありません。
+            問診データがまだありません。
           </Text>
         ) : (
-          <Table variant="simple">
-            <Thead>
-              <Tr>
-                <Th>患者名</Th>
-                <Th>問診日時</Th>
-                <Th width="1%">出力</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {sessions.map((s) => (
-                <Tr key={s.id}>
-                  <Td>{s.patient_name || '（未入力）'}</Td>
-                  <Td>{formatDateTime(s.finalized_at)}</Td>
-                  <Td onClick={(e) => e.stopPropagation()} whiteSpace="nowrap">
-                    <Menu isLazy>
-                      <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
-                        <MenuButton
-                          as={IconButton}
-                          size="md"
-                          variant="outline"
-                          icon={<FiDownload />}
-                          aria-label="問診結果を出力"
-                          minW="44px"
-                          minH="44px"
-                        />
-                      </Tooltip>
-                      <MenuList>
-                        <MenuItem
-                          onClick={() =>
-                            window.open(
-                              `/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`,
-                              '_blank',
-                              'noopener,noreferrer'
-                            )
-                          }
-                        >
-                          PDF
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() => copyMarkdownForSession(s.id)}
-                          isDisabled={copyingId !== null && copyingId !== s.id}
-                        >
-                          {copyingId === s.id ? 'Markdownコピー中…' : 'Markdown'}
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() =>
-                            window.open(
-                              `/admin/sessions/${encodeURIComponent(s.id)}/download/csv`,
-                              '_blank',
-                              'noopener,noreferrer'
-                            )
-                          }
-                        >
-                          CSV
-                        </MenuItem>
-                      </MenuList>
-                    </Menu>
-                  </Td>
+          <Box overflowX="auto">
+            <Table variant="simple">
+              <Thead>
+                <Tr>
+                  <Th>患者名</Th>
+                  <Th>受診種別</Th>
+                  <Th>問診日時</Th>
+                  <Th width="1%">出力</Th>
                 </Tr>
-              ))}
-            </Tbody>
-          </Table>
+              </Thead>
+              <Tbody>
+                {sessions.map((s) => (
+                  <Tr key={s.id}>
+                    <Td>{s.patient_name || '（未入力）'}</Td>
+                    <Td>{visitTypeLabel(s.visit_type)}</Td>
+                    <Td>{formatDateTime(s.finalized_at)}</Td>
+                    <Td onClick={(e) => e.stopPropagation()} whiteSpace="nowrap">
+                      <Menu isLazy>
+                        <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
+                          <MenuButton
+                            as={IconButton}
+                            size="md"
+                            variant="outline"
+                            icon={<FiDownload />}
+                            aria-label="問診結果を出力"
+                            minW="44px"
+                            minH="44px"
+                          />
+                        </Tooltip>
+                        <MenuList>
+                          <MenuItem
+                            onClick={() =>
+                              window.open(
+                                `/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`,
+                                '_blank',
+                                'noopener,noreferrer'
+                              )
+                            }
+                          >
+                            PDF
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() => copyMarkdownForSession(s.id)}
+                            isDisabled={copyingId !== null && copyingId !== s.id}
+                          >
+                            {copyingId === s.id ? 'Markdownコピー中…' : 'Markdown'}
+                          </MenuItem>
+                          <MenuItem
+                            onClick={() =>
+                              window.open(
+                                `/admin/sessions/${encodeURIComponent(s.id)}/download/csv`,
+                                '_blank',
+                                'noopener,noreferrer'
+                              )
+                            }
+                          >
+                            CSV
+                          </MenuItem>
+                        </MenuList>
+                      </Menu>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
         )}
         {!sessionsLoading && sessions.length > 0 && (
           <Text mt={3} fontSize="xs" color="fg.muted">
-            ※ 表示件数は再診データの最新10件です。詳細は「問診結果一覧」で確認できます。
+            ※ 表示件数は問診データの最新10件です。詳細は「問診結果一覧」で確認できます。
           </Text>
         )}
       </Box>

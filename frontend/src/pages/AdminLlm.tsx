@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
-  ButtonGroup,
   Card,
   CardBody,
   CardHeader,
@@ -26,7 +25,6 @@ import {
 import { RepeatIcon } from '@chakra-ui/icons';
 import { refreshLlmStatus } from '../utils/llmStatus';
 import { useNotify } from '../contexts/NotificationContext';
-import StatusBanner from '../components/StatusBanner';
 
 type FeedbackVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -49,8 +47,6 @@ interface SettingsState {
   enabled: boolean;
   profiles: Record<ProviderKey, ProviderProfile>;
 }
-
-type FeedbackState = { status: FeedbackVariant; message: string } | null;
 
 const PROVIDER_META: Record<ProviderKey, { label: string; description: string; helper: string }> = {
   ollama: {
@@ -191,11 +187,11 @@ export default function AdminLlm() {
     lm_studio: [],
     openai: [],
   });
-  const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const { notify } = useNotify();
   const initialLoad = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastAutoSaveNotice = useRef<string | null>(null);
 
   const activeProvider = state.provider;
   const currentProfile = state.profiles[activeProvider] ?? defaultProfile(activeProvider);
@@ -230,11 +226,15 @@ export default function AdminLlm() {
           return next;
         });
       } catch (error) {
-        setFeedback({ status: 'error', message: 'LLM設定の取得に失敗しました' });
+        notify({
+          title: 'LLM設定の取得に失敗しました',
+          status: 'error',
+          channel: 'admin',
+        });
       }
     };
     load();
-  }, []);
+  }, [notify]);
 
   useEffect(() => {
     if (initialLoad.current) {
@@ -245,7 +245,12 @@ export default function AdminLlm() {
     saveTimer.current = setTimeout(async () => {
       const profile = state.profiles[state.provider] ?? defaultProfile(state.provider);
       if (state.enabled && !(profile.model ?? '').trim()) {
-        setFeedback({ status: 'warning', message: 'モデル名が未入力のため保存をスキップしました' });
+        const message = 'モデル名が未入力のため保存をスキップしました';
+        const key = `warning:${message}`;
+        if (lastAutoSaveNotice.current !== key) {
+          notify({ title: message, status: 'warning', channel: 'admin' });
+          lastAutoSaveNotice.current = key;
+        }
         return;
       }
       try {
@@ -259,15 +264,21 @@ export default function AdminLlm() {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.detail || 'auto_save_failed');
         }
-        setFeedback({ status: 'success', message: '自動保存しました' });
+        lastAutoSaveNotice.current = null;
       } catch (error) {
-        setFeedback({ status: 'error', message: '自動保存に失敗しました' });
+        const title = 'LLM設定の自動保存に失敗しました';
+        const description = error instanceof Error ? error.message : undefined;
+        const key = `error:${title}:${description ?? ''}`;
+        if (lastAutoSaveNotice.current !== key) {
+          notify({ title, description, status: 'error', channel: 'admin' });
+          lastAutoSaveNotice.current = key;
+        }
       }
     }, 500);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [state]);
+  }, [state, notify]);
 
   const updateProfile = (provider: ProviderKey, updater: (profile: ProviderProfile) => ProviderProfile) => {
     setState((prev) => {
@@ -288,7 +299,6 @@ export default function AdminLlm() {
 
   const fetchModels = async () => {
     setIsLoadingModels(true);
-    setFeedback(null);
     const trimmedCurrentModel = (currentProfile.model ?? '').trim();
     let nextModel = trimmedCurrentModel;
     let status: FeedbackVariant = 'info';
@@ -363,13 +373,17 @@ export default function AdminLlm() {
     } finally {
       setIsLoadingModels(false);
       if (parts.length > 0) {
-        setFeedback({ status, message: parts.join(' / ') });
+        notify({
+          title: 'モデル一覧の更新結果',
+          description: parts.join(' / '),
+          status,
+          channel: 'admin',
+        });
       }
     }
   };
 
   const handleManualTest = async () => {
-    setFeedback(null);
     try {
       const res = await fetch('/llm/settings/test', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
@@ -479,20 +493,39 @@ export default function AdminLlm() {
         <CardBody>
           <Stack spacing={5}>
             <FormControl isDisabled={!isEnabled} isInvalid={state.enabled && !canSave}>
-              <HStack justify="space-between" align="center" mb={2}>
-                <FormLabel m={0}>モデル名</FormLabel>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={fetchModels}
-                  isLoading={isLoadingModels}
-                  isDisabled={!isEnabled}
-                  leftIcon={<RepeatIcon />}
-                >
-                  使用可能なモデル一覧を取得
-                </Button>
-              </HStack>
+              <Stack
+                direction={{ base: 'column', md: 'row' }}
+                justify="space-between"
+                align={{ base: 'flex-start', md: 'center' }}
+                spacing={3}
+                mb={2}
+              >
+                <FormLabel htmlFor="llm-model-select" m={0}>
+                  モデル名
+                </FormLabel>
+                <Stack direction={{ base: 'column', sm: 'row' }} spacing={2} w={{ base: 'full', md: 'auto' }}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={fetchModels}
+                    isLoading={isLoadingModels}
+                    isDisabled={!isEnabled}
+                    leftIcon={<RepeatIcon />}
+                  >
+                    使用可能なモデル一覧を取得
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleManualTest}
+                    isDisabled={!isEnabled}
+                  >
+                    疎通テストを実行
+                  </Button>
+                </Stack>
+              </Stack>
               <Select
+                id="llm-model-select"
                 value={currentProfile.model ?? ''}
                 placeholder="使用可能なモデル一覧を取得してください"
                 onChange={(e) =>
@@ -559,27 +592,6 @@ export default function AdminLlm() {
                 rows={6}
               />
             </FormControl>
-          </Stack>
-        </CardBody>
-      </Card>
-
-      <Card variant="outline">
-        <CardHeader>
-          <Heading size="md">動作確認</Heading>
-          <Text fontSize="sm" color="gray.600" mt={1}>
-            モデル一覧の取得や疎通テストで接続状態を確認します。
-          </Text>
-        </CardHeader>
-      <CardBody>
-        <Stack spacing={4}>
-          <ButtonGroup>
-            <Button variant="outline" onClick={handleManualTest} isDisabled={!isEnabled}>
-              疎通テストを実行
-            </Button>
-          </ButtonGroup>
-          {feedback && (
-            <StatusBanner status={feedback.status} description={feedback.message} />
-          )}
           </Stack>
         </CardBody>
       </Card>

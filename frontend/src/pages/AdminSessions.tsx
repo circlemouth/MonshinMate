@@ -368,7 +368,16 @@ export default function AdminSessions() {
 
   return (
     <>
-      <AccentOutlineBox p={4} mb={4}>
+      <Box
+        p={4}
+        mb={4}
+        bg="white"
+        _dark={{ bg: 'gray.900' }}
+        borderRadius="lg"
+        borderWidth="1px"
+        borderColor="border.subtle"
+        boxShadow="sm"
+      >
         <VStack align="stretch" spacing={4}>
           <HStack spacing={4} align="flex-end">
             <FormControl>
@@ -411,28 +420,10 @@ export default function AdminSessions() {
               />
             </FormControl>
           </HStack>
-          <HStack justifyContent="flex-end">
-            <Button onClick={handleSearch}>検索</Button>
-            <Button onClick={handleReset}>リセット</Button>
-          </HStack>
-          <Flex align="center" justify="space-between" wrap="wrap" gap={2}>
+          <Flex align="center" justify="space-between" wrap="wrap" gap={3}>
             <HStack spacing={3}>
-              <Tag colorScheme="primary" variant={hasSelection ? 'solid' : 'subtle'}>
-                {hasSelection ? `選択 ${selectedSessionIds.length} 件` : '未選択'}
-              </Tag>
-              {(patientName || dob || startDate || endDate) && (
-                <Text fontSize="sm" color="fg.muted">
-                  フィルタ:
-                  {patientName && ` 氏名:${patientName}`}
-                  {dob && ` 生年月日:${dob}`}
-                  {startDate && ` 開始:${startDate}`}
-                  {endDate && ` 終了:${endDate}`}
-                </Text>
-              )}
-            </HStack>
-            <HStack spacing={2}>
               <Menu isLazy>
-                <MenuButton as={Button} size="sm" leftIcon={<FiFile />} isDisabled={!hasSelection}>
+                <MenuButton as={Button} size="md" leftIcon={<FiFile />} isDisabled={!hasSelection}>
                   一括出力
                 </MenuButton>
                 <MenuList>
@@ -444,7 +435,7 @@ export default function AdminSessions() {
                 </MenuList>
               </Menu>
               <Menu isLazy>
-                <MenuButton as={Button} size="sm" colorScheme="red" isDisabled={!hasSelection}>
+                <MenuButton as={Button} size="md" colorScheme="red" isDisabled={!hasSelection}>
                   一括削除
                 </MenuButton>
                 <MenuList>
@@ -456,135 +447,173 @@ export default function AdminSessions() {
                   </MenuItem>
                 </MenuList>
               </Menu>
+              <Tag colorScheme="primary" variant={hasSelection ? 'solid' : 'subtle'}>
+                {hasSelection ? `選択 ${selectedSessionIds.length} 件` : '未選択'}
+              </Tag>
             </HStack>
+            <Flex align="center" justify="flex-end" wrap="wrap" gap={3}>
+              {(patientName || dob || startDate || endDate) && (
+                <Text fontSize="sm" color="fg.muted">
+                  フィルタ:
+                  {patientName && ` 氏名:${patientName}`}
+                  {dob && ` 生年月日:${dob}`}
+                  {startDate && ` 開始:${startDate}`}
+                  {endDate && ` 終了:${endDate}`}
+                </Text>
+              )}
+              <Button size="md" onClick={handleSearch}>
+                検索
+              </Button>
+              <Button size="md" onClick={handleReset}>
+                リセット
+              </Button>
+            </Flex>
           </Flex>
         </VStack>
-      </AccentOutlineBox>
-      <Table>
-        <Thead>
-          <Tr>
-            <Th width="1%">
-              <Checkbox
-                isChecked={allDisplayedSelected}
-                isIndeterminate={someDisplayedSelected}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  const checked = (e.target as HTMLInputElement).checked;
-                  const displayedSet = new Set(displayedSessionIds);
-                  setSelectedSessionIds((prev) => {
-                    if (checked) {
-                      return Array.from(new Set([...prev, ...displayedSessionIds]));
-                    }
-                    return prev.filter((id) => !displayedSet.has(id));
-                  });
-                }}
-              />
-            </Th>
-            <Th>患者名</Th>
-            <Th>生年月日</Th>
-            <Th>受診種別</Th>
-            <Th>問診日</Th>
-            <Th>操作</Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {paginatedSessions.map((s) => {
-            const selected = selectedSessionIds.includes(s.id);
-            return (
-              <Tr
-                key={s.id}
-                bg={selected ? 'bg.subtle' : undefined}
-                borderLeftWidth={selected ? '4px' : undefined}
-                borderLeftColor={selected ? 'accent.solid' : undefined}
-                _hover={{ bg: 'bg.emphasis' }}
-                onClick={() => openPreview(s.id)}
-                sx={{ cursor: 'pointer' }}
-              >
-                <Td onClick={(e) => e.stopPropagation()}>
+      </Box>
+      <Box
+        bg="white"
+        _dark={{ bg: 'gray.900' }}
+        borderRadius="lg"
+        borderWidth="1px"
+        borderColor="border.subtle"
+        boxShadow="sm"
+        overflow="hidden"
+      >
+        <Box overflowX="auto">
+          <Table>
+            <Thead>
+              <Tr>
+                <Th width="1%">
                   <Checkbox
-                    isChecked={selectedSessionIds.includes(s.id)}
-                    onChange={(e) => toggleSelect(s.id, (e.target as HTMLInputElement).checked)}
+                    isChecked={allDisplayedSelected}
+                    isIndeterminate={someDisplayedSelected}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const checked = (e.target as HTMLInputElement).checked;
+                      const displayedSet = new Set(displayedSessionIds);
+                      setSelectedSessionIds((prev) => {
+                        if (checked) {
+                          return Array.from(new Set([...prev, ...displayedSessionIds]));
+                        }
+                        return prev.filter((id) => !displayedSet.has(id));
+                      });
+                    }}
                   />
-                </Td>
-                <Td>{s.patient_name}</Td>
-                <Td>{s.dob}</Td>
-                <Td>{visitTypeLabel(s.visit_type)}</Td>
-                <Td>{formatDate(s.finalized_at)}</Td>
-                <Td onClick={(e) => e.stopPropagation()}>
-                  <HStack spacing={3}>
-                    <Menu isLazy>
-                      <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
-                        <MenuButton
-                          as={IconButton}
-                          size="md"
-                          variant="outline"
-                          icon={<FiDownload />}
-                          aria-label="問診結果を出力"
-                          minW="44px"
-                          minH="44px"
-                        />
-                      </Tooltip>
-                      <MenuList>
-                        <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
-                        <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
-                        <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
-                      </MenuList>
-                    </Menu>
-                    <Tooltip label="削除" placement="bottom" hasArrow openDelay={150}>
-                      <IconButton
-                        size="md"
-                        variant="outline"
-                        colorScheme="red"
-                        icon={<FiTrash />}
-                        aria-label="問診結果を削除"
-                        minW="44px"
-                        minH="44px"
-                        onClick={() => setConfirmState({ type: 'row', id: s.id })}
-                      />
-                    </Tooltip>
-                  </HStack>
-                </Td>
+                </Th>
+                <Th>患者名</Th>
+                <Th>生年月日</Th>
+                <Th>受診種別</Th>
+                <Th>問診日</Th>
+                <Th>操作</Th>
               </Tr>
-            );
-          })}
-          {sessions.length === 0 && (
-            <Tr>
-              <Td colSpan={6}>
-                <Text fontSize="sm" color="fg.muted" textAlign="center">
-                  条件に一致する問診データがありません。
-                </Text>
-              </Td>
-            </Tr>
-          )}
-        </Tbody>
-      </Table>
+            </Thead>
+            <Tbody>
+              {paginatedSessions.map((s) => {
+                const selected = selectedSessionIds.includes(s.id);
+                return (
+                  <Tr
+                    key={s.id}
+                    bg={selected ? 'bg.subtle' : undefined}
+                    borderLeftWidth={selected ? '4px' : undefined}
+                    borderLeftColor={selected ? 'accent.solid' : undefined}
+                    _hover={{ bg: 'bg.emphasis' }}
+                    onClick={() => openPreview(s.id)}
+                    sx={{ cursor: 'pointer' }}
+                  >
+                    <Td onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        isChecked={selectedSessionIds.includes(s.id)}
+                        onChange={(e) => toggleSelect(s.id, (e.target as HTMLInputElement).checked)}
+                      />
+                    </Td>
+                    <Td>{s.patient_name}</Td>
+                    <Td>{s.dob}</Td>
+                    <Td>{visitTypeLabel(s.visit_type)}</Td>
+                    <Td>{formatDate(s.finalized_at)}</Td>
+                    <Td onClick={(e) => e.stopPropagation()}>
+                      <HStack spacing={3}>
+                        <Menu isLazy>
+                          <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
+                            <MenuButton
+                              as={IconButton}
+                              size="md"
+                              variant="outline"
+                              icon={<FiDownload />}
+                              aria-label="問診結果を出力"
+                              minW="44px"
+                              minH="44px"
+                            />
+                          </Tooltip>
+                          <MenuList>
+                            <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>
+                              PDF
+                            </MenuItem>
+                            <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
+                            <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>
+                              CSV
+                            </MenuItem>
+                          </MenuList>
+                        </Menu>
+                        <Tooltip label="削除" placement="bottom" hasArrow openDelay={150}>
+                          <IconButton
+                            size="md"
+                            variant="outline"
+                            colorScheme="red"
+                            icon={<FiTrash />}
+                            aria-label="問診結果を削除"
+                            minW="44px"
+                            minH="44px"
+                            onClick={() => setConfirmState({ type: 'row', id: s.id })}
+                          />
+                        </Tooltip>
+                      </HStack>
+                    </Td>
+                  </Tr>
+                );
+              })}
+              {sessions.length === 0 && (
+                <Tr>
+                  <Td colSpan={6}>
+                    <Text fontSize="sm" color="fg.muted" textAlign="center">
+                      条件に一致する問診データがありません。
+                    </Text>
+                  </Td>
+                </Tr>
+              )}
+            </Tbody>
+          </Table>
+        </Box>
 
-      <HStack justifyContent="space-between" align="center" mt={3} mb={6}>
-        <Text fontSize="sm" color="fg.muted">
-          全体 {sessions.length} 件中 選択 {selectedSessionIds.length} 件
-        </Text>
-        <HStack spacing={3}>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
-            isDisabled={page === 0}
-          >
-            前のデータ
-          </Button>
+        <HStack justifyContent="space-between" align="center" px={6} py={4} borderTopWidth="1px" borderColor="border.subtle">
           <Text fontSize="sm" color="fg.muted">
-            ページ {page + 1} / {totalPages}
+            全体 {sessions.length} 件中 選択 {selectedSessionIds.length} 件
           </Text>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
-            isDisabled={page >= totalPages - 1}
-          >
-            次のデータ
-          </Button>
+          <HStack spacing={3}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+              isDisabled={page === 0}
+            >
+              前のデータ
+            </Button>
+            <Text fontSize="sm" color="fg.muted">
+              ページ {page + 1} / {totalPages}
+            </Text>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
+              isDisabled={page >= totalPages - 1}
+            >
+              次のデータ
+            </Button>
+          </HStack>
         </HStack>
-      </HStack>
+      </Box>
+
+      <Box h={6} />
 
       <Modal isOpen={preview.isOpen} onClose={preview.onClose} size="4xl" scrollBehavior="inside">
         <ModalOverlay />

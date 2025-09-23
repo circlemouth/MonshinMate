@@ -668,3 +668,35 @@
 2025-09-23 20:11:22,023 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-09-23 20:11:27,159 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-09-23 20:11:56,550 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-09-23 20:19:56,590 INFO admin_login_success
+2025-09-23 20:19:57,012 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-23 20:20:00,293 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-23 20:20:00,579 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:25:42,317 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-09-24 05:25:44,472 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:25:44,863 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:25:49,247 INFO admin_login_success
+2025-09-24 05:25:49,687 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:37:54,271 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:37:54,601 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:38:00,698 INFO admin_login_failed
+2025-09-24 05:38:03,735 INFO admin_login_success
+2025-09-24 05:38:04,105 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:38:14,997 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:38:15,313 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:38:20,303 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:38:20,613 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:46:31,572 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:46:31,889 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:47:58,271 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:47:58,588 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:54:36,941 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 05:54:37,239 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:12:58,841 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:12:59,162 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:13:01,815 INFO admin_login_success
+2025-09-24 06:13:02,215 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:17:09,571 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:17:09,872 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-24 06:17:13,157 INFO admin_login_success
+2025-09-24 06:17:13,537 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off

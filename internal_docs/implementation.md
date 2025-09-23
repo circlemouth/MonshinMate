@@ -138,7 +138,7 @@
    - [x] `/done`：完了メッセージと要約（印刷/コピー任意）
 3) **管理向け**
   - [x] `/admin/login`：管理者ログイン
-  - [x] `/admin/main`：メインダッシュボード（再診10件、システム情報サマリーバー＋詳細アコーディオン〈2025-09-22 改修〉）
+  - [x] `/admin/main`：メインダッシュボード（問診最新10件〈初診/再診〉、システム情報サマリーバー＋詳細アコーディオン〈2025-09-22 改修〉）
  - [x] `/admin/templates`：一覧/新規/編集/複製/削除
   - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否や対象性別を設定する表とプレビュー
   - [x] `/admin/sessions`：問診結果の一覧
@@ -282,7 +282,7 @@
 
 ## 14. メインダッシュボード再整備（2025-08-30）
 - [x] `/admin` を `/admin/main` へリダイレクトし、メインダッシュボードを再導入。
-- [x] ログイン後の遷移先を `/admin/main` に変更（再診最新10件＋システム状態カードを表示）。
+- [x] ログイン後の遷移先を `/admin/main` に変更（問診最新10件＋システム状態カードを表示）。
 
 ## 15. テンプレート管理UIの可読性改善（2025-08-22）
 - [x] テンプレート管理画面の表を `TableContainer` でラップし、横スクロールを許可。
@@ -966,3 +966,8 @@
 - [x] 変更（バックエンド）: `backend/app/main.py` に画像URL正規化ヘルパーを追加し、テンプレートのエクスポート時に絶対パスやクエリ付きURLでも `/questionnaire-item-images/files/<filename>` へ揃えて添付画像を含めるよう修正。インポート時も同じロジックで復元。
 - [x] テスト追加: `backend/tests/test_export_import.py::test_questionnaire_export_normalizes_absolute_image_url` を追加し、絶対URLを含むテンプレートが画像ごと再現できることを検証。
 - [x] バックエンド自動テスト実行: `../venv/bin/python -m pytest tests/test_export_import.py`（3件成功）。
+
+- [x] 外観設定の「表示範囲を調整」操作をモーダル上で行うように変更し、通常表示エリアではプレビューのみを表示。編集操作はモーダル内に集約してドラッグと数値入力を常時有効化。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx`。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`, `frontend/dist/docs/admin_user_manual.md`。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`。
