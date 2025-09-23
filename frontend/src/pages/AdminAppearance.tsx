@@ -296,12 +296,39 @@ export default function AdminAppearance() {
   const uploadLogo = async (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    const r = await fetch('/system-logo', { method: 'POST', body: fd });
-    if (!r.ok) return;
-    const d = await r.json();
-    const url = d.url as string;
-    setLogoUrl(url);
-    await fetch('/system/logo', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    const defaultCrop = { x: 0, y: 0, w: 1, h: 1 };
+    try {
+      const r = await fetch('/system-logo', { method: 'POST', body: fd });
+      if (!r.ok) {
+        let detail: string | undefined;
+        try {
+          const payload = await r.json();
+          detail = typeof payload?.detail === 'string' ? payload.detail : undefined;
+        } catch {
+          detail = undefined;
+        }
+        throw new Error(detail || 'ロゴ画像のアップロードに失敗しました。別の画像でお試しください。');
+      }
+      const d = await r.json();
+      const url = d.url as string;
+      setLogoUrl(url);
+      setCrop(defaultCrop);
+      await fetch('/system/logo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, crop: defaultCrop }),
+      });
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: 'ロゴのアップロードに失敗しました',
+        description: error?.message ?? '時間をおいて再度お試しください。',
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    }
   };
 
   return (
@@ -475,6 +502,7 @@ export default function AdminAppearance() {
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) void uploadLogo(f);
+                    e.target.value = '';
                   }}
                 />
                 {logoUrl ? (
