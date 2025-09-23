@@ -225,10 +225,19 @@ def _collect_image_names_from_templates(templates: list[dict[str, Any]]) -> set[
 
 
 def _sanitize_image_filename(name: str) -> str:
-    sanitized = Path(name).name
-    if not sanitized or not IMAGE_FILENAME_PATTERN.fullmatch(sanitized):
-        raise ValueError("invalid image filename")
-    return sanitized
+    sanitized = Path(name or "").name
+    if sanitized and IMAGE_FILENAME_PATTERN.fullmatch(sanitized):
+        return sanitized
+
+    stem = Path(sanitized or "image").stem or "image"
+    suffix = Path(sanitized or "image").suffix.lower()
+    if not suffix or not re.fullmatch(r"\.[a-z0-9]{1,8}", suffix):
+        suffix = ".png"
+    stem_ascii = re.sub(r"[^A-Za-z0-9_-]", "_", stem)[:32] or "image"
+    fallback = f"{stem_ascii}_{uuid4().hex[:8]}{suffix}"
+    if not IMAGE_FILENAME_PATTERN.fullmatch(fallback):
+        fallback = f"image_{uuid4().hex[:8]}{suffix}"
+    return fallback
 
 
 def _load_image_payloads(image_names: set[str]) -> dict[str, str]:

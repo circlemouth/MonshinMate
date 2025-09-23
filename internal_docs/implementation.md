@@ -219,6 +219,8 @@
 - [fix] 管理画面テンプレ設定のLLM有効判定を調整（疎通OKのみで有効化）。
   - これまで base_url が未設定だと UI のトグルが無効化されていたが、スタブ（ローカル）運用では base_url なしでも `/llm/settings/test` が OK を返すため、UI 側の可否判定を疎通テスト結果のみに変更。
   - 対象: `frontend/src/pages/AdminTemplates.tsx` の `llmAvailable` 判定。
+- [fix] 外観設定のロゴアップロードでファイル名を自動サニタイズし、失敗時のトースト表示を追加。日本語や空白を含むファイルでも保存でき、アップロード後にクロップUIが確実に表示されるよう改善。
+  - 対象: `backend/app/main.py`, `frontend/src/pages/AdminAppearance.tsx`
 3) ステージングでUAT→本番ロールアウト
 
 ---
