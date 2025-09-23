@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AlertIcon,
@@ -28,7 +28,6 @@ import {
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { refreshLlmStatus } from '../utils/llmStatus';
-import { Combobox } from '../components/Combobox';
 
 type FeedbackVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -195,7 +194,6 @@ export default function AdminLlm() {
   });
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const [modelDropdownSignal, setModelDropdownSignal] = useState(0);
   const toast = useToast();
   const initialLoad = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -203,6 +201,11 @@ export default function AdminLlm() {
   const activeProvider = state.provider;
   const currentProfile = state.profiles[activeProvider] ?? defaultProfile(activeProvider);
   const models = modelOptions[activeProvider] ?? [];
+  const availableModels = useMemo(() => {
+    const trimmed = (currentProfile.model ?? '').trim();
+    const merged = trimmed ? [trimmed, ...models] : models;
+    return Array.from(new Set(merged));
+  }, [currentProfile.model, models]);
   const hasModel = (currentProfile.model ?? '').trim().length > 0;
   const canSave = !state.enabled || hasModel;
   const isEnabled = state.enabled;
@@ -215,6 +218,18 @@ export default function AdminLlm() {
         const data = await res.json();
         const parsed = parseSettingsResponse(data);
         setState(parsed);
+        setModelOptions(() => {
+          const next: Record<ProviderKey, string[]> = {
+            ollama: [],
+            lm_studio: [],
+            openai: [],
+          };
+          for (const key of PROVIDER_KEYS) {
+            const modelName = parsed.profiles[key]?.model?.trim();
+            next[key] = modelName ? [modelName] : [];
+          }
+          return next;
+        });
       } catch (error) {
         setFeedback({ status: 'error', message: 'LLM設定の取得に失敗しました' });
       }
@@ -275,7 +290,8 @@ export default function AdminLlm() {
   const fetchModels = async () => {
     setIsLoadingModels(true);
     setFeedback(null);
-    let nextModel = currentProfile.model;
+    const trimmedCurrentModel = (currentProfile.model ?? '').trim();
+    let nextModel = trimmedCurrentModel;
     let status: FeedbackVariant = 'info';
     const parts: string[] = [];
     try {
@@ -291,18 +307,21 @@ export default function AdminLlm() {
       if (res.ok) {
         const data: string[] = await res.json();
         const unique = Array.from(new Set((data || []).filter((m) => typeof m === 'string' && m.trim())));
-        setModelOptions((prev) => ({ ...prev, [activeProvider]: unique }));
         if (unique.length > 0) {
+          setModelOptions((prev) => ({ ...prev, [activeProvider]: unique }));
           parts.push(`${unique.length}件のモデルを読み込みました`);
           status = 'success';
-          setModelDropdownSignal((prev) => prev + 1);
-          if (!currentProfile.model) {
+          if (!trimmedCurrentModel || !unique.includes(trimmedCurrentModel)) {
             nextModel = unique[0];
             updateProfile(activeProvider, (profile) => ({ ...profile, model: unique[0] }));
           }
         } else {
           parts.push('モデルが見つかりません');
           status = 'warning';
+          setModelOptions((prev) => ({
+            ...prev,
+            [activeProvider]: trimmedCurrentModel ? [trimmedCurrentModel] : [],
+          }));
         }
       } else {
         parts.push('モデルの読み込みに失敗しました');
@@ -471,32 +490,29 @@ export default function AdminLlm() {
                   使用可能なモデル一覧を取得
                 </Button>
               </HStack>
-              <Combobox
-                value={currentProfile.model}
-                options={models}
-                placeholder={
-                  models.length === 0
-                    ? 'モデル名を入力してください'
-                    : 'モデル名を入力するか候補から選択してください'
+              <Select
+                value={currentProfile.model ?? ''}
+                placeholder="使用可能なモデル一覧を取得してください"
+                onChange={(e) =>
+                  updateProfile(activeProvider, (profile) => ({ ...profile, model: e.target.value }))
                 }
-                isDisabled={!isEnabled}
-                onChange={(next) =>
-                  updateProfile(activeProvider, (profile) => ({ ...profile, model: next }))
-                }
-                emptyMessage="一致する候補がありません"
-                openSignal={modelDropdownSignal}
-              />
+                isDisabled={!isEnabled || availableModels.length === 0}
+              >
+                {availableModels.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </Select>
               {isLoadingModels && (
                 <HStack mt={2} color="gray.600" fontSize="sm">
                   <Spinner size="sm" />
                   <Text>モデル一覧を取得中です…</Text>
                 </HStack>
               )}
-              {!isLoadingModels && models.length > 0 && (
-                <FormHelperText>
-                  右側の▼ボタン、または入力欄で↓キーを押すと候補一覧を表示できます。
-                </FormHelperText>
-              )}
+              <FormHelperText>
+                「使用可能なモデル一覧を取得」を押すと候補が更新されます。保存済みのモデル名は一覧取得前でも表示されます。
+              </FormHelperText>
               {!canSave && (
                 <Text color="red.500" fontSize="sm" mt={2}>
                   LLM有効時はモデル名が必須です
