@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast, PinInput, PinInputField, HStack, Divider } from '@chakra-ui/react';
+import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, PinInput, PinInputField, HStack, Divider } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotificationContext';
+import { useDialog } from '../contexts/DialogContext';
 
 export default function AdminPasswordReset() {
   const [step, setStep] = useState('request'); // 'request' | 'confirm'
@@ -11,8 +13,9 @@ export default function AdminPasswordReset() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-  const toast = useToast();
   const { checkAuthStatus, isTotpEnabled, emergencyResetAvailable, setShowTotpSetup } = useAuth();
+  const { notify } = useNotify();
+  const { confirm } = useDialog();
 
   useEffect(() => {
     // 認証状態の確認で全画面ローディングが発生すると本画面が再マウントされ
@@ -40,7 +43,7 @@ export default function AdminPasswordReset() {
       if (!res.ok) {
         throw new Error(data.detail || 'パスワードの更新に失敗しました。');
       }
-      toast({ title: 'パスワードがリセットされました。', status: 'success' });
+      notify({ title: 'パスワードがリセットされました。', status: 'success', channel: 'admin' });
       navigate('/admin/login');
     } catch (e: any) {
       setError(e.message);
@@ -150,25 +153,27 @@ export default function AdminPasswordReset() {
       if (!res.ok) {
         throw new Error(data.detail || 'パスワードの更新に失敗しました。');
       }
-      toast({
+      notify({
         title: 'パスワードがリセットされました。',
         status: 'success',
-        duration: 5000,
-        isClosable: true,
+        channel: 'admin',
       });
       await checkAuthStatus(true);
       if (!isTotpEnabled) {
-        const enableTotp = window.confirm(
-          'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
-        );
+        const enableTotp = await confirm({
+          title: 'Authenticator を有効にしますか？',
+          description: '有効にしないとパスワードのリセットができません。',
+          confirmText: '有効にする',
+          cancelText: 'あとで',
+        });
         if (enableTotp) {
           setShowTotpSetup(true);
         } else {
-          toast({
+          notify({
             title: 'Authenticator を後から設定できますが、未設定のままではパスワードのリセットはできません。',
             status: 'warning',
+            channel: 'admin',
             duration: 7000,
-            isClosable: true,
           });
           navigate('/admin/login');
         }

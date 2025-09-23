@@ -27,6 +27,7 @@ import { refreshLlmStatus } from '../utils/llmStatus';
 import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
 import ImageAnnotator from '../components/ImageAnnotator';
+import { useNotify } from '../contexts/NotificationContext';
 // removed: postal-code address lookup UI
 import {
   mergePersonalInfoValue,
@@ -83,6 +84,7 @@ export default function QuestionnaireForm() {
   const dob = sessionStorage.getItem('dob') || '';
   const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
   const navigate = useNavigate();
+  const { notify } = useNotify();
   // removed: toast hook (no address lookup)
   // removed: postal-code lookup state
 
@@ -173,7 +175,16 @@ export default function QuestionnaireForm() {
     } catch {
       sessionStorage.setItem('answers', JSON.stringify(ans));
       postWithRetry(`/sessions/${sessionId}/finalize`, {});
-      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
+      notify({
+        title: 'ネットワークエラーが発生しました。',
+        description: '接続後に再度お試しください。',
+        status: 'error',
+        channel: 'patient',
+        actionLabel: '再試行',
+        onAction: () => {
+          void finalize(ans);
+        },
+      });
     }
     refreshLlmStatus().catch(() => {});
     navigate('/done');

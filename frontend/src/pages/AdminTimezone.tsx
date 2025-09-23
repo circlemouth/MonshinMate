@@ -10,12 +10,12 @@ import {
   CardBody,
   CardFooter,
   CardHeader,
-  useToast,
 } from '@chakra-ui/react';
 import { useTimezone } from '../contexts/TimezoneContext';
 import AutoSaveStatusText from '../components/AutoSaveStatusText';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { readErrorMessage } from '../utils/http';
+import { useNotify } from '../contexts/NotificationContext';
 
 function Section({
   title,
@@ -53,20 +53,19 @@ function Section({
 export default function AdminTimezone() {
   const { timezone, setTimezone } = useTimezone();
   const [selectedTimezone, setSelectedTimezone] = useState<string>(timezone);
-  const toast = useToast();
+  const { notify } = useNotify();
 
   const showErrorToast = useCallback(
     (title: string, description?: string) => {
-      toast({
+      notify({
         title,
         description,
         status: 'error',
+        channel: 'admin',
         duration: 4000,
-        isClosable: true,
-        position: 'top-right',
       });
     },
-    [toast]
+    [notify]
   );
 
   const saveTimezone = useCallback(

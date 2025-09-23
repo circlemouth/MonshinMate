@@ -28,7 +28,6 @@ import {
   Checkbox,
   Flex,
   Spacer,
-  useToast,
   Menu,
   MenuButton,
   MenuList,
@@ -44,6 +43,7 @@ import {
 import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
+import { useNotify } from '../contexts/NotificationContext';
 
 interface SessionSummary {
   id: string;
@@ -62,7 +62,7 @@ export default function AdminSessions() {
   const [loading, setLoading] = useState(false);
   const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
   const preview = useDisclosure();
-  const toast = useToast();
+  const { notify } = useNotify();
   const { formatDateTime, formatDate } = useTimezone();
 
   const [patientName, setPatientName] = useState('');
@@ -174,21 +174,19 @@ export default function AdminSessions() {
       setCopyingMarkdownTarget(key);
       const text = await fetchSessionMarkdown(id);
       await copyTextToClipboard(text);
-      toast({
+      notify({
         title: 'Markdownをコピーしました',
         status: 'success',
+        channel: 'admin',
         duration: 3000,
-        isClosable: true,
-        position: 'top-right',
       });
     } catch (err) {
       console.error(err);
-      toast({
+      notify({
         title: 'Markdownのコピーに失敗しました',
         status: 'error',
+        channel: 'admin',
         duration: 4000,
-        isClosable: true,
-        position: 'top-right',
       });
     } finally {
       setCopyingMarkdownTarget(null);
@@ -218,21 +216,19 @@ export default function AdminSessions() {
         );
         const combined = sections.join('');
         await copyTextToClipboard(combined);
-        toast({
+        notify({
           title: `Markdownを${ids.length}件コピーしました`,
           status: 'success',
+          channel: 'admin',
           duration: 3000,
-          isClosable: true,
-          position: 'top-right',
         });
       } catch (err) {
         console.error(err);
-        toast({
+        notify({
           title: 'Markdownの一括コピーに失敗しました',
           status: 'error',
+          channel: 'admin',
           duration: 4000,
-          isClosable: true,
-          position: 'top-right',
         });
       } finally {
         setCopyingMarkdownTarget(null);
@@ -312,11 +308,21 @@ export default function AdminSessions() {
       if (!res.ok) throw new Error('failed');
       const body = await res.json().catch(() => ({} as any));
       const deleted = body?.deleted ?? displayedSessionIds.length;
-      toast({ title: `${deleted}件削除しました`, status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      notify({
+        title: `${deleted}件削除しました`,
+        status: 'success',
+        channel: 'admin',
+        duration: 3000,
+      });
       reloadWithCurrentFilters();
     } catch (err) {
       console.error(err);
-      toast({ title: '一括削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+      notify({
+        title: '一括削除に失敗しました',
+        status: 'error',
+        channel: 'admin',
+        duration: 4000,
+      });
     }
   };
 
@@ -329,12 +335,22 @@ export default function AdminSessions() {
       if (!res.ok) throw new Error('failed');
       const body = await res.json().catch(() => ({} as any));
       const deleted = body?.deleted ?? ids.length;
-      toast({ title: `${deleted}件削除しました`, status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      notify({
+        title: `${deleted}件削除しました`,
+        status: 'success',
+        channel: 'admin',
+        duration: 3000,
+      });
       setSelectedSessionIds([]);
       reloadWithCurrentFilters();
     } catch (err) {
       console.error(err);
-      toast({ title: '一括削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+      notify({
+        title: '一括削除に失敗しました',
+        status: 'error',
+        channel: 'admin',
+        duration: 4000,
+      });
     }
   };
 
@@ -342,11 +358,11 @@ export default function AdminSessions() {
     try {
       const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('failed');
-      toast({ title: '削除しました', status: 'success', duration: 3000, isClosable: true, position: 'top-right' });
+      notify({ title: '削除しました', status: 'success', channel: 'admin', duration: 3000 });
       reloadWithCurrentFilters();
     } catch (err) {
       console.error(err);
-      toast({ title: '削除に失敗しました', status: 'error', duration: 4000, isClosable: true, position: 'top-right' });
+      notify({ title: '削除に失敗しました', status: 'error', channel: 'admin', duration: 4000 });
     }
   };
 
