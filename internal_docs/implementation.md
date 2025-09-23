@@ -930,7 +930,7 @@
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`
 
 ## 116. LLM設定画面の再構成とプロバイダ別設定保持（2025-09-22）
-- [x] 管理画面の LLM 設定 UI をカード分割＋グレートーンベースで再構成し、ベースURL・モデル名などをプロバイダ単位で保持しつつ LLM有効化スイッチはプロバイダ切替と独立させるよう `frontend/src/pages/AdminLlm.tsx` を全面改修。モデル名入力はシンプルなテキスト入力＋候補補完に統一し、モデル一覧取得ボタンを同セクションへ移動。
+- [x] 管理画面の LLM 設定 UI をカード分割＋グレートーンベースで再構成し、ベースURL・モデル名などをプロバイダ単位で保持しつつ LLM有効化スイッチはプロバイダ切替と独立させるよう `frontend/src/pages/AdminLlm.tsx` を全面改修。モデル名は API から取得した候補一覧のみを選択可能とし、既存の設定値は一覧未取得でも表示されるように保持。モデル一覧取得ボタンを同セクションへ移動。
 - [x] `backend/app/llm_gateway.py` と `backend/app/main.py` に `provider_profiles` を追加し、選択プロバイダごとの設定を永続化／復元できるよう API を拡張。
 - [x] `backend/tests/test_api.py::test_llm_settings_get_and_update` を更新し、プロバイダ切り替え時に個別設定が保持されることを確認。
 - [ ] バックエンド自動テスト実行: `cd backend && pytest -q`（`couchdb` モジュール未導入のため失敗）（`couchdb` モジュール未導入のため失敗）
