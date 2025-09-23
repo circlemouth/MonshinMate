@@ -221,6 +221,8 @@
   - 対象: `frontend/src/pages/AdminTemplates.tsx` の `llmAvailable` 判定。
 - [fix] 外観設定のロゴアップロードでファイル名を自動サニタイズし、失敗時のトースト表示を追加。日本語や空白を含むファイルでも保存でき、アップロード後にクロップUIが確実に表示されるよう改善。
   - 対象: `backend/app/main.py`, `frontend/src/pages/AdminAppearance.tsx`
+- [ui] ヘッダーのシステム表示名が長い場合でも一行表示を維持できるよう自動フォント縮小ロジックを追加。
+  - 対象: `frontend/src/App.tsx`, `frontend/src/hooks/useAutoFontSize.ts`
 3) ステージングでUAT→本番ロールアウト
 
 ---
