@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   VStack,
   Stack,
@@ -29,7 +29,10 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { AddIcon, CheckIcon } from '@chakra-ui/icons';
+import AutoSaveStatusText from '../components/AutoSaveStatusText';
 import { useThemeColor } from '../contexts/ThemeColorContext';
+import { useAutoSave } from '../hooks/useAutoSave';
+import { readErrorMessage } from '../utils/http';
 
 const colorPresets = [
   { value: '#D32F2F', label: 'レッド' },
@@ -47,6 +50,7 @@ const colorPresets = [
 const presetValues = colorPresets.map((preset) => preset.value);
 
 const defaultCustomColor = '#000000';
+const defaultCropState = { x: 0, y: 0, w: 1, h: 1 } as const;
 
 function getContrastingIconColor(hex: string): 'black' | 'white' {
   if (!hex || hex.length < 7) return 'black';
@@ -106,51 +110,357 @@ export default function AdminAppearance() {
 
   // Common states
   const toast = useToast();
-  const [status, setStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [loading, setLoading] = useState(false);
+  const showErrorToast = useCallback(
+    (title: string, description?: string) => {
+      toast({
+        title,
+        description,
+        status: 'error',
+        duration: 4000,
+        isClosable: true,
+        position: 'top-right',
+      });
+    },
+    [toast]
+  );
+
+  type LogoConfig = { url: string | null; crop: { x: number; y: number; w: number; h: number } };
 
   // Logo states
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [crop, setCrop] = useState<{ x: number; y: number; w: number; h: number }>({ x: 0, y: 0, w: 1, h: 1 });
+  const [crop, setCrop] = useState<{ x: number; y: number; w: number; h: number }>(() => ({ ...defaultCropState }));
   type DragMode = 'none' | 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
   const [dragMode, setDragMode] = useState<DragMode>('none');
   const dragStartRef = useRef<{ px: number; py: number; crop: { x: number; y: number; w: number; h: number } } | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const [logoLoaded, setLogoLoaded] = useState(false);
+
+  const saveDisplayName = useCallback(
+    async (current: string, signal: AbortSignal) => {
+      const payload = { display_name: current || 'Monshinクリニック' };
+      const res = await fetch('/system/display-name', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, '表示名の保存に失敗しました'));
+      }
+      const data = await res.json().catch(() => ({}));
+      const savedName = data.display_name || payload.display_name;
+      setName(savedName);
+      try {
+        window.dispatchEvent(new CustomEvent('systemDisplayNameUpdated', { detail: savedName }));
+      } catch {
+        // ignore event dispatch errors
+      }
+      return savedName;
+    },
+    []
+  );
+
+  const saveCompletion = useCallback(
+    async (current: string, signal: AbortSignal) => {
+      const payload = { message: current || 'ご回答ありがとうございました。' };
+      const res = await fetch('/system/completion-message', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, '完了メッセージの保存に失敗しました'));
+      }
+      const data = await res.json().catch(() => ({}));
+      const savedMessage = data.message || payload.message;
+      setCompletionMessage(savedMessage);
+      return savedMessage;
+    },
+    []
+  );
+
+  const saveEntry = useCallback(
+    async (current: string, signal: AbortSignal) => {
+      const payload = { message: current || '不明点があれば受付にお知らせください' };
+      const res = await fetch('/system/entry-message', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, '問診開始画面メッセージの保存に失敗しました'));
+      }
+      const data = await res.json().catch(() => ({}));
+      const savedMessage = data.message || payload.message;
+      setEntryMessage(savedMessage);
+      return savedMessage;
+    },
+    []
+  );
+
+  const saveThemeColor = useCallback(
+    async (currentColor: string, signal: AbortSignal) => {
+      const payload = { color: currentColor || '#1976D2' };
+      const res = await fetch('/system/theme-color', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'テーマカラーの保存に失敗しました'));
+      }
+      const data = await res.json().catch(() => ({}));
+      const savedColor = data.color || payload.color;
+      setSelectedColor(savedColor);
+      const preset = presetValues.includes(savedColor);
+      setIsCustom(!preset);
+      if (!preset) {
+        setCustomColor(savedColor);
+      }
+      setColor(savedColor);
+      return savedColor;
+    },
+    [setColor]
+  );
+
+  const logoConfig = useMemo<LogoConfig>(() => ({ url: logoUrl, crop }), [logoUrl, crop]);
+
+  const saveLogoConfig = useCallback(
+    async (config: LogoConfig, signal: AbortSignal) => {
+      if (!config.url) {
+        return config;
+      }
+      const res = await fetch('/system/logo', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: config.url, crop: config.crop }),
+        signal,
+      });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'ロゴの保存に失敗しました'));
+      }
+      try {
+        window.dispatchEvent(new CustomEvent('systemLogoUpdated', { detail: config }));
+      } catch {
+        // ignore errors when dispatching events
+      }
+      return config;
+    },
+    []
+  );
+
+  const handleNameError = useCallback(
+    (_: unknown, message: string) => {
+      showErrorToast('表示名の保存に失敗しました', message !== '表示名の保存に失敗しました' ? message : undefined);
+    },
+    [showErrorToast]
+  );
+  const handleCompletionError = useCallback(
+    (_: unknown, message: string) => {
+      showErrorToast('完了メッセージの保存に失敗しました', message !== '完了メッセージの保存に失敗しました' ? message : undefined);
+    },
+    [showErrorToast]
+  );
+  const handleEntryError = useCallback(
+    (_: unknown, message: string) => {
+      showErrorToast('問診開始画面メッセージの保存に失敗しました', message !== '問診開始画面メッセージの保存に失敗しました' ? message : undefined);
+    },
+    [showErrorToast]
+  );
+  const handleColorError = useCallback(
+    (_: unknown, message: string) => {
+      showErrorToast('テーマカラーの保存に失敗しました', message !== 'テーマカラーの保存に失敗しました' ? message : undefined);
+    },
+    [showErrorToast]
+  );
+  const handleLogoError = useCallback(
+    (_: unknown, message: string) => {
+      showErrorToast('ロゴの保存に失敗しました', message !== 'ロゴの保存に失敗しました' ? message : undefined);
+    },
+    [showErrorToast]
+  );
+
+  const {
+    status: nameStatus,
+    errorMessage: nameError,
+    markSynced: markNameSynced,
+  } = useAutoSave<string>({
+    value: name,
+    save: saveDisplayName,
+    delay: 600,
+    onError: handleNameError,
+  });
+  const {
+    status: completionStatus,
+    errorMessage: completionError,
+    markSynced: markCompletionSynced,
+  } = useAutoSave<string>({
+    value: completionMessage,
+    save: saveCompletion,
+    delay: 600,
+    onError: handleCompletionError,
+  });
+  const {
+    status: entryStatus,
+    errorMessage: entryError,
+    markSynced: markEntrySynced,
+  } = useAutoSave<string>({
+    value: entryMessage,
+    save: saveEntry,
+    delay: 600,
+    onError: handleEntryError,
+  });
+  const {
+    status: colorStatus,
+    errorMessage: colorError,
+    markSynced: markColorSynced,
+  } = useAutoSave<string>({
+    value: selectedColor,
+    save: saveThemeColor,
+    delay: 400,
+    onError: handleColorError,
+  });
+  const {
+    status: logoStatus,
+    errorMessage: logoError,
+    markSynced: markLogoSynced,
+  } = useAutoSave<LogoConfig>({
+    value: logoConfig,
+    enabled: logoLoaded && !!logoUrl,
+    delay: 800,
+    compare: (next, prev) => {
+      if (!prev) return false;
+      return (
+        next.url === prev.url &&
+        next.crop.x === prev.crop.x &&
+        next.crop.y === prev.crop.y &&
+        next.crop.w === prev.crop.w &&
+        next.crop.h === prev.crop.h
+      );
+    },
+    save: saveLogoConfig,
+    onError: handleLogoError,
+  });
 
   useEffect(() => {
-    // 表示名・完了メッセージを取得
-    fetch('/system/display-name')
-      .then((r) => r.json())
-      .then((d) => setName(d.display_name || 'Monshinクリニック'));
-    fetch('/system/completion-message')
-      .then((r) => r.json())
-      .then((d) => setCompletionMessage(d.message || 'ご回答ありがとうございました。'));
-    fetch('/system/entry-message') // New fetch
-      .then((r) => r.json())
-      .then((d) => setEntryMessage(d.message || '不明点があれば受付にお知らせください'));
+    let canceled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/system/display-name');
+        if (canceled) return;
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const initial = data.display_name || 'Monshinクリニック';
+          setName(initial);
+          markNameSynced(initial);
+        } else {
+          throw new Error();
+        }
+      } catch {
+        if (!canceled) {
+          const fallback = 'Monshinクリニック';
+          setName(fallback);
+          markNameSynced(fallback);
+        }
+      }
 
-    // テーマカラーを初期化
-    const isPreset = presetValues.includes(color);
-    setSelectedColor(color);
-    setIsCustom(!isPreset);
-    if (!isPreset) {
-      setCustomColor(color);
+      try {
+        const res = await fetch('/system/completion-message');
+        if (canceled) return;
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const initial = data.message || 'ご回答ありがとうございました。';
+          setCompletionMessage(initial);
+          markCompletionSynced(initial);
+        } else {
+          throw new Error();
+        }
+      } catch {
+        if (!canceled) {
+          const fallback = 'ご回答ありがとうございました。';
+          setCompletionMessage(fallback);
+          markCompletionSynced(fallback);
+        }
+      }
+
+      try {
+        const res = await fetch('/system/entry-message');
+        if (canceled) return;
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const initial = data.message || '不明点があれば受付にお知らせください';
+          setEntryMessage(initial);
+          markEntrySynced(initial);
+        } else {
+          throw new Error();
+        }
+      } catch {
+        if (!canceled) {
+          const fallback = '不明点があれば受付にお知らせください';
+          setEntryMessage(fallback);
+          markEntrySynced(fallback);
+        }
+      }
+    };
+
+    load();
+    return () => {
+      canceled = true;
+    };
+  }, [markNameSynced, markCompletionSynced, markEntrySynced]);
+
+  useEffect(() => {
+    const nextColor = color || '#1976D2';
+    setSelectedColor(nextColor);
+    const preset = presetValues.includes(nextColor);
+    setIsCustom(!preset);
+    if (!preset) {
+      setCustomColor(nextColor);
     }
-  }, [color]);
+    markColorSynced(nextColor);
+  }, [color, markColorSynced]);
 
-  // Load logo settings
   useEffect(() => {
+    let canceled = false;
     (async () => {
       try {
-        const r = await fetch('/system/logo');
-        if (r.ok) {
-          const d = await r.json();
-          if (d?.url) setLogoUrl(d.url);
-          if (d?.crop) setCrop({ x: d.crop.x ?? 0, y: d.crop.y ?? 0, w: d.crop.w ?? 1, h: d.crop.h ?? 1 });
+        const res = await fetch('/system/logo');
+        if (canceled) return;
+        if (res.ok) {
+          const data = await res.json().catch(() => ({}));
+          const nextUrl = typeof data?.url === 'string' ? data.url : null;
+          const nextCrop = {
+            x: data?.crop?.x ?? defaultCropState.x,
+            y: data?.crop?.y ?? defaultCropState.y,
+            w: data?.crop?.w ?? defaultCropState.w,
+            h: data?.crop?.h ?? defaultCropState.h,
+          };
+          setLogoUrl(nextUrl);
+          setCrop(nextCrop);
+          markLogoSynced({ url: nextUrl, crop: nextCrop });
+        } else {
+          throw new Error();
         }
-      } catch {}
+      } catch {
+        if (!canceled) {
+          const fallbackCrop = { ...defaultCropState };
+          setLogoUrl(null);
+          setCrop(fallbackCrop);
+          markLogoSynced({ url: null, crop: fallbackCrop });
+        }
+      } finally {
+        if (!canceled) {
+          setLogoLoaded(true);
+        }
+      }
     })();
-  }, []);
+    return () => {
+      canceled = true;
+    };
+  }, [markLogoSynced]);
 
   const selectPreset = (c: string) => {
     setSelectedColor(c);
@@ -168,84 +478,6 @@ export default function AdminAppearance() {
     const newColor = e.target.value;
     setSelectedColor(newColor);
     setCustomColor(newColor);
-  };
-
-  const save = async () => {
-    setLoading(true);
-    setStatus(null);
-    try {
-      // 表示名と完了メッセージを保存
-      const resName = await fetch('/system/display-name', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ display_name: name || 'Monshinクリニック' }),
-      });
-      if (!resName.ok) throw new Error('表示名の保存に失敗しました');
-      const dataName = await resName.json();
-      setName(dataName.display_name || 'Monshinクリニック');
-      window.dispatchEvent(new CustomEvent('systemDisplayNameUpdated', { detail: dataName.display_name }));
-
-      const resMsg = await fetch('/system/completion-message', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: completionMessage || 'ご回答ありがとうございました。' }),
-      });
-      if (!resMsg.ok) throw new Error('完了メッセージの保存に失敗しました');
-      const dataMsg = await resMsg.json();
-      setCompletionMessage(dataMsg.message || 'ご回答ありがとうございました。');
-
-      // New fetch for entry message
-      const resEntryMsg = await fetch('/system/entry-message', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: entryMessage || '不明点があれば受付にお知らせください' }),
-      });
-      if (!resEntryMsg.ok) throw new Error('問診開始画面メッセージの保存に失敗しました');
-      const dataEntryMsg = await resEntryMsg.json();
-      setEntryMessage(dataEntryMsg.message || '不明点があれば受付にお知らせください');
-
-      // テーマカラーを保存
-      const resTheme = await fetch('/system/theme-color', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ color: selectedColor || '#1976D2' }),
-      });
-      if (!resTheme.ok) throw new Error('テーマカラーの保存に失敗しました');
-      const dataTheme = await resTheme.json();
-      setColor(dataTheme.color);
-
-      // Save logo settings (if any)
-      await fetch('/system/logo', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: logoUrl, crop }),
-      });
-      try { window.dispatchEvent(new CustomEvent('systemLogoUpdated', { detail: { url: logoUrl, crop } })); } catch {}
-
-      setStatus({ type: 'success', message: '保存しました' });
-      toast({
-        title: '外観設定を保存しました',
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-        position: 'top-right',
-      });
-      onClose();
-    } catch (e: any) {
-      console.error(e);
-      const message = e?.message || '保存に失敗しました';
-      setStatus({ type: 'error', message });
-      toast({
-        title: '保存に失敗しました',
-        description: message,
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-        position: 'top-right',
-      });
-    } finally {
-      setLoading(false);
-    }
   };
 
   const customButtonIconColor = getContrastingIconColor(customColor);
@@ -296,7 +528,7 @@ export default function AdminAppearance() {
   const uploadLogo = async (file: File) => {
     const fd = new FormData();
     fd.append('file', file);
-    const defaultCrop = { x: 0, y: 0, w: 1, h: 1 };
+    const defaultCrop = { ...defaultCropState };
     try {
       const r = await fetch('/system-logo', { method: 'POST', body: fd });
       if (!r.ok) {
@@ -313,21 +545,23 @@ export default function AdminAppearance() {
       const url = d.url as string;
       setLogoUrl(url);
       setCrop(defaultCrop);
-      await fetch('/system/logo', {
+      const res = await fetch('/system/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, crop: defaultCrop }),
       });
+      if (!res.ok) {
+        throw new Error(await readErrorMessage(res, 'ロゴの保存に失敗しました'));
+      }
+      markLogoSynced({ url, crop: defaultCrop });
+      try {
+        window.dispatchEvent(new CustomEvent('systemLogoUpdated', { detail: { url, crop: defaultCrop } }));
+      } catch {
+        // ignore dispatch errors
+      }
     } catch (error: any) {
       console.error(error);
-      toast({
-        title: 'ロゴのアップロードに失敗しました',
-        description: error?.message ?? '時間をおいて再度お試しください。',
-        status: 'error',
-        duration: 4000,
-        isClosable: true,
-        position: 'top-right',
-      });
+      showErrorToast('ロゴのアップロードに失敗しました', error?.message ?? '時間をおいて再度お試しください。');
     }
   };
 
@@ -336,151 +570,163 @@ export default function AdminAppearance() {
       <Stack spacing={1} align="flex-start">
         <Heading size="lg">外観設定</Heading>
         <Text fontSize="sm" color="fg.muted">
-          管理画面と患者画面のブランド要素をまとめて調整できます。
+          管理画面と患者画面のブランド要素をまとめて調整できます。各項目は変更後すぐに自動保存され、全画面へ即時反映されます。
         </Text>
       </Stack>
 
       <Stack spacing={6} align="stretch">
         <Section
           title="基本情報"
-          description="患者向け画面や管理画面で表示する名称を設定します。"
+          description="患者向け画面や管理画面で表示する名称を設定します。入力すると数秒以内に自動保存されます。"
         >
-        <FormControl>
-          <FormLabel>システム表示名</FormLabel>
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="例: Monshinクリニック"
-          />
-          <Text fontSize="sm" color="fg.muted">
-            未入力の場合は「Monshinクリニック」が自動で表示されます。
-          </Text>
-        </FormControl>
+          <FormControl>
+            <FormLabel>システム表示名</FormLabel>
+            <Stack spacing={1} align="stretch">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="例: Monshinクリニック"
+              />
+              <AutoSaveStatusText status={nameStatus} message={nameError} />
+            </Stack>
+            <Text fontSize="sm" color="fg.muted">
+              未入力の場合は「Monshinクリニック」が自動で表示されます。
+            </Text>
+          </FormControl>
         </Section>
 
       <Section
         title="画面メッセージ"
-        description="問診開始時と完了時に表示される案内文を編集できます。"
+        description="問診開始時と完了時に表示される案内文を編集できます。入力内容は自動的に保存されます。"
       >
         <FormControl>
           <FormLabel>完了画面のメッセージ</FormLabel>
-          <Textarea
-            value={completionMessage}
-            onChange={(e) => setCompletionMessage(e.target.value)}
-            placeholder="例: ご回答ありがとうございました。"
-          />
+          <Stack spacing={1} align="stretch">
+            <Textarea
+              value={completionMessage}
+              onChange={(e) => setCompletionMessage(e.target.value)}
+              placeholder="例: ご回答ありがとうございました。"
+            />
+            <AutoSaveStatusText status={completionStatus} message={completionError} />
+          </Stack>
           <Text fontSize="sm" color="fg.muted">
             回答完了後のサンクスメッセージとして利用されます。
           </Text>
         </FormControl>
         <FormControl>
           <FormLabel>問診開始画面のメッセージ</FormLabel>
-          <Textarea
-            value={entryMessage}
-            onChange={(e) => setEntryMessage(e.target.value)}
-            placeholder="例: 不明点があれば受付にお知らせください"
-          />
+          <Stack spacing={1} align="stretch">
+            <Textarea
+              value={entryMessage}
+              onChange={(e) => setEntryMessage(e.target.value)}
+              placeholder="例: 不明点があれば受付にお知らせください"
+            />
+            <AutoSaveStatusText status={entryStatus} message={entryError} />
+          </Stack>
           <Text fontSize="sm" color="fg.muted">
             受付での案内や注意事項などを記載してください。
           </Text>
         </FormControl>
-        </Section>
+      </Section>
 
         <Section
           title="ブランドカラー"
-          description="アクセントカラーを選択すると患者・管理画面の主要ボタンに反映されます。"
+          description="アクセントカラーを選択すると患者・管理画面の主要ボタンに反映されます。選択や入力は自動保存されます。"
         >
-        <Wrap spacing={3}>
-          {colorPresets.map((preset) => {
-            const isSelected = selectedColor === preset.value && !isCustom;
-            return (
-              <WrapItem key={preset.value}>
-                <VStack spacing={1} align="center">
-                  <Tooltip label={`${preset.label} (${preset.value.toUpperCase()})`}>
-                    <IconButton
-                      aria-label={`${preset.label} (${preset.value.toUpperCase()})`}
-                      size="sm"
-                      icon={<CheckIcon opacity={isSelected ? 1 : 0} />}
-                      onClick={() => selectPreset(preset.value)}
-                      bg={preset.value}
-                      color={getContrastingIconColor(preset.value)}
-                      borderWidth={isSelected ? 2 : 1}
-                      borderColor={isSelected ? 'accent.solid' : 'gray.300'}
-                      _hover={{ opacity: 0.85, bg: preset.value }}
-                      _active={{ opacity: 0.9, bg: preset.value }}
-                      _focusVisible={{ boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.6)' }}
-                      rounded="full"
-                    />
-                  </Tooltip>
-                  <Text fontSize="xs" color="fg.muted">
-                    {preset.label}
-                  </Text>
-                </VStack>
+          <Stack spacing={3} align="stretch">
+            <Wrap spacing={3}>
+              {colorPresets.map((preset) => {
+                const isSelected = selectedColor === preset.value && !isCustom;
+                return (
+                  <WrapItem key={preset.value}>
+                    <VStack spacing={1} align="center">
+                      <Tooltip label={`${preset.label} (${preset.value.toUpperCase()})`}>
+                        <IconButton
+                          aria-label={`${preset.label} (${preset.value.toUpperCase()})`}
+                          size="sm"
+                          icon={<CheckIcon opacity={isSelected ? 1 : 0} />}
+                          onClick={() => selectPreset(preset.value)}
+                          bg={preset.value}
+                          color={getContrastingIconColor(preset.value)}
+                          borderWidth={isSelected ? 2 : 1}
+                          borderColor={isSelected ? 'accent.solid' : 'gray.300'}
+                          _hover={{ opacity: 0.85, bg: preset.value }}
+                          _active={{ opacity: 0.9, bg: preset.value }}
+                          _focusVisible={{ boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.6)' }}
+                          rounded="full"
+                        />
+                      </Tooltip>
+                      <Text fontSize="xs" color="fg.muted">
+                        {preset.label}
+                      </Text>
+                    </VStack>
+                  </WrapItem>
+                );
+              })}
+              <WrapItem>
+                <Popover isOpen={isOpen} onOpen={handlePopoverOpen} onClose={onClose} placement="bottom-start">
+                  <PopoverTrigger>
+                    <Box>
+                      <Tooltip label="カスタムカラーを設定">
+                        <IconButton
+                          aria-label="カスタムカラーを設定"
+                          size="sm"
+                          icon={<AddIcon />}
+                          bg={customColor}
+                          color={customButtonIconColor}
+                          borderWidth={isCustom ? 2 : 1}
+                          borderColor={isCustom ? 'accent.solid' : 'gray.300'}
+                          _hover={{ opacity: 0.85, bg: customColor }}
+                          _active={{ opacity: 0.9, bg: customColor }}
+                          _focusVisible={{ boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.6)' }}
+                          rounded="full"
+                        />
+                      </Tooltip>
+                    </Box>
+                  </PopoverTrigger>
+                  <PopoverContent w="auto">
+                    <PopoverArrow />
+                    <PopoverCloseButton />
+                    <PopoverBody>
+                      <VStack spacing={2} align="stretch">
+                        <Text fontSize="sm" color="fg.muted">
+                          16進数またはカラーピッカーで設定してください。
+                        </Text>
+                        <HStack>
+                          <Input
+                            value={selectedColor}
+                            onChange={onCustomChange}
+                            placeholder="#RRGGBB"
+                            maxW="150px"
+                          />
+                          <Input type="color" value={selectedColor} onChange={onCustomChange} maxW="60px" p={0} />
+                        </HStack>
+                      </VStack>
+                    </PopoverBody>
+                  </PopoverContent>
+                </Popover>
               </WrapItem>
-            );
-          })}
-          <WrapItem>
-            <Popover isOpen={isOpen} onOpen={handlePopoverOpen} onClose={onClose} placement="bottom-start">
-              <PopoverTrigger>
-                <Box>
-                  <Tooltip label="カスタムカラーを設定">
-                    <IconButton
-                      aria-label="カスタムカラーを設定"
-                      size="sm"
-                      icon={<AddIcon />}
-                      bg={customColor}
-                      color={customButtonIconColor}
-                      borderWidth={isCustom ? 2 : 1}
-                      borderColor={isCustom ? 'accent.solid' : 'gray.300'}
-                      _hover={{ opacity: 0.85, bg: customColor }}
-                      _active={{ opacity: 0.9, bg: customColor }}
-                      _focusVisible={{ boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.6)' }}
-                      rounded="full"
-                    />
-                  </Tooltip>
-                </Box>
-              </PopoverTrigger>
-              <PopoverContent w="auto">
-                <PopoverArrow />
-                <PopoverCloseButton />
-                <PopoverBody>
-                  <VStack spacing={2} align="stretch">
-                    <Text fontSize="sm" color="fg.muted">
-                      16進数またはカラーピッカーで設定してください。
-                    </Text>
-                    <HStack>
-                      <Input
-                        value={selectedColor}
-                        onChange={onCustomChange}
-                        placeholder="#RRGGBB"
-                        maxW="150px"
-                      />
-                      <Input type="color" value={selectedColor} onChange={onCustomChange} maxW="60px" p={0} />
-                    </HStack>
-                  </VStack>
-                </PopoverBody>
-              </PopoverContent>
-            </Popover>
-          </WrapItem>
-        </Wrap>
-        <HStack spacing={3} pt={2} align="center">
-          <Box
-            w="28px"
-            h="28px"
-            borderRadius="full"
-            borderWidth="1px"
-            borderColor="gray.300"
-            bg={selectedColor || '#1976D2'}
-          />
-          <Text fontSize="sm" color="fg.muted">
-            {isCustom ? 'カスタムカラー' : 'プリセットカラー'} / {(selectedColor || '#1976D2').toUpperCase()}
-          </Text>
-        </HStack>
-      </Section>
+            </Wrap>
+            <AutoSaveStatusText status={colorStatus} message={colorError} />
+            <HStack spacing={3} align="center">
+              <Box
+                w="28px"
+                h="28px"
+                borderRadius="full"
+                borderWidth="1px"
+                borderColor="gray.300"
+                bg={selectedColor || '#1976D2'}
+              />
+              <Text fontSize="sm" color="fg.muted">
+                {isCustom ? 'カスタムカラー' : 'プリセットカラー'} / {(selectedColor || '#1976D2').toUpperCase()}
+              </Text>
+            </HStack>
+          </Stack>
+        </Section>
 
       <Section
         title="ロゴ / アイコン"
-        description="問診画面のヘッダーや管理画面に表示されるロゴ画像を設定します。"
+        description="問診画面のヘッダーや管理画面に表示されるロゴ画像を設定します。トリミングや数値入力も自動で保存されます。"
       >
         <FormControl>
           <FormLabel>クリニックのロゴ/アイコン</FormLabel>
@@ -488,6 +734,7 @@ export default function AdminAppearance() {
             <Text fontSize="sm" color="fg.muted">
               PNG / JPEG 推奨。画像をアップロード後、青い枠をドラッグして表示範囲を調整してください。
             </Text>
+            <AutoSaveStatusText status={logoStatus} message={logoError} />
             <HStack align="flex-start" spacing={6} flexWrap="wrap">
               <VStack spacing={2} align="center">
                 <Text fontSize="sm" color="fg.muted">
@@ -720,26 +967,6 @@ export default function AdminAppearance() {
         </FormControl>
       </Section>
 
-      <Section
-        title="保存"
-        description="変更内容を保存して、患者画面と管理画面に即時反映します。"
-        footer={
-          <HStack justify="flex-end" spacing={4} w="100%" flexWrap="wrap" alignItems="center">
-            {status && (
-              <Text fontSize="sm" color={status.type === 'success' ? 'green.500' : 'red.500'} mt={{ base: 2, sm: 0 }}>
-                {status.message}
-              </Text>
-            )}
-            <Button onClick={save} colorScheme="primary" isLoading={loading}>
-              保存
-            </Button>
-          </HStack>
-        }
-      >
-        <Text fontSize="sm" color="fg.muted">
-          保存するとブランドカラーやロゴ、各種メッセージがすぐに反映されます。必要に応じて患者画面で表示を確認してください。
-        </Text>
-      </Section>
     </Stack>
   </Stack>
   );
