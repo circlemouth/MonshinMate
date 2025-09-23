@@ -1,6 +1,6 @@
 import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { flushQueue } from './retryQueue';
 import FlowProgress from './components/FlowProgress';
 import { track } from './metrics';
@@ -36,6 +36,7 @@ import AdminMain from './pages/AdminMain';
 import AdminLayout from './components/AdminLayout';
 import FontSizeControl from './components/FontSizeControl';
 import { refreshLlmStatus } from './utils/llmStatus';
+import { useAutoFontSize } from './hooks/useAutoFontSize';
 
 export default function App() {
   const location = useLocation();
@@ -79,6 +80,7 @@ export default function App() {
 
   const [displayName, setDisplayName] = useState('Monshinクリニック');
   const [logo, setLogo] = useState<{ url: string | null; crop: { x: number; y: number; w: number; h: number } | null }>({ url: null, crop: null });
+  const systemNameRef = useRef<HTMLHeadingElement>(null);
 
   // システム表示名の取得と更新イベント購読
   useEffect(() => {
@@ -126,6 +128,8 @@ export default function App() {
 
   const isChatPage = location.pathname === '/chat';
   const isAdminPage = location.pathname.startsWith('/admin');
+
+  useAutoFontSize(systemNameRef, isAdminPage ? '管理画面' : displayName, { minSize: 12 });
 
   // パスワードリセット画面へ遷移した場合は、ログイン用モーダルを閉じる
   useEffect(() => {
@@ -184,7 +188,17 @@ export default function App() {
               />
             </Box>
           )}
-          <Heading size="lg">{isAdminPage ? '管理画面' : displayName}</Heading>
+          <Heading
+            ref={systemNameRef}
+            size="lg"
+            whiteSpace="nowrap"
+            maxW="100%"
+            minW={0}
+            flexShrink={1}
+            title={isAdminPage ? '管理画面' : displayName}
+          >
+            {isAdminPage ? '管理画面' : displayName}
+          </Heading>
           <Spacer />
           {isAdminPage ? (
             <Button
