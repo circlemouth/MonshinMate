@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Box, Container, Heading, Text, VStack, Image, Input, Button, useToast, Spinner, FormControl, FormLabel, Checkbox } from '@chakra-ui/react';
+import { Box, Container, Heading, Text, VStack, Image, Input, Button, Spinner, FormControl, FormLabel, Checkbox } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotify } from '../contexts/NotificationContext';
 
 export default function AdminTotpSetup() {
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
@@ -10,7 +11,7 @@ export default function AdminTotpSetup() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState('');
   const { checkAuthStatus, setShowTotpSetup } = useAuth();
-  const toast = useToast();
+  const { notify } = useNotify();
   const navigate = useNavigate();
   const [isQrCodeVisible, setIsQrCodeVisible] = useState(false);
   const [useForLogin, setUseForLogin] = useState(true); // デフォルトでチェックを入れておく
@@ -61,11 +62,11 @@ export default function AdminTotpSetup() {
         throw new Error(data.detail || 'コードの検証に失敗しました。');
       }
 
-      toast({
+      notify({
         title: '2要素認証が有効になりました。',
         status: 'success',
+        channel: 'admin',
         duration: 3000,
-        isClosable: true,
       });
       await checkAuthStatus(true);
       setShowTotpSetup(false);
@@ -81,13 +82,13 @@ export default function AdminTotpSetup() {
     await checkAuthStatus(true);
     setShowTotpSetup(false);
     navigate('/admin/login');
-     toast({
-        title: '2要素認証の設定はいつでも管理画面から行えます。',
-        status: 'info',
-        duration: 5000,
-        isClosable: true,
-      });
-  }
+    notify({
+      title: '2要素認証の設定はいつでも管理画面から行えます。',
+      status: 'info',
+      channel: 'admin',
+      duration: 5000,
+    });
+  };
 
   return (
     <Box

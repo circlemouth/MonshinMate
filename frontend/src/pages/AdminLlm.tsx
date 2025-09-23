@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
-  AlertIcon,
   Button,
   ButtonGroup,
   Card,
@@ -22,12 +20,13 @@ import {
   Switch,
   Text,
   Textarea,
-  useToast,
   VStack,
   Spinner,
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { useNotify } from '../contexts/NotificationContext';
+import StatusBanner from '../components/StatusBanner';
 
 type FeedbackVariant = 'info' | 'success' | 'warning' | 'error';
 
@@ -194,7 +193,7 @@ export default function AdminLlm() {
   });
   const [feedback, setFeedback] = useState<FeedbackState>(null);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
-  const toast = useToast();
+  const { notify } = useNotify();
   const initialLoad = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -377,10 +376,15 @@ export default function AdminLlm() {
       if (!res.ok || data?.status !== 'ok') {
         throw new Error(data?.detail || 'test_failed');
       }
-      toast({ title: '疎通テスト成功', status: 'success' });
+      notify({ title: '疎通テスト成功', status: 'success', channel: 'admin' });
       setFeedback({ status: 'success', message: '疎通テストが成功しました' });
     } catch (error: any) {
-      toast({ title: '疎通テストに失敗しました', description: error?.message || '', status: 'error' });
+      notify({
+        title: '疎通テストに失敗しました',
+        description: error?.message || undefined,
+        status: 'error',
+        channel: 'admin',
+      });
       setFeedback({ status: 'error', message: '疎通テストに失敗しました' });
     } finally {
       try {
@@ -576,11 +580,8 @@ export default function AdminLlm() {
             </Button>
           </ButtonGroup>
           {feedback && (
-            <Alert status={feedback.status} variant="subtle">
-              <AlertIcon />
-              <Text>{feedback.message}</Text>
-            </Alert>
-            )}
+            <StatusBanner status={feedback.status} description={feedback.message} />
+          )}
           </Stack>
         </CardBody>
       </Card>

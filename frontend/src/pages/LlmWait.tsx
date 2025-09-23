@@ -3,11 +3,13 @@ import { VStack, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { useNotify } from '../contexts/NotificationContext';
 
 /** LLM 追質問の要否判定待機画面。 */
 export default function LlmWait() {
   const navigate = useNavigate();
   const sessionId = sessionStorage.getItem('session_id');
+  const { notify } = useNotify();
 
   const finalize = async () => {
     if (!sessionId) return;
@@ -24,7 +26,16 @@ export default function LlmWait() {
     } catch (e) {
       console.error('finalize failed', e);
       postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
-      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
+      notify({
+        title: 'ネットワークエラーが発生しました。',
+        description: '接続後に再度お試しください。',
+        status: 'error',
+        channel: 'patient',
+        actionLabel: '再試行',
+        onAction: () => {
+          void finalize();
+        },
+      });
     }
     refreshLlmStatus().catch(() => {});
     navigate('/done');

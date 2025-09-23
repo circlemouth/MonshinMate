@@ -22,11 +22,11 @@ import {
   Thead,
   Tr,
   VStack,
-  useToast,
 } from '@chakra-ui/react';
 import { FiDownload, FiUpload } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
+import { useNotify } from '../contexts/NotificationContext';
 
 interface SessionSummary {
   id: string;
@@ -37,7 +37,7 @@ interface SessionSummary {
 }
 
 export default function AdminDataTransfer() {
-  const toast = useToast();
+  const { notify } = useNotify();
   const { formatDateTime } = useTimezone();
   const PAGE_SIZE = 20;
 
@@ -139,15 +139,16 @@ export default function AdminDataTransfer() {
       setSessionPage(0);
     } catch (err) {
       console.error(err);
-      toast({
+      notify({
         title: err instanceof Error ? err.message : '問診データの取得に失敗しました',
         status: 'error',
+        channel: 'admin',
         duration: 4000,
       });
     } finally {
       setSessionLoading(false);
     }
-  }, [toast]);
+  }, [notify]);
 
   useEffect(() => {
     void loadSessions({});
@@ -187,7 +188,7 @@ export default function AdminDataTransfer() {
     try {
       const targetIds = getTargetIds();
       if (targetIds.length === 0 && !startDate && !endDate) {
-        toast({ title: '出力対象の問診がありません', status: 'warning', duration: 3000 });
+        notify({ title: '出力対象の問診がありません', status: 'warning', channel: 'admin', duration: 3000 });
         return;
       }
       setSessionExporting(true);
@@ -216,10 +217,10 @@ export default function AdminDataTransfer() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast({ title: '問診データを出力しました', status: 'success', duration: 3000 });
+      notify({ title: '問診データを出力しました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
       console.error(err);
-      toast({ title: '問診データの出力に失敗しました', status: 'error', duration: 4000 });
+      notify({ title: '問診データの出力に失敗しました', status: 'error', channel: 'admin', duration: 4000 });
     } finally {
       setSessionExporting(false);
     }
@@ -232,7 +233,7 @@ export default function AdminDataTransfer() {
 
   const handleSessionImport = async () => {
     if (!sessionImportFile) {
-      toast({ title: 'インポートするファイルを選択してください', status: 'warning', duration: 3000 });
+      notify({ title: 'インポートするファイルを選択してください', status: 'warning', channel: 'admin', duration: 3000 });
       return;
     }
     const formData = new FormData();
@@ -255,12 +256,13 @@ export default function AdminDataTransfer() {
       }
       loadSessions({ patientName, dob, startDate, endDate });
       setSessionImportFile(null);
-      toast({ title: '問診データを取り込みました', status: 'success', duration: 3000 });
+      notify({ title: '問診データを取り込みました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
       console.error(err);
-      toast({
+      notify({
         title: err instanceof Error ? err.message : '問診データのインポートに失敗しました',
         status: 'error',
+        channel: 'admin',
         duration: 5000,
       });
     } finally {
@@ -297,10 +299,10 @@ export default function AdminDataTransfer() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      toast({ title: '設定ファイルを出力しました', status: 'success', duration: 3000 });
+      notify({ title: '設定ファイルを出力しました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
       console.error(err);
-      toast({ title: '設定ファイルの出力に失敗しました', status: 'error', duration: 4000 });
+      notify({ title: '設定ファイルの出力に失敗しました', status: 'error', channel: 'admin', duration: 4000 });
     } finally {
       setTemplateExporting(false);
     }
@@ -308,7 +310,7 @@ export default function AdminDataTransfer() {
 
   const handleTemplateImport = async () => {
     if (!templateImportFile) {
-      toast({ title: 'インポートするファイルを選択してください', status: 'warning', duration: 3000 });
+      notify({ title: 'インポートするファイルを選択してください', status: 'warning', channel: 'admin', duration: 3000 });
       return;
     }
     const formData = new FormData();
@@ -333,12 +335,13 @@ export default function AdminDataTransfer() {
         throw new Error(message);
       }
       setTemplateImportFile(null);
-      toast({ title: '設定ファイルを取り込みました', status: 'success', duration: 3000 });
+      notify({ title: '設定ファイルを取り込みました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
       console.error(err);
-      toast({
+      notify({
         title: err instanceof Error ? err.message : '設定ファイルのインポートに失敗しました',
         status: 'error',
+        channel: 'admin',
         duration: 5000,
       });
     } finally {

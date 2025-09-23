@@ -26,13 +26,13 @@ import {
   CardBody,
   CardFooter,
   CardHeader,
-  useToast,
 } from '@chakra-ui/react';
 import { AddIcon, CheckIcon } from '@chakra-ui/icons';
 import AutoSaveStatusText from '../components/AutoSaveStatusText';
 import { useThemeColor } from '../contexts/ThemeColorContext';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { readErrorMessage } from '../utils/http';
+import { useNotify } from '../contexts/NotificationContext';
 
 const colorPresets = [
   { value: '#D32F2F', label: 'レッド' },
@@ -109,19 +109,18 @@ export default function AdminAppearance() {
   const [customColor, setCustomColor] = useState(defaultCustomColor);
 
   // Common states
-  const toast = useToast();
+  const { notify } = useNotify();
   const showErrorToast = useCallback(
     (title: string, description?: string) => {
-      toast({
+      notify({
         title,
         description,
         status: 'error',
+        channel: 'admin',
         duration: 4000,
-        isClosable: true,
-        position: 'top-right',
       });
     },
-    [toast]
+    [notify]
   );
 
   type LogoConfig = { url: string | null; crop: { x: number; y: number; w: number; h: number } };

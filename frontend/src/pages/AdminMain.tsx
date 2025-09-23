@@ -20,12 +20,12 @@ import {
   HStack,
   Tooltip,
   Skeleton,
-  useToast,
 } from '@chakra-ui/react';
 import { FiCpu, FiDatabase, FiDownload, FiLayers } from 'react-icons/fi';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
 import SystemStatusCard from '../components/SystemStatusCard';
 import { useTimezone } from '../contexts/TimezoneContext';
+import { useNotify } from '../contexts/NotificationContext';
 
 interface SessionSummary {
   id: string;
@@ -109,8 +109,8 @@ export default function AdminMain() {
 
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-  const toast = useToast();
   const { formatDateTime } = useTimezone();
+  const { notify } = useNotify();
 
   const parseCheckedAt = (value: string | null | undefined): Date | null => {
     if (!value) return null;
@@ -298,21 +298,19 @@ export default function AdminMain() {
         document.execCommand('copy');
         document.body.removeChild(textarea);
       }
-      toast({
+      notify({
         title: 'Markdownをコピーしました',
         status: 'success',
+        channel: 'admin',
         duration: 3000,
-        isClosable: true,
-        position: 'top-right',
       });
     } catch (err) {
       console.error(err);
-      toast({
+      notify({
         title: 'Markdownのコピーに失敗しました',
         status: 'error',
+        channel: 'admin',
         duration: 4000,
-        isClosable: true,
-        position: 'top-right',
       });
     } finally {
       setCopyingId(null);
