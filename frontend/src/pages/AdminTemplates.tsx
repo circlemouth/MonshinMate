@@ -46,7 +46,6 @@ import {
   FormHelperText,
   Image,
   Icon,
-  useToast,
   // removed: postal lookup UI wrappers
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
@@ -58,6 +57,8 @@ import {
   personalInfoFields,
   mergePersonalInfoValue,
 } from '../utils/personalInfo';
+import { useNotify } from '../contexts/NotificationContext';
+import { useDialog } from '../contexts/DialogContext';
 // removed: postal-code address lookup logic
 
   interface Item {
@@ -155,7 +156,8 @@ export default function AdminTemplates() {
   const [initialLlmMax, setInitialLlmMax] = useState<number>(5);
   const [followupLlmMax, setFollowupLlmMax] = useState<number>(5);
   const isDirtyRef = useRef<boolean>(false);
-  const toast = useToast();
+  const { notify } = useNotify();
+  const { confirm, prompt } = useDialog();
 
   const loadTemplateList = (options?: { retainSelection?: boolean }) => {
     const retainSelection = options?.retainSelection ?? false;
@@ -198,7 +200,13 @@ export default function AdminTemplates() {
 
   const confirmAndDeleteImage = async (url?: string): Promise<boolean> => {
     if (!url) return true;
-    const confirmed = window.confirm('添付画像を削除しますか？\n削除すると元に戻せません。');
+    const confirmed = await confirm({
+      title: '添付画像を削除しますか？',
+      description: '削除すると元に戻せません。',
+      confirmText: '削除する',
+      cancelText: 'キャンセル',
+      tone: 'danger',
+    });
     if (!confirmed) return false;
     await deleteItemImage(url);
     return true;
@@ -782,11 +790,11 @@ export default function AdminTemplates() {
     items.forEach(checkItem);
     if (missingImageErrors.length > 0) {
       setSaveStatus('error');
-      toast({
+      notify({
         title: '画像が必要です',
         description: missingImageErrors[0],
         status: 'error',
-        isClosable: true,
+        channel: 'admin',
       });
       return;
     }
@@ -850,33 +858,50 @@ export default function AdminTemplates() {
   };
 
   const deleteTemplateApi = async (id: string) => {
-    if (window.confirm(`テンプレート「${id}」を削除しますか？`)) {
-      try {
-        await Promise.all([
-          fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
-          fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
-        ]);
+    const confirmed = await confirm({
+      title: `テンプレート「${id}」を削除しますか？`,
+      description: '削除すると元に戻せません。',
+      confirmText: '削除する',
+      cancelText: 'キャンセル',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await Promise.all([
+        fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
+        fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
+      ]);
 
-        const newTemplates = templates.filter((t) => t.id !== id);
-        setTemplates(newTemplates);
+      const newTemplates = templates.filter((t) => t.id !== id);
+      setTemplates(newTemplates);
 
-        if (id === templateId) {
-          setTemplateId('default');
-        }
-      } catch (error) {
-        console.error('Failed to delete template:', error);
-        alert('テンプレートの削除に失敗しました。');
+      if (id === templateId) {
+        setTemplateId('default');
       }
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      notify({ title: 'テンプレートの削除に失敗しました。', status: 'error', channel: 'admin' });
     }
   };
 
   const duplicateTemplateApi = async (id: string) => {
-    const newId = window.prompt(`テンプレート「${id}」の複製先IDを入力してください`, `${id}_copy`);
-    if (!newId) return;
-    if (templates.some((t) => t.id === newId)) {
-      alert('そのIDは既に使用されています。');
-      return;
-    }
+    const result = await prompt({
+      title: `テンプレート「${id}」の複製`,
+      description: '複製先のテンプレートIDを入力してください。',
+      initialValue: `${id}_copy`,
+      confirmText: '複製する',
+      cancelText: 'キャンセル',
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return 'IDを入力してください。';
+        if (templates.some((t) => t.id === trimmed)) {
+          return 'そのIDは既に使用されています。';
+        }
+        return null;
+      },
+    });
+    if (result === null) return;
+    const newId = result.trim();
     try {
       await fetch(`/questionnaires/${id}/duplicate`, {
         method: 'POST',
@@ -887,33 +912,43 @@ export default function AdminTemplates() {
       setTemplateId(newId);
     } catch (error) {
       console.error('Failed to duplicate template:', error);
-      alert('テンプレートの複製に失敗しました。');
+      notify({ title: 'テンプレートの複製に失敗しました。', status: 'error', channel: 'admin' });
     }
   };
 
   const resetTemplateApi = async (id: string) => {
-    if (window.confirm(`テンプレート「${id}」を初期状態に戻します。よろしいですか？`)) {
-      try {
-        await fetch(`/questionnaires/${id}/reset`, { method: 'POST' });
-        alert(`テンプレート「${id}」をリセットしました。`);
-        if (templateId === id) {
-          loadTemplates(id);
-        }
-      } catch (error) {
-        console.error('Failed to reset template:', error);
-        alert('リセットに失敗しました。');
+    const confirmed = await confirm({
+      title: `テンプレート「${id}」を初期状態に戻します。`,
+      description: '保存済みの内容は失われます。よろしいですか？',
+      confirmText: 'リセット',
+      cancelText: 'キャンセル',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    try {
+      await fetch(`/questionnaires/${id}/reset`, { method: 'POST' });
+      notify({
+        title: `テンプレート「${id}」をリセットしました。`,
+        status: 'success',
+        channel: 'admin',
+      });
+      if (templateId === id) {
+        loadTemplates(id);
       }
+    } catch (error) {
+      console.error('Failed to reset template:', error);
+      notify({ title: 'リセットに失敗しました。', status: 'error', channel: 'admin' });
     }
   };
 
   const handleCreateNewTemplate = () => {
     const newId = newTemplateId.trim();
     if (!newId) {
-      alert('IDを入力してください。');
+      notify({ title: 'IDを入力してください。', status: 'error', channel: 'admin' });
       return;
     }
     if (templates.some((t) => t.id === newId)) {
-      alert('そのIDは既に使用されています。');
+      notify({ title: 'そのIDは既に使用されています。', status: 'error', channel: 'admin' });
       return;
     }
     setTemplates([...templates, { id: newId }]);

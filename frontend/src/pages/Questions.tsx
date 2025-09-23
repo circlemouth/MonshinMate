@@ -3,6 +3,7 @@ import { VStack, Box, Input, Button } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { useNotify } from '../contexts/NotificationContext';
 
 interface LlmQuestion {
   id: string;
@@ -19,6 +20,7 @@ export default function Questions() {
   const [answers, setAnswers] = useState<Record<string, any>>(
     JSON.parse(sessionStorage.getItem('answers') || '{}')
   );
+  const { notify } = useNotify();
 
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
@@ -36,7 +38,16 @@ export default function Questions() {
     } catch {
       sessionStorage.setItem('answers', JSON.stringify(ans));
       postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
-      alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
+      notify({
+        title: 'ネットワークエラーが発生しました。',
+        description: '接続後に再度お試しください。',
+        status: 'error',
+        channel: 'patient',
+        actionLabel: '再試行',
+        onAction: () => {
+          void finalize(ans);
+        },
+      });
     }
     refreshLlmStatus().catch(() => {});
     navigate('/done');

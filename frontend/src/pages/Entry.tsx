@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { track } from '../metrics';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { useNotify } from '../contexts/NotificationContext';
 
 /** 患者名と生年月日を入力するエントリページ。 */
 export default function Entry() {
@@ -34,6 +35,7 @@ export default function Entry() {
   const [visitType, setVisitType] = useState('');
   const [attempted, setAttempted] = useState(false);
   const navigate = useNavigate();
+  const { notify } = useNotify();
 
   // 新規セッション開始時に前回のデータをクリア
   useEffect(() => {
@@ -84,7 +86,16 @@ export default function Entry() {
       sessionStorage.setItem('visit_type', visitType);
       navigate('/questionnaire');
     } catch (e) {
-      alert('セッションの作成に失敗しました。時間をおいて再度お試しください。');
+      notify({
+        title: 'セッションの作成に失敗しました。',
+        description: '時間をおいて再度お試しください。',
+        status: 'error',
+        channel: 'patient',
+        actionLabel: '再試行',
+        onAction: () => {
+          void handleNext();
+        },
+      });
     }
   };
 

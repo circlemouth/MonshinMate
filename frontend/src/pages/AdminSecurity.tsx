@@ -33,10 +33,11 @@ import {
   Switch,
   Text,
   useDisclosure,
-  useToast,
   VStack,
 } from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
+import { useNotify } from '../contexts/NotificationContext';
+import StatusBanner from '../components/StatusBanner';
 
 interface AuthStatus {
   is_initial_password: boolean;
@@ -52,7 +53,7 @@ export default function AdminSecurity() {
   const [modeSaving, setModeSaving] = useState(false);
   const [currentMode, setCurrentMode] = useState<AuthStatus['totp_mode']>('off');
   // 画面内モーダルで TOTP セットアップを行う
-  const toast = useToast();
+  const { notify } = useNotify();
   const { isOpen, onOpen, onClose } = useDisclosure();
   // 無効化確認用モーダル
   const disableModal = useDisclosure();
@@ -72,7 +73,7 @@ export default function AdminSecurity() {
       setStatus(d);
       setCurrentMode(d?.totp_mode ?? 'off');
     } catch {
-      toast({ title: '状態の取得に失敗しました', status: 'error' });
+      notify({ title: '状態の取得に失敗しました', status: 'error', channel: 'admin' });
     }
   };
 
@@ -88,9 +89,9 @@ export default function AdminSecurity() {
       if (!r.ok) throw new Error();
       const blob = await r.blob();
       setQrUrl(URL.createObjectURL(blob));
-      toast({ title: 'Authenticator をスキャンしてください', status: 'info' });
+      notify({ title: 'Authenticator をスキャンしてください', status: 'info', channel: 'admin' });
     } catch {
-      toast({ title: 'QRコードの生成に失敗しました', status: 'error' });
+      notify({ title: 'QRコードの生成に失敗しました', status: 'error', channel: 'admin' });
     } finally {
       setLoading(false);
     }
@@ -109,13 +110,13 @@ export default function AdminSecurity() {
         const d = await r.json().catch(() => ({}));
         throw new Error(d.detail || '認証に失敗しました');
       }
-      toast({ title: '2要素認証を有効化しました', status: 'success' });
+      notify({ title: '2要素認証を有効化しました', status: 'success', channel: 'admin' });
       setQrUrl(null);
       setCode('');
       loadStatus();
       return true;
     } catch (e: any) {
-      toast({ title: e.message, status: 'error' });
+      notify({ title: e.message, status: 'error', channel: 'admin' });
       return false;
     } finally {
       setLoading(false);
@@ -135,14 +136,14 @@ export default function AdminSecurity() {
         const d = await r.json().catch(() => ({}));
         throw new Error(d.detail || '無効化に失敗しました');
       }
-      toast({ title: '2要素認証を無効化しました', status: 'success' });
+      notify({ title: '2要素認証を無効化しました', status: 'success', channel: 'admin' });
       setQrUrl(null);
       setCode('');
       setDisableCode('');
       loadStatus();
       disableModal.onClose();
     } catch (e: any) {
-      toast({ title: e.message, status: 'error' });
+      notify({ title: e.message, status: 'error', channel: 'admin' });
     } finally {
       setLoading(false);
     }
@@ -153,12 +154,16 @@ export default function AdminSecurity() {
     try {
       const r = await fetch('/admin/totp/regenerate', { method: 'POST' });
       if (!r.ok) throw new Error();
-      toast({ title: '秘密鍵を再生成しました。新しいQRをスキャンしてください', status: 'info' });
+      notify({
+        title: '秘密鍵を再生成しました。新しいQRをスキャンしてください',
+        status: 'info',
+        channel: 'admin',
+      });
       // すぐに新しいQRを取得
       await startSetup();
       loadStatus();
     } catch {
-      toast({ title: '再生成に失敗しました', status: 'error' });
+      notify({ title: '再生成に失敗しました', status: 'error', channel: 'admin' });
     } finally {
       setLoading(false);
     }
@@ -175,7 +180,7 @@ export default function AdminSecurity() {
       if (!r.ok) throw new Error();
       await loadStatus();
     } catch {
-      toast({ title: '保存に失敗しました', status: 'error' });
+      notify({ title: '保存に失敗しました', status: 'error', channel: 'admin' });
     } finally {
       setModeSaving(false);
     }
@@ -183,7 +188,7 @@ export default function AdminSecurity() {
 
   const changePassword = async () => {
     if (!currentPw || !newPw || newPw !== newPw2) {
-      toast({ title: '入力内容を確認してください', status: 'error' });
+      notify({ title: '入力内容を確認してください', status: 'error', channel: 'admin' });
       return;
     }
     setPwLoading(true);
@@ -197,14 +202,18 @@ export default function AdminSecurity() {
         const d = await r.json().catch(() => ({}));
         throw new Error(d.detail || '変更に失敗しました');
       }
-      toast({ title: 'パスワードを変更しました。二段階認証は無効化されました', status: 'success' });
+      notify({
+        title: 'パスワードを変更しました。二段階認証は無効化されました',
+        status: 'success',
+        channel: 'admin',
+      });
       setCurrentPw('');
       setNewPw('');
       setNewPw2('');
       pwModal.onClose();
       await loadStatus();
     } catch (e: any) {
-      toast({ title: e.message, status: 'error' });
+      notify({ title: e.message, status: 'error', channel: 'admin' });
     } finally {
       setPwLoading(false);
     }
@@ -235,10 +244,10 @@ export default function AdminSecurity() {
               </Stack>
             ) : totpEnabled ? (
               <Stack spacing={5} align="flex-start">
-                <Alert status="success" variant="subtle" borderRadius="md">
-                  <AlertIcon />
-                  二段階認証は有効です。Authenticator アプリで生成された 6 桁コードを使用してください。
-                </Alert>
+                <StatusBanner
+                  status="success"
+                  description="二段階認証は有効です。Authenticator アプリで生成された 6 桁コードを使用してください。"
+                />
                 <FormControl display="flex" alignItems="center" flexWrap="wrap" gap={3}>
                   <Switch
                     isChecked={currentMode === 'login_and_reset'}
@@ -275,10 +284,10 @@ export default function AdminSecurity() {
               </Stack>
             ) : (
               <Stack spacing={5} align="flex-start">
-                <Alert status="warning" variant="subtle" borderRadius="md">
-                  <AlertIcon />
-                  二段階認証が無効です。セキュリティ強化のため有効化を推奨します。
-                </Alert>
+                <StatusBanner
+                  status="warning"
+                  description="二段階認証が無効です。セキュリティ強化のため有効化を推奨します。"
+                />
                 <OrderedList spacing={2} pl={4} fontSize="sm" color="gray.700">
                   <ListItem>Authenticator などの認証アプリを準備する</ListItem>
                   <ListItem>下の「設定を開始」から QR コードを取得する</ListItem>
@@ -320,10 +329,10 @@ export default function AdminSecurity() {
               <Text fontSize="sm" color="gray.700">
                 現在のパスワードを更新すると、セキュリティを保ったままアカウントを運用できます。パスワード変更時には二段階認証が一時的に無効化されます。
               </Text>
-              <Alert status="info" variant="subtle" borderRadius="md">
-                <AlertIcon />
-                強固なパスワード（12文字以上・記号を含む）を設定し、定期的に更新してください。
-              </Alert>
+              <StatusBanner
+                status="info"
+                description="強固なパスワード（12文字以上・記号を含む）を設定し、定期的に更新してください。"
+              />
             </Stack>
           </CardBody>
           <CardFooter>
@@ -386,10 +395,11 @@ export default function AdminSecurity() {
           <ModalCloseButton />
           <ModalBody>
             <Stack spacing={4}>
-              <Alert status="info" variant="left-accent" borderRadius="md">
-                <AlertIcon />
-                変更後は新しいパスワードで直ちにログインできます。二段階認証は再設定が必要になります。
-              </Alert>
+              <StatusBanner
+                status="info"
+                description="変更後は新しいパスワードで直ちにログインできます。二段階認証は再設定が必要になります。"
+                variant="left-accent"
+              />
               <FormControl>
                 <FormLabel>現在のパスワード</FormLabel>
                 <Input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} />
@@ -445,10 +455,12 @@ export default function AdminSecurity() {
           <ModalCloseButton />
           <ModalBody>
             <Stack spacing={4} align="center">
-              <Alert status="info" variant="left-accent" borderRadius="md" w="100%">
-                <AlertIcon />
-                認証アプリで QR をスキャン後、6 桁コードを入力して有効化を完了してください。
-              </Alert>
+              <StatusBanner
+                status="info"
+                description="認証アプリで QR をスキャン後、6 桁コードを入力して有効化を完了してください。"
+                variant="left-accent"
+                w="100%"
+              />
               {!qrUrl ? (
                 <Stack direction="row" spacing={3} align="center">
                   <Spinner size="sm" />
@@ -522,10 +534,12 @@ export default function AdminSecurity() {
           <ModalCloseButton />
           <ModalBody>
             <Stack spacing={4} align="center">
-              <Alert status="warning" variant="left-accent" borderRadius="md" w="100%">
-                <AlertIcon />
-                無効化するとログイン時の追加認証が不要になります。実行する前に運用ポリシーを確認してください。
-              </Alert>
+              <StatusBanner
+                status="warning"
+                description="無効化するとログイン時の追加認証が不要になります。実行する前に運用ポリシーを確認してください。"
+                variant="left-accent"
+                w="100%"
+              />
               <FormControl textAlign="center">
                 <FormLabel>6桁コード</FormLabel>
                 <PinInput

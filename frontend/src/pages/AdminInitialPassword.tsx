@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack, useToast } from '@chakra-ui/react';
+import { Box, Container, Heading, FormControl, FormLabel, Input, Button, Text, VStack } from '@chakra-ui/react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { useNotify } from '../contexts/NotificationContext';
+import { useDialog } from '../contexts/DialogContext';
 
 export default function AdminInitialPassword() {
   const [newPassword, setNewPassword] = useState('');
@@ -9,8 +11,9 @@ export default function AdminInitialPassword() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { checkAuthStatus, setShowTotpSetup, isInitialPassword } = useAuth();
-  const toast = useToast();
   const navigate = useNavigate();
+  const { notify } = useNotify();
+  const { confirm } = useDialog();
 
   // 初期パスワードでない場合はこのページを使わせない（セキュリティ保護）
   useEffect(() => {
@@ -49,26 +52,28 @@ export default function AdminInitialPassword() {
         return;
       }
 
-      toast({
+      notify({
         title: 'パスワードが設定されました。',
         status: 'success',
-        duration: 5000,
-        isClosable: true,
+        channel: 'admin',
       });
 
       // 状態を更新したうえでAuthenticatorの有効化を促す
       await checkAuthStatus(true);
-      const enableTotp = window.confirm(
-        'Authenticator を有効にしますか？\n有効にしないとパスワードのリセットができません。'
-      );
+      const enableTotp = await confirm({
+        title: 'Authenticator を有効にしますか？',
+        description: '有効にしないとパスワードのリセットができません。',
+        confirmText: '有効にする',
+        cancelText: 'あとで',
+      });
       if (enableTotp) {
         setShowTotpSetup(true);
       } else {
-        toast({
+        notify({
           title: 'Authenticator を後から設定できますが、未設定のままではパスワードのリセットはできません。',
           status: 'warning',
+          channel: 'admin',
           duration: 7000,
-          isClosable: true,
         });
         navigate('/admin/login');
       }

@@ -149,6 +149,12 @@
 4) **状態管理/永続化**
  - [x] sessionStorageドラフト、画面遷移ガード
   - [x] 再試行キュー（ネットワークエラー時に未送信の回答をsessionStorageに蓄積し再送）
+5) **通知・ダイアログ基盤（2025-03-01 統一）**
+  - [x] `NotificationProvider`＋`useNotify()` を全画面に適用し、Chakra UI のトーストに統一。
+    - 患者向け通知はフッター寄り（`channel: 'patient'`）で8秒表示、管理向けは右上（`channel: 'admin'`）。
+    - 再試行ボタン等のアクションは `actionLabel` と `onAction` で実装し、ブラウザ標準の `alert`/`prompt`/`confirm` は使用しない。
+  - [x] 持続表示が必要なステータスは `StatusBanner` コンポーネントで表現し、疎通テストや自動保存の結果を集約。
+  - [x] `useDialog()` を追加し、確認ダイアログ（削除/リセット）と入力ダイアログ（テンプレート複製など）を Promise で扱う。
 
 ---
 
