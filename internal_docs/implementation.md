@@ -942,3 +942,9 @@
 - [x] ドキュメント更新: `docs/session_api.md`
 - [ ] バックエンド自動テスト実行: `cd backend && pytest -q`（`couchdb` モジュール未導入のため失敗）
 
+## 118. 管理画面設定の自動保存統一（2026-02-05）
+- [x] 外観設定（表示名・各種メッセージ・ブランドカラー・ロゴ）の入力内容を `useAutoSave` で即時保存するよう変更。保存ボタンを廃止し、ステータス表示を追加。
+- [x] タイムゾーン設定も選択直後に自動保存し、`TimezoneContext` へ即座に反映。
+- [x] 共通部品: `AutoSaveStatusText` と `readErrorMessage` ユーティリティを新設し、フロントエンドから利用。
+- [x] ドキュメント更新: `docs/admin_user_manual.md` と `internal_docs/admin_system_setup.md` を自動保存仕様に更新。
+
