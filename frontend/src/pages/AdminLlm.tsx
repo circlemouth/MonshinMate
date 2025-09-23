@@ -377,7 +377,6 @@ export default function AdminLlm() {
         throw new Error(data?.detail || 'test_failed');
       }
       notify({ title: '疎通テスト成功', status: 'success', channel: 'admin' });
-      setFeedback({ status: 'success', message: '疎通テストが成功しました' });
     } catch (error: any) {
       notify({
         title: '疎通テストに失敗しました',
@@ -385,7 +384,6 @@ export default function AdminLlm() {
         status: 'error',
         channel: 'admin',
       });
-      setFeedback({ status: 'error', message: '疎通テストに失敗しました' });
     } finally {
       try {
         await refreshLlmStatus();
