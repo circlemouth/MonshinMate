@@ -509,10 +509,11 @@ export default function AdminTemplates() {
       });
     const onUpdated = (e: any) => {
       if (!mounted) return;
-      const st = (e?.detail as LlmStatus) ?? 'ng';
-      setLlmStatus(st);
+      const payload = e?.detail as { status?: LlmStatus } | undefined;
+      const nextStatus = payload?.status ?? 'ng';
+      setLlmStatus(nextStatus);
       // 疎通イベントの結果のみで判定
-      setLlmAvailable(st === 'ok');
+      setLlmAvailable(nextStatus === 'ok');
     };
     window.addEventListener('llmStatusUpdated' as any, onUpdated);
     return () => {

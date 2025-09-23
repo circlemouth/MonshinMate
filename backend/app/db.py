@@ -1058,6 +1058,16 @@ def export_questionnaire_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, A
     finally:
         conn.close()
 
+    settings = load_app_settings(db_path) or {}
+    default_qid = settings.get("default_questionnaire_id")
+
+    return {
+        "templates": templates,
+        "summary_prompts": summary_prompts,
+        "followup_prompts": followup_prompts,
+        "default_questionnaire_id": default_qid,
+    }
+
 
 def delete_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> bool:
     """指定セッションを削除する。

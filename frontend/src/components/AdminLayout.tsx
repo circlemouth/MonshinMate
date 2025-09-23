@@ -24,8 +24,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     let mounted = true;
     const onUpdated = (e: any) => {
       if (!mounted) return;
-      const st = (e?.detail as LlmStatus) ?? 'ng';
-      setLlmStatus(st);
+      const payload = e?.detail as { status?: LlmStatus } | undefined;
+      if (!payload?.status) return;
+      setLlmStatus(payload.status);
     };
     window.addEventListener('llmStatusUpdated' as any, onUpdated);
     return () => {

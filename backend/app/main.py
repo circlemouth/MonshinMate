@@ -730,6 +730,7 @@ def on_startup() -> None:
             llm_gateway.update_settings(LLMSettings(**stored))
     except Exception:
         logging.getLogger(__name__).exception("failed to load stored llm settings; using defaults")
+    llm_gateway.sync_status(reason="startup")
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger(__name__).info("startup completed")
@@ -789,26 +790,30 @@ def healthz() -> dict:
 def readyz() -> dict:
     """依存疎通確認用のエンドポイント。"""
     db_ok = False
-    llm_ok = not llm_gateway.settings.enabled
-    llm_detail = "disabled" if not llm_gateway.settings.enabled else "not_checked"
+    snapshot = llm_gateway.get_status_snapshot()
+    status_value = snapshot.get("status")
+    if status_value is None:
+        status_value = "disabled" if not llm_gateway.settings.enabled else "pending"
+    detail_parts = [f"status={status_value}"]
+    if snapshot.get("checked_at"):
+        detail_parts.append(f"checked_at={snapshot['checked_at']}")
+    if snapshot.get("source"):
+        detail_parts.append(f"source={snapshot['source']}")
+    if snapshot.get("detail"):
+        detail_parts.append(f"detail={snapshot['detail']}")
+    llm_ok = True
+    if llm_gateway.settings.enabled and llm_gateway.settings.base_url:
+        llm_ok = status_value in {"ok", "pending"}
+    elif llm_gateway.settings.enabled and not llm_gateway.settings.base_url:
+        detail_parts.append("note=base_url_missing")
+    else:
+        detail_parts.append("note=disabled")
+    llm_detail = " ".join(detail_parts)
     try:
         _ = list_templates()
         db_ok = True
     except Exception:
         pass
-
-    if llm_gateway.settings.enabled and llm_gateway.settings.base_url:
-        try:
-            res = llm_gateway.test_connection()
-            if res.get("status") == "ok":
-                llm_ok = True
-            llm_detail = res.get("detail", "ng")
-        except Exception as e:
-            llm_detail = str(e)
-    elif llm_gateway.settings.enabled and not llm_gateway.settings.base_url:
-        # ベースURL未指定時は LLM を必須依存とみなさず ready を優先
-        llm_ok = True
-        llm_detail = "base_url_missing_skipped"
 
     if db_ok and llm_ok:
         return {"status": "ready"}
@@ -1387,10 +1392,13 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
     # 成功時のみバックグラウンドで再生成を起動
     try:
         if settings.enabled and settings.base_url:
-            res = llm_gateway.test_connection()
-            if res.get("status") != "ok":
-                raise HTTPException(status_code=400, detail=res.get("detail") or "LLM接続に失敗しました")
-            background.add_task(_bg_regen_summaries)
+            res = llm_gateway.test_connection(source="settings_put")
+            if res.get("status") == "ok":
+                background.add_task(_bg_regen_summaries)
+            else:
+                logging.getLogger("llm").warning(
+                    "llm_settings_test_failed_on_save: %s", res.get("detail")
+                )
     except HTTPException:
         raise
     except Exception:
@@ -1539,7 +1547,7 @@ def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
         )
         gateway = LLMGateway(temp)
         return gateway.test_connection()
-    return llm_gateway.test_connection()
+    return llm_gateway.test_connection(source="manual_test")
 
 class ListModelsRequest(BaseModel):
     """モデル一覧取得リクエスト。"""
@@ -1869,6 +1877,15 @@ class DatabaseStatus(BaseModel):
     status: str
 
 
+class LLMStatusResponse(BaseModel):
+    """LLM 通信状態のスナップショット。"""
+
+    status: str
+    detail: str | None = None
+    source: str | None = None
+    checked_at: datetime | None = None
+
+
 @app.get("/system/database-status", response_model=DatabaseStatus)
 def get_database_status() -> DatabaseStatus:
     """データベースの使用状況を返す。"""
@@ -1881,6 +1898,22 @@ def get_database_status() -> DatabaseStatus:
         return DatabaseStatus(status="couchdb")
     except Exception:
         return DatabaseStatus(status="error")
+
+
+@app.get("/system/llm-status", response_model=LLMStatusResponse)
+def get_llm_status_snapshot() -> LLMStatusResponse:
+    """LLM 通信状態を返す。"""
+
+    snapshot = llm_gateway.get_status_snapshot()
+    status = snapshot.get("status")
+    if status not in {"ok", "ng", "disabled", "pending"}:
+        status = "disabled" if not llm_gateway.settings.enabled else "pending"
+    return LLMStatusResponse(
+        status=str(status),
+        detail=snapshot.get("detail"),
+        source=snapshot.get("source"),
+        checked_at=snapshot.get("checked_at"),
+    )
 
 
 # --- 管理者認証 API ---
@@ -2058,6 +2091,10 @@ def admin_login(payload: AdminLoginRequest) -> dict:
         logging.getLogger("security").info("admin_login_success")
     except Exception:
         pass
+    try:
+        llm_gateway.test_connection(source="admin_login")
+    except Exception:
+        logging.getLogger(__name__).exception("llm_status_update_failed_on_login")
     return {"status": "ok", "message": "Login successful"}
 
 
@@ -2080,6 +2117,10 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
         logging.getLogger("security").info("admin_login_totp_success")
     except Exception:
         pass
+    try:
+        llm_gateway.test_connection(source="admin_login_totp")
+    except Exception:
+        logging.getLogger(__name__).exception("llm_status_update_failed_on_login_totp")
     return {"status": "ok", "message": "Login successful"}
 
 

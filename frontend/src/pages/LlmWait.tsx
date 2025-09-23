@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { VStack, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 /** LLM 追質問の要否判定待機画面。 */
 export default function LlmWait() {
@@ -25,6 +26,7 @@ export default function LlmWait() {
       postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
+    refreshLlmStatus().catch(() => {});
     navigate('/done');
   };
 
@@ -34,25 +36,26 @@ export default function LlmWait() {
       return;
     }
     const check = async () => {
-      try {
-        const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-        if (!res.ok) throw new Error('http error');
-        const data = await res.json();
-        if (data.questions && data.questions.length > 0) {
-          sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
-          navigate('/questions');
-        } else {
-          await finalize();
-        }
-      } catch (e) {
-        console.error('llm question check failed', e);
-        try {
-          const msg = e instanceof Error ? e.message : String(e);
-          sessionStorage.setItem('llm_error', msg);
-        } catch {}
+    try {
+      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!res.ok) throw new Error('http error');
+      const data = await res.json();
+      if (data.questions && data.questions.length > 0) {
+        sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
+        navigate('/questions');
+      } else {
         await finalize();
       }
-    };
+    } catch (e) {
+      console.error('llm question check failed', e);
+      try {
+        const msg = e instanceof Error ? e.message : String(e);
+        sessionStorage.setItem('llm_error', msg);
+      } catch {}
+      await finalize();
+    }
+    refreshLlmStatus().catch(() => {});
+  };
     check();
   }, [sessionId, navigate]);
 
