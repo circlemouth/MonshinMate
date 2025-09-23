@@ -23,7 +23,7 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { FiCpu, FiDatabase, FiDownload, FiLayers } from 'react-icons/fi';
-import { LlmStatus } from '../utils/llmStatus';
+import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
 import SystemStatusCard from '../components/SystemStatusCard';
 import { useTimezone } from '../contexts/TimezoneContext';
 
@@ -59,6 +59,7 @@ const LLM_STATUS_MAP: Record<LlmStatus, { label: string; color: string; descript
   ok: { label: '疎通良好', color: 'green', description: 'LLM との接続は正常です。' },
   ng: { label: '接続エラー', color: 'red', description: 'LLM との接続に問題があります。' },
   disabled: { label: '無効', color: 'primary', description: 'LLM 機能は無効化されています。' },
+  pending: { label: '確認待ち', color: 'orange', description: '直近の疎通確認を待っています。' },
 };
 
 const formatLocalDateTime = (date: Date) => {
@@ -102,11 +103,37 @@ export default function AdminMain() {
   const [llmLoading, setLlmLoading] = useState<boolean>(true);
   const [llmSettings, setLlmSettings] = useState<LlmSettingsResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
+  const [llmStatusDetail, setLlmStatusDetail] = useState<string | null>(null);
+  const [llmStatusSource, setLlmStatusSource] = useState<string | null>(null);
+  const [llmCheckedAt, setLlmCheckedAt] = useState<Date | null>(null);
 
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
   const toast = useToast();
   const { formatDateTime } = useTimezone();
+
+  const parseCheckedAt = (value: string | null | undefined): Date | null => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+
+  const sourceLabel = (source: string | null): string | null => {
+    if (!source) return null;
+    const map: Record<string, string> = {
+      admin_login: '管理者ログイン',
+      admin_login_totp: '管理者ログイン(TOTP)',
+      manual_test: '疎通テスト',
+      settings_put: '設定保存時',
+      settings_update: '設定同期',
+      generate_followups: '追加質問生成',
+      generate_question: '追質問生成',
+      chat: 'チャット',
+      summarize: 'サマリー生成',
+      startup: '起動時',
+    };
+    return map[source] ?? source;
+  };
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -185,36 +212,48 @@ export default function AdminMain() {
     setLlmLoading(true);
     setLlmError(null);
     try {
-      const res = await fetch('/llm/settings');
+      const [res, snapshot] = await Promise.all([
+        fetch('/llm/settings'),
+        refreshLlmStatus(),
+      ]);
       if (!res.ok) {
         throw new Error('failed to load llm settings');
       }
       const settings: LlmSettingsResponse = await res.json();
       setLlmSettings(settings);
-      if (!settings.enabled) {
-        setLlmStatus('disabled');
-      } else {
-        try {
-          const testRes = await fetch('/llm/settings/test', { method: 'POST' });
-          if (testRes.ok) {
-            const result = await testRes.json();
-            setLlmStatus(result?.status === 'ok' ? 'ok' : 'ng');
-          } else {
-            setLlmStatus('ng');
-          }
-        } catch (testErr) {
-          console.error(testErr);
-          setLlmStatus('ng');
-        }
-      }
+      const effectiveStatus = settings.enabled ? snapshot.status : 'disabled';
+      setLlmStatus(effectiveStatus);
+      setLlmStatusDetail(snapshot.detail ?? null);
+      setLlmStatusSource(snapshot.source ?? null);
+      setLlmCheckedAt(parseCheckedAt(snapshot.checkedAt));
     } catch (err) {
       console.error(err);
       setLlmSettings(null);
       setLlmStatus('ng');
       setLlmError('LLM 設定の取得に失敗しました。');
+      setLlmStatusDetail(null);
+      setLlmStatusSource(null);
+      setLlmCheckedAt(null);
     } finally {
       setLlmLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      const payload = e?.detail as
+        | { status?: LlmStatus; detail?: string | null; source?: string | null; checkedAt?: string | null }
+        | undefined;
+      if (!payload?.status) return;
+      setLlmStatus(payload.status);
+      setLlmStatusDetail(payload.detail ?? null);
+      setLlmStatusSource(payload.source ?? null);
+      setLlmCheckedAt(parseCheckedAt(payload.checkedAt));
+    };
+    window.addEventListener('llmStatusUpdated' as any, handler);
+    return () => {
+      window.removeEventListener('llmStatusUpdated' as any, handler);
+    };
   }, []);
 
   useEffect(() => {
@@ -290,12 +329,17 @@ export default function AdminMain() {
   const providerName = llmSettings ? providerLabel(llmSettings.provider) : '未設定';
   const modelName = llmSettings?.model && llmSettings.model.trim() ? llmSettings.model : '未設定';
 
-  const llmTone = llmStatus === 'ok' ? 'success' : llmStatus === 'disabled' ? 'warning' : 'error';
+  const llmTone = llmStatus === 'ok' ? 'success' : llmStatus === 'ng' ? 'error' : 'warning';
   const llmSummaryDescription = (() => {
     if (llmError) return llmError;
     if (!llmSettings) return 'LLM 設定を取得できませんでした。';
     if (!llmSettings.enabled) return 'LLM 機能は無効化されています。';
-    return `プロバイダ: ${providerName} / モデル: ${modelName}`;
+    const parts = [`プロバイダ: ${providerName} / モデル: ${modelName}`];
+    if (llmStatusDetail) parts.push(`直近の結果: ${llmStatusDetail}`);
+    const srcLabel = sourceLabel(llmStatusSource);
+    if (srcLabel) parts.push(`更新契機: ${srcLabel}`);
+    parts.push(`最終更新: ${llmCheckedAt ? formatLocalDateTime(llmCheckedAt) : '未実行'}`);
+    return parts.join(' / ');
   })();
 
   return (

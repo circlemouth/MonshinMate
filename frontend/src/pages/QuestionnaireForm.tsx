@@ -23,6 +23,7 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
+import { refreshLlmStatus } from '../utils/llmStatus';
 import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
 import ImageAnnotator from '../components/ImageAnnotator';
@@ -174,6 +175,7 @@ export default function QuestionnaireForm() {
       postWithRetry(`/sessions/${sessionId}/finalize`, {});
       alert('ネットワークエラーが発生しました。接続後に再度お試しください。');
     }
+    refreshLlmStatus().catch(() => {});
     navigate('/done');
   };
 

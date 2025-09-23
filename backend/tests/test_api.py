@@ -167,6 +167,37 @@ def test_llm_settings_test_with_body() -> None:
     assert res.json()["status"] == "ng"
 
 
+def test_llm_status_snapshot_endpoint() -> None:
+    """LLM 状態スナップショットが取得できる。"""
+    on_startup()
+    res = client.get("/system/llm-status")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] in {"disabled", "pending", "ng", "ok"}
+
+
+def test_llm_status_updates_after_settings_change() -> None:
+    """設定変更と疎通テストで LLM 状態が更新される。"""
+    on_startup()
+    payload = {
+        "provider": "ollama",
+        "model": "test-model",
+        "temperature": 0.2,
+        "system_prompt": "",
+        "enabled": True,
+        "base_url": "http://127.0.0.1:9",
+    }
+    res = client.put("/llm/settings", json=payload)
+    assert res.status_code == 200
+    snapshot = client.get("/system/llm-status").json()
+    assert snapshot["status"] in {"ng", "pending"}
+    assert snapshot.get("checked_at") is not None
+    client.post("/llm/settings/test")
+    snapshot_after = client.get("/system/llm-status").json()
+    assert snapshot_after["status"] in {"ng", "disabled", "ok"}
+    assert snapshot_after.get("checked_at") is not None
+
+
 def test_create_session() -> None:
     """セッション作成が行われ ID が発行されることを確認する。"""
     on_startup()

@@ -1,7 +1,8 @@
 """LLM ゲートウェイのスタブ実装。"""
 from __future__ import annotations
 
-from typing import Any
+from datetime import datetime, timezone
+from typing import Any, Literal
 import time
 import logging
 import json
@@ -21,6 +22,9 @@ DEFAULT_FOLLOWUP_PROMPT = (
     "上記の患者回答を踏まえ、診療に必要な追加確認事項を最大{max_questions}個生成してください。"
     "各質問は丁寧な日本語の文章で記述し、文字列のみを要素とするJSON配列として返してください。"
 )
+
+
+LlmStatusValue = Literal["ok", "ng", "disabled", "pending"]
 
 
 class ProviderProfile(BaseModel):
@@ -112,6 +116,14 @@ class LLMGateway:
         # セッション単位での直列化用ロック
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
+        self._status_lock = threading.Lock()
+        self._last_status: dict[str, Any] = {
+            "status": "disabled",
+            "detail": "not_checked",
+            "source": "init",
+            "checked_at": None,
+        }
+        self._sync_status_for_settings(reason="init")
 
     def _get_lock(self, key: str | None) -> threading.RLock | None:
         if not key:
@@ -127,14 +139,71 @@ class LLMGateway:
                     lock = self._locks[key]
         return lock
 
+    def _set_status(
+        self,
+        status: LlmStatusValue,
+        detail: str | None,
+        source: str,
+        *,
+        mark_time: bool,
+    ) -> None:
+        with self._status_lock:
+            previous = getattr(self, "_last_status", {}) or {}
+            checked_at = (
+                datetime.now(timezone.utc)
+                if mark_time
+                else previous.get("checked_at")
+            )
+            self._last_status = {
+                "status": status,
+                "detail": detail,
+                "source": source,
+                "checked_at": checked_at,
+            }
+
+    def _record_status(
+        self, status: LlmStatusValue, source: str, detail: str | None = None
+    ) -> None:
+        self._set_status(status, detail, source, mark_time=True)
+
+    def _sync_status_for_settings(self, *, reason: str) -> None:
+        s = self.settings
+        if not s.enabled:
+            self._set_status("disabled", "llm disabled", reason, mark_time=False)
+            return
+        if not s.base_url or not s.model:
+            self._set_status(
+                "disabled",
+                "connection settings incomplete",
+                reason,
+                mark_time=False,
+            )
+            return
+        with self._status_lock:
+            current = (self._last_status or {}).get("status")
+        if current not in {"ok", "ng"}:
+            self._set_status("pending", "awaiting_check", reason, mark_time=False)
+
+    def sync_status(self, *, reason: str = "sync") -> None:
+        """現在の設定に基づいてステータスを整合させる。"""
+
+        self._sync_status_for_settings(reason=reason)
+
+    def get_status_snapshot(self) -> dict[str, Any]:
+        """直近の LLM 通信状態を取得する。"""
+
+        with self._status_lock:
+            return dict(self._last_status)
+
     def update_settings(self, settings: LLMSettings) -> None:
         """設定値を更新する。"""
 
         settings.sync_from_active_profile()
         settings.sync_to_active_profile()
         self.settings = settings
+        self._sync_status_for_settings(reason="settings_update")
 
-    def test_connection(self) -> dict[str, str]:
+    def test_connection(self, *, source: str = "manual_test") -> dict[str, str]:
         """LLM 接続の疎通確認（スタブ）。
 
         Returns:
@@ -143,23 +212,37 @@ class LLMGateway:
         s = self.settings
         if not s.enabled:
             # 無効時は疎通NGを返す
+            self._set_status("disabled", "llm disabled", source, mark_time=True)
             return {"status": "ng", "detail": "llm is disabled"}
         if not s.base_url or not s.model:
             # ベースURLやモデル未指定での自動OKは行わない
+            self._set_status(
+                "disabled",
+                "connection settings incomplete",
+                source,
+                mark_time=True,
+            )
             return {"status": "ng", "detail": "base_url or model is missing"}
 
         # まずモデル一覧を取得し、選択モデルが含まれているかで判定する
         try:
             models = self.list_models()
             if not models:
-                return {"status": "ng", "detail": "no models returned"}
+                detail = "no models returned"
+                self._record_status("ng", source, detail)
+                return {"status": "ng", "detail": detail}
             if s.model in models:
+                self._record_status("ok", source, "connection ok")
                 return {"status": "ok"}
-            return {"status": "ng", "detail": f"model '{s.model}' not found"}
+            detail = f"model '{s.model}' not found"
+            self._record_status("ng", source, detail)
+            return {"status": "ng", "detail": detail}
         except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
-            return {"status": "ng", "detail": str(e)}
+            detail = str(e)
+            self._record_status("ng", source, detail)
+            return {"status": "ng", "detail": detail}
 
-    def list_models(self) -> list[str]:
+    def list_models(self, *, source: str | None = None) -> list[str]:
         """利用可能なモデル名の一覧を返す。
 
         Returns:
@@ -167,6 +250,9 @@ class LLMGateway:
         """
         s = self.settings
         if not s.enabled or not s.base_url:
+            if source:
+                detail = "llm disabled" if not s.enabled else "base_url missing"
+                self._set_status("disabled", detail, source, mark_time=True)
             return []
 
         try:
@@ -177,7 +263,12 @@ class LLMGateway:
                 r.raise_for_status()
                 data = r.json()
                 # "models" キーの中の "name" を抽出
-                return sorted([m.get("name") for m in data.get("models", []) if m.get("name")])
+                models = sorted(
+                    [m.get("name") for m in data.get("models", []) if m.get("name")]
+                )
+                if source:
+                    self._record_status("ok", source, "model list fetched")
+                return models
             else:  # LM Studio or other OpenAI compatible
                 url = s.base_url.rstrip("/") + "/v1/models"
                 headers = {}
@@ -187,9 +278,16 @@ class LLMGateway:
                 r.raise_for_status()
                 data = r.json()
                 # "data" キーの中の "id" を抽出
-                return sorted([m.get("id") for m in data.get("data", []) if m.get("id")])
+                models = sorted(
+                    [m.get("id") for m in data.get("data", []) if m.get("id")]
+                )
+                if source:
+                    self._record_status("ok", source, "model list fetched")
+                return models
         except Exception as e:
             logging.getLogger("llm").error(f"Failed to list models: {e}")
+            if source:
+                self._record_status("ng", source, str(e))
             return []
 
     def generate_question(
@@ -201,8 +299,7 @@ class LLMGateway:
         """不足項目に対する追質問文を生成する。
 
         リモート LLM が有効かつ接続設定がある場合は HTTP 経由で生成を試み、
-        失敗した場合は例外を送出する。例外は呼び出し側で捕捉し、
-        LLM を用いないフォールバック処理へ委ねる。
+        失敗した場合はログとステータス記録のみ行い、スタブ質問へフォールバックする。
 
         Args:
             missing_item_id: 不足している項目ID。
@@ -249,6 +346,9 @@ class LLMGateway:
                             missing_item_id,
                             duration,
                         )
+                        self._record_status(
+                            "ok", "generate_question", "remote question generated"
+                        )
                         return content
                     raise RuntimeError("empty response from ollama")
                 else:
@@ -285,13 +385,19 @@ class LLMGateway:
                                 missing_item_id,
                                 duration,
                             )
+                            self._record_status(
+                                "ok",
+                                "generate_question",
+                                "remote question generated",
+                            )
                             return content
                     raise RuntimeError("empty response from lm studio")
             except Exception as e:  # noqa: BLE001 - 呼び出し側でフォールバック
+                self._record_status("ng", "generate_question", str(e))
                 logging.getLogger("llm").exception(
                     "remote_generate_question_failed: %s", e
                 )
-                raise
+                # 失敗時はスタブの追質問にフォールバックする
 
         # ---- フォールバック（ローカルスタブ） ----
         suffix = ""
@@ -402,16 +508,23 @@ class LLMGateway:
                         if isinstance(arr, list):
                             return [str(x) for x in arr][:max_questions]
                     raise RuntimeError("invalid structured response from lm studio")
-            # ロック内で実行し、失敗時は例外を呼び出し側へ返す
+            # ロック内で実行し、失敗時はスタブへフォールバックする
             try:
                 if lock:
                     with lock:
-                        return _attempt()
-                return _attempt()
+                        result = _attempt()
+                else:
+                    result = _attempt()
+                self._record_status(
+                    "ok", "generate_followups", "remote followups generated"
+                )
+                return result
             except Exception as e:  # noqa: BLE001
-                logging.getLogger("llm").warning("generate_followups attempt failed: %s", e)
-                # 呼び出し側でフォールバック処理を行うため例外を再送出
-                raise
+                self._record_status("ng", "generate_followups", str(e))
+                logging.getLogger("llm").warning(
+                    "generate_followups attempt failed: %s", e
+                )
+                # 失敗時はスタブ実装へフォールバックする
         # スタブ実装：固定的な質問を返す
         return [f"追加質問{idx + 1}" for idx in range(max_questions)]
 
@@ -425,8 +538,10 @@ class LLMGateway:
                 reply = self._chat_remote(message)
                 duration = (time.perf_counter() - start) * 1000
                 logging.getLogger("llm").info("chat(remote) took_ms=%.1f", duration)
+                self._record_status("ok", "chat", "remote chat succeeded")
                 return reply
-            except Exception:
+            except Exception as e:
+                self._record_status("ng", "chat", str(e))
                 logging.getLogger("llm").exception("remote_chat_failed; falling back to stub")
 
         # フォールバック（スタブ）
@@ -535,6 +650,7 @@ class LLMGateway:
         """
         try:
             s = self.settings
+            last_error: Exception | None = None
             # 質問と回答のペアを整形
             lines: list[str] = []
             for k, v in answers.items():
@@ -604,20 +720,39 @@ class LLMGateway:
                 try:
                     if lock:
                         with lock:
-                            return _attempt()
-                    return _attempt()
+                            result = _attempt()
+                    else:
+                        result = _attempt()
+                    self._record_status(
+                        "ok", "summarize", "remote summary generated"
+                    )
+                    return result
                 except Exception as e:
-                    logging.getLogger("llm").warning("summarize_with_prompt attempt failed: %s", e)
+                    last_error = e
+                    logging.getLogger("llm").warning(
+                        "summarize_with_prompt attempt failed: %s", e
+                    )
                     if retry > 0:
                         time.sleep(0.4)
                         try:
                             if lock:
                                 with lock:
-                                    return _attempt()
-                            return _attempt()
+                                    result = _attempt()
+                            else:
+                                result = _attempt()
+                            self._record_status(
+                                "ok", "summarize", "remote summary generated"
+                            )
+                            return result
                         except Exception as e2:
-                            logging.getLogger("llm").exception("summarize_with_prompt retry failed: %s", e2)
+                            last_error = e2
+                            logging.getLogger("llm").exception(
+                                "summarize_with_prompt retry failed: %s", e2
+                            )
+            if last_error:
+                self._record_status("ng", "summarize", str(last_error))
         except Exception as e:  # noqa: BLE001 - フォールバックへ
+            self._record_status("ng", "summarize", str(e))
             logging.getLogger("llm").exception("summarize_with_prompt failed: %s", e)
 
         # フォールバック（スタブ要約）

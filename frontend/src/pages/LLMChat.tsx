@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { VStack, HStack, Input, Button, Box, Text, Flex, Avatar, Icon } from '@chakra-ui/react';
 import { FiSend } from 'react-icons/fi';
+import { refreshLlmStatus } from '../utils/llmStatus';
 
 interface Message {
   from: 'user' | 'bot';
@@ -45,6 +46,7 @@ export default function LLMChat() {
       setMessages([...newMessages, { from: 'bot', text: '申し訳ありません、エラーが発生しました。' }]);
     } finally {
       setIsLoading(false);
+      refreshLlmStatus().catch(() => {});
     }
   };
 
