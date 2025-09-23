@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime, UTC
 from typing import Any, Iterable
 import base64
+import unicodedata
 
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet, InvalidToken
@@ -58,6 +59,9 @@ if COUCHDB_URL:
             couch_db = _server.create(COUCHDB_DB_NAME)
     except Exception:
         couch_db = None
+
+
+SPACE_CHARS = {" ", "\u3000"}
 
 
 def _dict_factory(cursor: sqlite3.Cursor, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -118,6 +122,12 @@ def get_conn(db_path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON;")
     return conn
 
+
+def _normalize_patient_name_for_search(value: str) -> str:
+    """検索時に患者名を比較しやすい形に正規化する。"""
+
+    normalized = unicodedata.normalize("NFKC", value)
+    return ''.join(ch for ch in normalized if ch not in SPACE_CHARS)
 
 def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     """最小限のテーブル群を作成し、初期データを投入する。"""
@@ -861,12 +871,25 @@ def list_sessions(
 
     検索条件が指定された場合はそれに応じてフィルタする。
     """
+    patient_name_query = (patient_name or "").strip()
+    normalized_patient_name_query = (
+        _normalize_patient_name_for_search(patient_name_query) if patient_name_query else ""
+    )
     if couch_db:
         docs = [r.doc for r in couch_db.view("_all_docs", include_docs=True)]
         result: list[dict[str, Any]] = []
+        use_direct = bool(patient_name_query)
+        use_normalized = bool(normalized_patient_name_query)
         for d in docs:
-            if patient_name and patient_name not in d.get("patient_name", ""):
-                continue
+            if use_direct or use_normalized:
+                raw_name = d.get("patient_name") or ""
+                direct_match = patient_name_query in raw_name if use_direct else True
+                normalized_match = True
+                if use_normalized:
+                    normalized_target = _normalize_patient_name_for_search(raw_name)
+                    normalized_match = normalized_patient_name_query in normalized_target
+                if not direct_match and not normalized_match:
+                    continue
             if dob and dob != d.get("dob"):
                 continue
             f_at = d.get("finalized_at")
@@ -890,9 +913,15 @@ def list_sessions(
         query = "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions"
         conditions: list[str] = []
         params: list[Any] = []
-        if patient_name:
-            conditions.append("patient_name LIKE ?")
-            params.append(f"%{patient_name}%")
+        if patient_name_query:
+            if normalized_patient_name_query:
+                conditions.append(
+                    "(patient_name LIKE ? OR REPLACE(REPLACE(patient_name, ' ', ''), '　', '') LIKE ?)"
+                )
+                params.extend([f"%{patient_name_query}%", f"%{normalized_patient_name_query}%"])
+            else:
+                conditions.append("patient_name LIKE ?")
+                params.append(f"%{patient_name_query}%")
         if dob:
             conditions.append("dob = ?")
             params.append(dob)

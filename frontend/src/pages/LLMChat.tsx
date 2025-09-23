@@ -56,29 +56,31 @@ export default function LLMChat() {
   };
 
   return (
-    <Flex h="100%" direction="column" >
-      <Box flex="1" overflowY="auto" px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} bg="neutral.50">
+    <Flex h="100%" direction="column">
+      <Box flex="1" overflowY="auto" px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} bg="bg.subtle">
         <VStack spacing={4} align="stretch">
           {messages.map((m, i) => (
             <Flex key={i} justify={m.from === 'user' ? 'flex-end' : 'flex-start'}>
-              {m.from === 'bot' && <Avatar name="ボット" bg="primary.500" color="white" mr={2} />}
+              {m.from === 'bot' && <Avatar name="ボット" bg="accent.solid" color="accent.onFilled" mr={2} />}
               <Box
-                bg={m.from === 'user' ? 'primary.600' : 'white'}
-                color={m.from === 'user' ? 'white' : 'neutral.900'}
+                bg={m.from === 'user' ? 'accent.solid' : 'bg.surface'}
+                color={m.from === 'user' ? 'accent.onFilled' : 'fg.default'}
                 p={3}
                 borderRadius="lg"
                 maxW="80%"
                 boxShadow="sm"
+                borderWidth={m.from === 'bot' ? '1px' : '0'}
+                borderColor={m.from === 'bot' ? 'border.accent' : 'transparent'}
               >
                 <Text whiteSpace="pre-wrap">{m.text}</Text>
               </Box>
-              {m.from === 'user' && <Avatar name="ユーザー" bg="neutral.300" ml={2} />}
+              {m.from === 'user' && <Avatar name="ユーザー" bg="accentAlpha.16" color="fg.accent" ml={2} />}
             </Flex>
           ))}
           <div ref={messagesEndRef} />
         </VStack>
       </Box>
-      <Box px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} borderTopWidth="1px" borderColor="border.default" bg="white">
+      <Box px={{ base: 2, md: 3 }} py={{ base: 2, md: 3 }} borderTopWidth="1px" borderColor="border.accent" bg="bg.surface">
         <HStack>
           <Input
             value={input}
@@ -87,8 +89,9 @@ export default function LLMChat() {
             placeholder="メッセージを入力..."
             size="lg"
             borderRadius="full"
-            bg="neutral.100"
-            _focus={{ bg: 'white', borderColor: 'primary.500' }}
+            bg="bg.subtle"
+            _hover={{ bg: 'bg.emphasis' }}
+            _focus={{ bg: 'bg.surface', borderColor: 'accent.solid', boxShadow: '0 0 0 1px var(--chakra-colors-accent-solid)' }}
             isDisabled={isLoading}
           />
           <Button

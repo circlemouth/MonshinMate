@@ -33,7 +33,13 @@ export default function FlowProgress() {
 
   return (
     <Box mb={4}>
-      <Progress value={percent} size="sm" colorScheme="primary" borderRadius="8px" />
+      <Progress
+        value={percent}
+        size="sm"
+        borderRadius="full"
+        bg="bg.subtle"
+        sx={{ '& > div': { background: 'accent.solid' } }}
+      />
     </Box>
   );
 }

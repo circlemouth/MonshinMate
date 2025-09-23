@@ -7,6 +7,7 @@ from typing import Any, Iterable
 from uuid import uuid4
 import time
 from datetime import datetime, timedelta, UTC
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import os
 import io
 import zipfile
@@ -756,6 +757,7 @@ default_llm_settings = LLMSettings(
     # 初期値としてローカルの Ollama 既定ポートを設定
     base_url="http://localhost:11434",
 )
+default_llm_settings.sync_to_active_profile()
 llm_gateway = LLMGateway(default_llm_settings)
 
 # メモリ上でセッションを保持する簡易ストア
@@ -1274,9 +1276,11 @@ def get_llm_settings() -> LLMSettings:
             # DB 側が真ならメモリへも反映して返す
             s = LLMSettings(**stored)
             llm_gateway.update_settings(s)
-            return s
+            llm_gateway.settings.sync_from_active_profile()
+            return llm_gateway.settings
     except Exception:
         logger.exception("failed_to_load_llm_settings_on_get")
+    llm_gateway.settings.sync_from_active_profile()
     return llm_gateway.settings
 
 
@@ -1287,6 +1291,7 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
     if settings.enabled and (not settings.model or not str(settings.model).strip()):
         raise HTTPException(status_code=400, detail="LLM有効時はモデル名が必須です")
 
+    settings.sync_to_active_profile()
     llm_gateway.update_settings(settings)
     try:
         # DB にも保存（永続化）
@@ -1381,6 +1386,7 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
         raise
     except Exception:
         logger.exception("llm_settings_post_update_check_failed")
+    llm_gateway.settings.sync_from_active_profile()
     return llm_gateway.settings
 
 
@@ -1552,6 +1558,15 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
 
 
 # --- システム表示名・設定 API ---
+class TimezoneSettings(BaseModel):
+    """システム全体の時間帯設定。"""
+
+    timezone: str
+
+
+DEFAULT_TIMEZONE = "Asia/Tokyo"
+
+
 class DisplayNameSettings(BaseModel):
     display_name: str
 
@@ -1584,6 +1599,47 @@ class LogoCrop(BaseModel):
 class LogoSettings(BaseModel):
     url: str | None = None
     crop: LogoCrop | None = None
+
+@app.get("/system/timezone", response_model=TimezoneSettings)
+def get_system_timezone() -> TimezoneSettings:
+    """システム全体で利用する時間帯を返す。未設定時は JST。"""
+
+    try:
+        stored = load_app_settings() or {}
+        tz = stored.get("timezone") or DEFAULT_TIMEZONE
+        # 不正な値が保存されていた場合もデフォルトにフォールバック
+        try:
+            ZoneInfo(tz)
+        except ZoneInfoNotFoundError:
+            tz = DEFAULT_TIMEZONE
+        return TimezoneSettings(timezone=tz)
+    except Exception:
+        logger.exception("get_timezone_failed")
+        return TimezoneSettings(timezone=DEFAULT_TIMEZONE)
+
+
+@app.put("/system/timezone", response_model=TimezoneSettings)
+def set_system_timezone(payload: TimezoneSettings) -> TimezoneSettings:
+    """システム全体で利用する時間帯を保存する。"""
+
+    timezone_value = payload.timezone or DEFAULT_TIMEZONE
+    try:
+        ZoneInfo(timezone_value)
+    except ZoneInfoNotFoundError:
+        raise HTTPException(status_code=400, detail="invalid_timezone")
+    except Exception as exc:
+        logger.exception("validate_timezone_failed")
+        raise HTTPException(status_code=500, detail="timezone_validation_failed") from exc
+
+    try:
+        current = load_app_settings() or {}
+        current["timezone"] = timezone_value
+        save_app_settings(current)
+        return TimezoneSettings(timezone=current["timezone"])
+    except Exception as exc:
+        logger.exception("set_timezone_failed")
+        raise HTTPException(status_code=500, detail="save_timezone_failed") from exc
+
 
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:

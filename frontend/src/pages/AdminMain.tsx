@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Box,
   Heading,
@@ -14,16 +14,18 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
-  Button,
+  IconButton,
   VStack,
   SimpleGrid,
   HStack,
-  Tag,
+  Tooltip,
+  Skeleton,
   useToast,
 } from '@chakra-ui/react';
-import { useNavigate } from 'react-router-dom';
-import { FiFile } from 'react-icons/fi';
+import { FiCpu, FiDatabase, FiDownload, FiLayers } from 'react-icons/fi';
 import { LlmStatus } from '../utils/llmStatus';
+import SystemStatusCard from '../components/SystemStatusCard';
+import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionSummary {
   id: string;
@@ -47,30 +49,26 @@ interface LlmSettingsResponse {
 
 type DatabaseStatus = 'couchdb' | 'sqlite' | 'error';
 
-type TemplateGroup = {
-  id: string;
-  visitTypes: string[];
-};
-
 const DB_STATUS_MAP: Record<DatabaseStatus, { label: string; color: string; description: string }> = {
   couchdb: { label: 'CouchDB', color: 'green', description: 'CouchDB コンテナに接続しています。' },
-  sqlite: { label: 'SQLite', color: 'blue', description: 'ローカルの SQLite を使用しています。' },
+  sqlite: { label: 'SQLite', color: 'primary', description: 'ローカルの SQLite を使用しています。' },
   error: { label: '接続エラー', color: 'red', description: 'データベースの状態を取得できませんでした。' },
 };
 
 const LLM_STATUS_MAP: Record<LlmStatus, { label: string; color: string; description: string }> = {
   ok: { label: '疎通良好', color: 'green', description: 'LLM との接続は正常です。' },
   ng: { label: '接続エラー', color: 'red', description: 'LLM との接続に問題があります。' },
-  disabled: { label: '無効', color: 'gray', description: 'LLM 機能は無効化されています。' },
+  disabled: { label: '無効', color: 'primary', description: 'LLM 機能は無効化されています。' },
 };
 
-const visitTypeLabel = (type: string) => (type === 'initial' ? '初診' : type === 'followup' ? '再診' : type);
-
-const formatDateTime = (iso?: string | null) => {
-  if (!iso) return '-';
-  const [datePart, timePart] = iso.split('T');
-  if (!timePart) return datePart;
-  return `${datePart} ${timePart.slice(0, 5)}`;
+const formatLocalDateTime = (date: Date) => {
+  const pad = (value: number) => value.toString().padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+  return `${year}-${month}-${day} ${hours}:${minutes}`;
 };
 
 const providerLabel = (provider?: string) => {
@@ -105,8 +103,10 @@ export default function AdminMain() {
   const [llmSettings, setLlmSettings] = useState<LlmSettingsResponse | null>(null);
   const [llmError, setLlmError] = useState<string | null>(null);
 
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
   const toast = useToast();
-  const navigate = useNavigate();
+  const { formatDateTime } = useTimezone();
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -224,22 +224,19 @@ export default function AdminMain() {
     void loadLlmInfo();
   }, [loadSessions, loadTemplates, loadDatabaseStatus, loadLlmInfo]);
 
-  const templateGroups = useMemo<TemplateGroup[]>(() => {
-    const map = new Map<string, Set<string>>();
-    templates.forEach((tpl) => {
-      if (!tpl?.id) return;
-      const key = String(tpl.id);
-      if (!map.has(key)) {
-        map.set(key, new Set());
-      }
-      if (tpl.visit_type) {
-        map.get(key)?.add(tpl.visit_type);
-      }
-    });
-    return Array.from(map.entries())
-      .map(([id, types]) => ({ id, visitTypes: Array.from(types).sort() }))
-      .sort((a, b) => a.id.localeCompare(b.id));
-  }, [templates]);
+  useEffect(() => {
+    if (!templatesLoading && !dbLoading && !llmLoading) {
+      setLastUpdatedAt(new Date());
+    }
+  }, [templatesLoading, dbLoading, llmLoading]);
+
+  const templateSummaryValue = defaultTemplateId ?? '未設定';
+  const templateTone = templateError
+    ? 'error'
+    : defaultTemplateId && templates.length > 0
+    ? 'success'
+    : 'warning';
+  const templateSummaryDescription: string | undefined = templateError ?? undefined;
 
   const copyMarkdownForSession = async (id: string) => {
     try {
@@ -283,22 +280,22 @@ export default function AdminMain() {
     }
   };
 
-  const llmStatusMeta = LLM_STATUS_MAP[llmStatus];
   const dbStatusMeta = DB_STATUS_MAP[dbStatus];
+  const llmStatusMeta = LLM_STATUS_MAP[llmStatus];
 
-  const llmDetailText = (() => {
+  const dbTone = dbStatus === 'error' ? 'error' : 'success';
+  const dbSummaryValue = dbStatusMeta.label;
+  const dbSummaryDescription = dbStatusMeta.description;
+
+  const providerName = llmSettings ? providerLabel(llmSettings.provider) : '未設定';
+  const modelName = llmSettings?.model && llmSettings.model.trim() ? llmSettings.model : '未設定';
+
+  const llmTone = llmStatus === 'ok' ? 'success' : llmStatus === 'disabled' ? 'warning' : 'error';
+  const llmSummaryDescription = (() => {
     if (llmError) return llmError;
     if (!llmSettings) return 'LLM 設定を取得できませんでした。';
     if (!llmSettings.enabled) return 'LLM 機能は無効化されています。';
-    const provider = providerLabel(llmSettings.provider);
-    const model = llmSettings.model && llmSettings.model.trim() ? llmSettings.model : '未設定';
-    if (llmStatus === 'ok') {
-      return `プロバイダ: ${provider} / モデル: ${model}`;
-    }
-    if (llmStatus === 'ng') {
-      return `プロバイダ: ${provider} / モデル: ${model} - 疎通確認に失敗しました。`;
-    }
-    return `プロバイダ: ${provider} / モデル: ${model}`;
+    return `プロバイダ: ${providerName} / モデル: ${modelName}`;
   })();
 
   return (
@@ -309,8 +306,8 @@ export default function AdminMain() {
         </Heading>
         {sessionsLoading ? (
           <HStack spacing={3} align="center">
-            <Spinner size="sm" />
-            <Text fontSize="sm" color="gray.600">
+            <Spinner size="sm" color="accent.solid" />
+            <Text fontSize="sm" color="fg.muted">
               読み込み中...
             </Text>
           </HStack>
@@ -319,7 +316,7 @@ export default function AdminMain() {
             {sessionError}
           </Text>
         ) : sessions.length === 0 ? (
-          <Text fontSize="sm" color="gray.600">
+          <Text fontSize="sm" color="fg.muted">
             再診の問診データがまだありません。
           </Text>
         ) : (
@@ -333,19 +330,22 @@ export default function AdminMain() {
             </Thead>
             <Tbody>
               {sessions.map((s) => (
-                <Tr
-                  key={s.id}
-                  _hover={{ bg: 'gray.50' }}
-                  onClick={() => navigate(`/admin/sessions/${encodeURIComponent(s.id)}`)}
-                  sx={{ cursor: 'pointer' }}
-                >
+                <Tr key={s.id}>
                   <Td>{s.patient_name || '（未入力）'}</Td>
                   <Td>{formatDateTime(s.finalized_at)}</Td>
                   <Td onClick={(e) => e.stopPropagation()} whiteSpace="nowrap">
                     <Menu isLazy>
-                      <MenuButton as={Button} size="sm" variant="outline" leftIcon={<FiFile />}>
-                        出力
-                      </MenuButton>
+                      <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
+                        <MenuButton
+                          as={IconButton}
+                          size="md"
+                          variant="outline"
+                          icon={<FiDownload />}
+                          aria-label="問診結果を出力"
+                          minW="44px"
+                          minH="44px"
+                        />
+                      </Tooltip>
                       <MenuList>
                         <MenuItem
                           onClick={() =>
@@ -384,121 +384,51 @@ export default function AdminMain() {
           </Table>
         )}
         {!sessionsLoading && sessions.length > 0 && (
-          <Text mt={3} fontSize="xs" color="gray.500">
+          <Text mt={3} fontSize="xs" color="fg.muted">
             ※ 表示件数は再診データの最新10件です。詳細は「問診結果一覧」で確認できます。
           </Text>
         )}
       </Box>
-
       <Box>
         <Heading size="md" mb={4}>
-          システムの状態
+          システム情報
         </Heading>
         <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-          <Box borderWidth="1px" borderRadius="md" p={4}>
-            <Heading size="sm" mb={3}>
-              使用中テンプレート
-            </Heading>
-            {templatesLoading ? (
-              <HStack spacing={2}>
-                <Spinner size="sm" />
-                <Text fontSize="sm" color="gray.600">
-                  読み込み中...
-                </Text>
-              </HStack>
-            ) : templateError ? (
-              <Text fontSize="sm" color="red.500">
-                {templateError}
-              </Text>
-            ) : templateGroups.length === 0 ? (
-              <Text fontSize="sm" color="gray.600">
-                登録されているテンプレートがありません。
-              </Text>
-            ) : (
-              <VStack align="stretch" spacing={2}>
-                {defaultTemplateId && (
-                  <Text fontSize="sm" color="gray.600">
-                    既定テンプレートID: <strong>{defaultTemplateId}</strong>
-                  </Text>
-                )}
-                {templateGroups.map((group) => (
-                  <HStack key={group.id} spacing={3} align="center">
-                    <Text fontWeight="semibold" fontSize="sm">
-                      {group.id}
-                    </Text>
-                    {group.visitTypes.map((vt) => (
-                      <Tag
-                        key={vt}
-                        size="sm"
-                        colorScheme={vt === 'initial' ? 'blue' : vt === 'followup' ? 'purple' : 'gray'}
-                      >
-                        {visitTypeLabel(vt)}
-                      </Tag>
-                    ))}
-                    {defaultTemplateId === group.id && (
-                      <Tag size="sm" colorScheme="green">
-                        既定
-                      </Tag>
-                    )}
-                  </HStack>
-                ))}
-              </VStack>
-            )}
-          </Box>
-
-          <Box borderWidth="1px" borderRadius="md" p={4}>
-            <Heading size="sm" mb={3}>
-              データベース
-            </Heading>
-            {dbLoading ? (
-              <HStack spacing={2}>
-                <Spinner size="sm" />
-                <Text fontSize="sm" color="gray.600">
-                  状態確認中...
-                </Text>
-              </HStack>
-            ) : (
-              <VStack align="stretch" spacing={2}>
-                <Tag colorScheme={dbStatusMeta.color} variant="subtle" w="fit-content">
-                  DB: {dbStatusMeta.label}
-                </Tag>
-                <Text fontSize="sm" color="gray.600">
-                  {dbStatusMeta.description}
-                </Text>
-              </VStack>
-            )}
-          </Box>
-
-          <Box borderWidth="1px" borderRadius="md" p={4}>
-            <Heading size="sm" mb={3}>
-              LLM
-            </Heading>
-            {llmLoading ? (
-              <HStack spacing={2}>
-                <Spinner size="sm" />
-                <Text fontSize="sm" color="gray.600">
-                  状態確認中...
-                </Text>
-              </HStack>
-            ) : (
-              <VStack align="stretch" spacing={2}>
-                <Tag colorScheme={llmStatusMeta.color} variant="subtle" w="fit-content">
-                  {llmStatusMeta.label}
-                </Tag>
-                <Text fontSize="sm" color="gray.600">
-                  {llmDetailText}
-                </Text>
-                {llmSettings?.base_url && llmSettings.enabled && (
-                  <Text fontSize="xs" color="gray.500">
-                    接続先: {llmSettings.base_url}
-                  </Text>
-                )}
-              </VStack>
-            )}
-          </Box>
+          <Skeleton isLoaded={!templatesLoading} borderRadius="lg" fadeDuration={0.2}>
+            <SystemStatusCard
+              icon={FiLayers}
+              label="テンプレート"
+              value={templateSummaryValue}
+              tone={templateTone}
+              description={templateSummaryDescription}
+              footer={templateError || !defaultTemplateId ? undefined : `既定テンプレート: ${defaultTemplateId}`}
+            />
+          </Skeleton>
+          <Skeleton isLoaded={!dbLoading} borderRadius="lg" fadeDuration={0.2}>
+            <SystemStatusCard
+              icon={FiDatabase}
+              label="データベース"
+              value={dbSummaryValue}
+              tone={dbTone}
+              description={dbSummaryDescription}
+            />
+          </Skeleton>
+          <Skeleton isLoaded={!llmLoading} borderRadius="lg" fadeDuration={0.2}>
+            <SystemStatusCard
+              icon={FiCpu}
+              label="LLM"
+              value={llmStatusMeta.label}
+              tone={llmTone}
+              description={llmSummaryDescription}
+            />
+          </Skeleton>
         </SimpleGrid>
+        {lastUpdatedAt && (
+          <Text fontSize="xs" color="fg.muted" textAlign="right" mt={2}>
+            最終更新: {formatLocalDateTime(lastUpdatedAt)}
+          </Text>
+        )}
       </Box>
     </VStack>
   );
 }
-

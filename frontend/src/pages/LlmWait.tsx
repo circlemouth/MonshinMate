@@ -58,8 +58,8 @@ export default function LlmWait() {
 
   return (
     <VStack spacing={6} mt={20} align="center">
-      <Spinner size="xl" color="primary.500" />
-      <Text>追加質問が必要か確認しています...</Text>
+      <Spinner size="xl" color="accent.solid" />
+      <Text color="fg.muted">問診内容を確認しています...</Text>
     </VStack>
   );
 }

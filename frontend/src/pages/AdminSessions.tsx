@@ -42,6 +42,8 @@ import {
   AlertDialogFooter,
 } from '@chakra-ui/react';
 import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi';
+import AccentOutlineBox from '../components/AccentOutlineBox';
+import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionSummary {
   id: string;
@@ -53,7 +55,7 @@ interface SessionSummary {
 
 /** 管理画面: セッション一覧。 */
 export default function AdminSessions() {
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 50;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
   const [selectedItems, setSelectedItems] = useState<any[]>([]);
@@ -61,6 +63,7 @@ export default function AdminSessions() {
   const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
   const preview = useDisclosure();
   const toast = useToast();
+  const { formatDateTime, formatDate } = useTimezone();
 
   const [patientName, setPatientName] = useState('');
   const [dob, setDob] = useState('');
@@ -77,10 +80,14 @@ export default function AdminSessions() {
     endDate?: string;
   }) => {
     const params = new URLSearchParams();
-    if (filters.patientName) params.append('patient_name', filters.patientName);
-    if (filters.dob) params.append('dob', filters.dob);
-    if (filters.startDate) params.append('start_date', filters.startDate);
-    if (filters.endDate) params.append('end_date', filters.endDate);
+    const trimmedPatient = filters.patientName?.trim();
+    const trimmedDob = filters.dob?.trim();
+    const trimmedStart = filters.startDate?.trim();
+    const trimmedEnd = filters.endDate?.trim();
+    if (trimmedPatient) params.append('patient_name', trimmedPatient);
+    if (trimmedDob) params.append('dob', trimmedDob);
+    if (trimmedStart) params.append('start_date', trimmedStart);
+    if (trimmedEnd) params.append('end_date', trimmedEnd);
     const qs = params.toString();
     fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
       .then((r) => r.json())
@@ -203,7 +210,7 @@ export default function AdminSessions() {
               `## ${session?.patient_name ?? '患者'} (${session?.dob ?? '-'})`,
               `- 問診ID: ${id}`,
               session?.visit_type ? `- 受診種別: ${visitTypeLabel(session.visit_type)}` : null,
-              session?.finalized_at ? `- 確定日時: ${session.finalized_at}` : null,
+              session?.finalized_at ? `- 確定日時: ${formatDateTime(session.finalized_at)}` : null,
             ].filter((line): line is string => Boolean(line));
             const separator = index === ids.length - 1 ? '' : '\n\n---\n\n';
             return `${headerLines.join('\n')}\n\n${text.trim()}${separator}`;
@@ -278,7 +285,7 @@ export default function AdminSessions() {
   };
 
   const formatAnswer = (answer: any) => {
-    if (answer === null || answer === undefined || answer === '') return <Text color="gray.500">未回答</Text>;
+    if (answer === null || answer === undefined || answer === '') return <Text color="fg.muted">未回答</Text>;
     if (Array.isArray(answer)) return <Text>{answer.join(', ')}</Text>;
     if (typeof answer === 'object')
       return (
@@ -345,73 +352,98 @@ export default function AdminSessions() {
 
   return (
     <>
-      <VStack align="stretch" spacing={4} mb={4}>
-        <HStack spacing={4} align="flex-end">
-          <FormControl>
-            <FormLabel>患者名</FormLabel>
-            <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
-          </FormControl>
-          <FormControl>
-            <FormLabel>生年月日</FormLabel>
-            <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
-          </FormControl>
-          <FormControl>
-            <FormLabel>問診日(開始)</FormLabel>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-          </FormControl>
-          <FormControl>
-            <FormLabel>問診日(終了)</FormLabel>
-            <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-          </FormControl>
-        </HStack>
-        <HStack justifyContent="flex-end">
-          <Button onClick={handleSearch}>検索</Button>
-          <Button onClick={handleReset}>リセット</Button>
-        </HStack>
-        <Flex align="center" justify="space-between" wrap="wrap" gap={2}>
-          <HStack spacing={3}>
-            <Tag colorScheme={hasSelection ? 'blue' : 'gray'}>
-              {hasSelection ? `選択 ${selectedSessionIds.length} 件` : '未選択'}
-            </Tag>
-            {(patientName || dob || startDate || endDate) && (
-              <Text fontSize="sm" color="gray.600">
-                フィルタ:
-                {patientName && ` 氏名:${patientName}`}
-                {dob && ` 生年月日:${dob}`}
-                {startDate && ` 開始:${startDate}`}
-                {endDate && ` 終了:${endDate}`}
-              </Text>
-            )}
+      <AccentOutlineBox p={4} mb={4}>
+        <VStack align="stretch" spacing={4}>
+          <HStack spacing={4} align="flex-end">
+            <FormControl>
+              <FormLabel>患者名</FormLabel>
+              <Input
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>生年月日</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(開始)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(終了)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </FormControl>
           </HStack>
-          <HStack spacing={2}>
-            <Menu isLazy>
-              <MenuButton as={Button} size="sm" leftIcon={<FiFile />} isDisabled={!hasSelection}>
-                一括出力
-              </MenuButton>
-              <MenuList>
-                <MenuItem onClick={() => handleBulkDownload('pdf')}>PDFをダウンロード</MenuItem>
-                <MenuItem onClick={() => handleBulkDownload('md')} isDisabled={copyingMarkdownTarget === 'bulk'}>
-                  Markdownをコピー
-                </MenuItem>
-                <MenuItem onClick={() => handleBulkDownload('csv')}>CSVをダウンロード</MenuItem>
-              </MenuList>
-            </Menu>
-            <Menu isLazy>
-              <MenuButton as={Button} size="sm" colorScheme="red">
-                一括削除
-              </MenuButton>
-              <MenuList>
-                <MenuItem onClick={() => setConfirmState({ type: 'bulk-selected' })} isDisabled={!hasSelection}>
-                  選択を削除
-                </MenuItem>
-                <MenuItem onClick={() => setConfirmState({ type: 'bulk-displayed' })}>
-                  表示中を削除
-                </MenuItem>
-              </MenuList>
-            </Menu>
+          <HStack justifyContent="flex-end">
+            <Button onClick={handleSearch}>検索</Button>
+            <Button onClick={handleReset}>リセット</Button>
           </HStack>
-        </Flex>
-      </VStack>
+          <Flex align="center" justify="space-between" wrap="wrap" gap={2}>
+            <HStack spacing={3}>
+              <Tag colorScheme="primary" variant={hasSelection ? 'solid' : 'subtle'}>
+                {hasSelection ? `選択 ${selectedSessionIds.length} 件` : '未選択'}
+              </Tag>
+              {(patientName || dob || startDate || endDate) && (
+                <Text fontSize="sm" color="fg.muted">
+                  フィルタ:
+                  {patientName && ` 氏名:${patientName}`}
+                  {dob && ` 生年月日:${dob}`}
+                  {startDate && ` 開始:${startDate}`}
+                  {endDate && ` 終了:${endDate}`}
+                </Text>
+              )}
+            </HStack>
+            <HStack spacing={2}>
+              <Menu isLazy>
+                <MenuButton as={Button} size="sm" leftIcon={<FiFile />} isDisabled={!hasSelection}>
+                  一括出力
+                </MenuButton>
+                <MenuList>
+                  <MenuItem onClick={() => handleBulkDownload('pdf')}>PDFをダウンロード</MenuItem>
+                  <MenuItem onClick={() => handleBulkDownload('md')} isDisabled={copyingMarkdownTarget === 'bulk'}>
+                    Markdownをコピー
+                  </MenuItem>
+                  <MenuItem onClick={() => handleBulkDownload('csv')}>CSVをダウンロード</MenuItem>
+                </MenuList>
+              </Menu>
+              <Menu isLazy>
+                <MenuButton as={Button} size="sm" colorScheme="red" isDisabled={!hasSelection}>
+                  一括削除
+                </MenuButton>
+                <MenuList>
+                  <MenuItem onClick={() => setConfirmState({ type: 'bulk-selected' })} isDisabled={!hasSelection}>
+                    選択を削除
+                  </MenuItem>
+                  <MenuItem onClick={() => setConfirmState({ type: 'bulk-displayed' })}>
+                    表示中を削除
+                  </MenuItem>
+                </MenuList>
+              </Menu>
+            </HStack>
+          </Flex>
+        </VStack>
+      </AccentOutlineBox>
       <Table>
         <Thead>
           <Tr>
@@ -440,58 +472,69 @@ export default function AdminSessions() {
           </Tr>
         </Thead>
         <Tbody>
-          {paginatedSessions.map((s) => (
-            <Tr key={s.id} _hover={{ bg: 'gray.50' }} onClick={() => openPreview(s.id)} sx={{ cursor: 'pointer' }}>
-              <Td onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  isChecked={selectedSessionIds.includes(s.id)}
-                  onChange={(e) => toggleSelect(s.id, (e.target as HTMLInputElement).checked)}
-                />
-              </Td>
-              <Td>{s.patient_name}</Td>
-              <Td>{s.dob}</Td>
-              <Td>{visitTypeLabel(s.visit_type)}</Td>
-              <Td>{(s.finalized_at ? s.finalized_at.split('T')[0] : '-')}</Td>
-              <Td onClick={(e) => e.stopPropagation()}>
-                <HStack spacing={3}>
-                  <Menu isLazy>
-                    <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
-                      <MenuButton
-                        as={IconButton}
+          {paginatedSessions.map((s) => {
+            const selected = selectedSessionIds.includes(s.id);
+            return (
+              <Tr
+                key={s.id}
+                bg={selected ? 'bg.subtle' : undefined}
+                borderLeftWidth={selected ? '4px' : undefined}
+                borderLeftColor={selected ? 'accent.solid' : undefined}
+                _hover={{ bg: 'bg.emphasis' }}
+                onClick={() => openPreview(s.id)}
+                sx={{ cursor: 'pointer' }}
+              >
+                <Td onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    isChecked={selectedSessionIds.includes(s.id)}
+                    onChange={(e) => toggleSelect(s.id, (e.target as HTMLInputElement).checked)}
+                  />
+                </Td>
+                <Td>{s.patient_name}</Td>
+                <Td>{s.dob}</Td>
+                <Td>{visitTypeLabel(s.visit_type)}</Td>
+                <Td>{formatDate(s.finalized_at)}</Td>
+                <Td onClick={(e) => e.stopPropagation()}>
+                  <HStack spacing={3}>
+                    <Menu isLazy>
+                      <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
+                        <MenuButton
+                          as={IconButton}
+                          size="md"
+                          variant="outline"
+                          icon={<FiDownload />}
+                          aria-label="問診結果を出力"
+                          minW="44px"
+                          minH="44px"
+                        />
+                      </Tooltip>
+                      <MenuList>
+                        <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
+                        <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
+                        <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
+                      </MenuList>
+                    </Menu>
+                    <Tooltip label="削除" placement="bottom" hasArrow openDelay={150}>
+                      <IconButton
                         size="md"
                         variant="outline"
-                        icon={<FiDownload />}
-                        aria-label="問診結果を出力"
+                        colorScheme="red"
+                        icon={<FiTrash />}
+                        aria-label="問診結果を削除"
                         minW="44px"
                         minH="44px"
+                        onClick={() => setConfirmState({ type: 'row', id: s.id })}
                       />
                     </Tooltip>
-                    <MenuList>
-                      <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>PDF</MenuItem>
-                      <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
-                      <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>CSV</MenuItem>
-                    </MenuList>
-                  </Menu>
-                  <Tooltip label="削除" placement="bottom" hasArrow openDelay={150}>
-                    <IconButton
-                      size="md"
-                      variant="outline"
-                      colorScheme="red"
-                      icon={<FiTrash />}
-                      aria-label="問診結果を削除"
-                      minW="44px"
-                      minH="44px"
-                      onClick={() => setConfirmState({ type: 'row', id: s.id })}
-                    />
-                  </Tooltip>
-                </HStack>
-              </Td>
-            </Tr>
-          ))}
+                  </HStack>
+                </Td>
+              </Tr>
+            );
+          })}
           {sessions.length === 0 && (
             <Tr>
               <Td colSpan={6}>
-                <Text fontSize="sm" color="gray.500" textAlign="center">
+                <Text fontSize="sm" color="fg.muted" textAlign="center">
                   条件に一致する問診データがありません。
                 </Text>
               </Td>
@@ -501,7 +544,7 @@ export default function AdminSessions() {
       </Table>
 
       <HStack justifyContent="space-between" align="center" mt={3} mb={6}>
-        <Text fontSize="sm" color="gray.600">
+        <Text fontSize="sm" color="fg.muted">
           全体 {sessions.length} 件中 選択 {selectedSessionIds.length} 件
         </Text>
         <HStack spacing={3}>
@@ -513,7 +556,7 @@ export default function AdminSessions() {
           >
             前のデータ
           </Button>
-          <Text fontSize="sm" color="gray.600">
+          <Text fontSize="sm" color="fg.muted">
             ページ {page + 1} / {totalPages}
           </Text>
           <Button
@@ -539,7 +582,7 @@ export default function AdminSessions() {
                   <Tooltip label="PDF形式で出力" placement="bottom" hasArrow openDelay={150}>
                     <Button
                       size="sm"
-                      colorScheme="blue"
+                      colorScheme="primary"
                       variant="outline"
                       leftIcon={<FiFile />}
                       onClick={() =>
@@ -555,7 +598,7 @@ export default function AdminSessions() {
                   <Tooltip label="Markdown形式をコピー" placement="bottom" hasArrow openDelay={150}>
                     <Button
                       size="sm"
-                      colorScheme="blue"
+                      colorScheme="primary"
                       variant="outline"
                       leftIcon={<FiFileText />}
                       isLoading={copyingMarkdownTarget === 'modal'}
@@ -567,7 +610,7 @@ export default function AdminSessions() {
                   <Tooltip label="CSV形式で出力" placement="bottom" hasArrow openDelay={150}>
                     <Button
                       size="sm"
-                      colorScheme="blue"
+                      colorScheme="primary"
                       variant="outline"
                       leftIcon={<FiTable />}
                       onClick={() =>
@@ -588,7 +631,7 @@ export default function AdminSessions() {
           <ModalBody>
             {loading && (
               <Box py={6} textAlign="center">
-                <Spinner />
+                <Spinner color="accent.solid" />
               </Box>
             )}
             {!loading && selectedDetail && (
@@ -609,18 +652,18 @@ export default function AdminSessions() {
                     </Text>
                     {/* テンプレートIDの表示は削除 */}
                     <Text>
-                      <strong>問診日:</strong> {selectedDetail.finalized_at ? selectedDetail.finalized_at.split('T')[0] : '-'}
+                      <strong>問診日:</strong> {formatDate(selectedDetail.finalized_at)}
                     </Text>
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>
                 {selectedItems.map((entry: any) => (
-                  <Box key={entry.id} p={3} borderWidth="1px" borderRadius="md">
+                  <AccentOutlineBox key={entry.id} p={3} borderRadius="md">
                     <Text fontWeight="bold" mb={1}>
                       {entry.label}
                     </Text>
                     {formatAnswer(entry.answer)}
-                  </Box>
+                  </AccentOutlineBox>
                 ))}
                 {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
                   <>
@@ -628,21 +671,21 @@ export default function AdminSessions() {
                     {Object.entries(selectedDetail.llm_question_texts)
                       .sort(([a]: any, [b]: any) => String(a).localeCompare(String(b), undefined, { numeric: true }))
                       .map(([qid, qtext]: any) => (
-                        <Box key={qid} p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
+                        <AccentOutlineBox key={qid} p={3} borderRadius="md">
                           <Text fontWeight="bold" mb={1}>
                             {(selectedDetail.question_texts ?? {})[qid] ?? qtext}
                           </Text>
                           {formatAnswer(selectedDetail.answers?.[qid])}
-                        </Box>
+                        </AccentOutlineBox>
                       ))}
                   </>
                 )}
                 {selectedDetail.summary && (
                   <VStack align="stretch" spacing={2} mt={2}>
                     <Heading size="sm">自動生成サマリー</Heading>
-                    <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50">
+                    <AccentOutlineBox p={3} borderRadius="md">
                       <Text whiteSpace="pre-wrap">{formatSummaryText(selectedDetail.summary)}</Text>
-                    </Box>
+                    </AccentOutlineBox>
                   </VStack>
                 )}
               </VStack>

@@ -53,46 +53,99 @@ def test_llm_chat() -> None:
 def test_llm_settings_get_and_update() -> None:
     """LLM 設定の取得と更新ができることを確認する。"""
     on_startup()
-    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True})
+    profiles = {
+        "ollama": {
+            "model": "llama2",
+            "temperature": 0.2,
+            "system_prompt": "",
+            "base_url": "http://localhost:11434",
+            "api_key": "",
+        },
+        "lm_studio": {
+            "model": "",
+            "temperature": 0.2,
+            "system_prompt": "",
+            "base_url": "http://localhost:1234",
+            "api_key": "",
+        },
+        "openai": {
+            "model": "",
+            "temperature": 0.2,
+            "system_prompt": "",
+            "base_url": "https://api.openai.com",
+            "api_key": "",
+        },
+    }
+
+    res = client.put(
+        "/llm/settings",
+        json={
+            "provider": "ollama",
+            "enabled": True,
+            **profiles["ollama"],
+            "provider_profiles": profiles,
+        },
+    )
+    assert res.status_code == 200
     res = client.get("/llm/settings")
     assert res.status_code == 200
     data = res.json()
     assert data["provider"] == "ollama"
     assert data["enabled"] is True
+    assert data["provider_profiles"]["ollama"]["model"] == "llama2"
 
-    payload = {
-        "provider": "lm_studio",
+    profiles["lm_studio"] = {
         "model": "test-model",
         "temperature": 0.5,
         "system_prompt": "test",
-        "enabled": True,
+        "base_url": "http://localhost:1234",
+        "api_key": "",
     }
-    res = client.put("/llm/settings", json=payload)
+    res = client.put(
+        "/llm/settings",
+        json={
+            "provider": "lm_studio",
+            "enabled": True,
+            **profiles["lm_studio"],
+            "provider_profiles": profiles,
+        },
+    )
     assert res.status_code == 200
     res = client.get("/llm/settings")
     updated = res.json()
     assert updated["provider"] == "lm_studio"
     assert updated["enabled"] is True
+    assert updated["provider_profiles"]["ollama"]["model"] == "llama2"
+    assert updated["provider_profiles"]["lm_studio"]["model"] == "test-model"
     chat_res = client.post("/llm/chat", json={"message": "hi"})
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
 
-    # OpenAI 互換エンドポイントに切り替え、手入力モデル名が保存されるか確認
-    openai_payload = {
-        "provider": "openai",
+    # OpenAI 互換エンドポイントに切り替え、プロバイダごとの設定保持を確認
+    profiles["openai"] = {
         "model": "gpt-4.1-mini",
         "temperature": 0.3,
         "system_prompt": "openai",
-        "enabled": True,
         "base_url": "https://api.openai.com",
         "api_key": "sk-test",
     }
-    res = client.put("/llm/settings", json=openai_payload)
+    res = client.put(
+        "/llm/settings",
+        json={
+            "provider": "openai",
+            "enabled": True,
+            **profiles["openai"],
+            "provider_profiles": profiles,
+        },
+    )
     assert res.status_code == 200
     res = client.get("/llm/settings")
     openai_settings = res.json()
     assert openai_settings["provider"] == "openai"
     assert openai_settings["model"] == "gpt-4.1-mini"
     assert openai_settings["base_url"] == "https://api.openai.com"
+    assert openai_settings["provider_profiles"]["ollama"]["model"] == "llama2"
+    assert openai_settings["provider_profiles"]["lm_studio"]["model"] == "test-model"
+    assert openai_settings["provider_profiles"]["openai"]["api_key"] == "sk-test"
     openai_chat = client.post("/llm/chat", json={"message": "hello"})
     assert openai_chat.json()["reply"].startswith("LLM応答[openai:gpt-4.1-mini")
 
@@ -373,6 +426,33 @@ def test_admin_session_search_filters() -> None:
     )
     assert nohit_res.status_code == 200
     assert all(s["id"] != session_id for s in nohit_res.json())
+
+
+def test_admin_session_search_ignores_spaces() -> None:
+    """患者名検索で空白を除いた部分一致が機能することを確認する。"""
+    on_startup()
+    payload = {
+        "patient_name": "空白 太郎",
+        "dob": "1988-03-03",
+        "gender": "male",
+        "visit_type": "initial",
+        "answers": {"chief_complaint": "咳"},
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    session_id = res.json()["id"]
+    fin = client.post(f"/sessions/{session_id}/finalize")
+    assert fin.status_code == 200
+
+    # 全角・半角スペースを取り除いた検索語でも一致する
+    list_res = client.get("/admin/sessions", params={"patient_name": "空白太郎"})
+    assert list_res.status_code == 200
+    assert any(s["id"] == session_id for s in list_res.json())
+
+    # 前後の空白を含む検索語でも一致する
+    padded_res = client.get("/admin/sessions", params={"patient_name": "  空白太郎　"})
+    assert padded_res.status_code == 200
+    assert any(s["id"] == session_id for s in padded_res.json())
 
 
 def test_admin_session_download() -> None:

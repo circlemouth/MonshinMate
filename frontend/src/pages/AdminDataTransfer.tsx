@@ -1,4 +1,4 @@
-import { useEffect, useState, ChangeEvent } from 'react';
+import { useCallback, useEffect, useState, ChangeEvent } from 'react';
 import {
   Box,
   Button,
@@ -25,6 +25,8 @@ import {
   useToast,
 } from '@chakra-ui/react';
 import { FiDownload, FiUpload } from 'react-icons/fi';
+import AccentOutlineBox from '../components/AccentOutlineBox';
+import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionSummary {
   id: string;
@@ -36,6 +38,7 @@ interface SessionSummary {
 
 export default function AdminDataTransfer() {
   const toast = useToast();
+  const { formatDateTime } = useTimezone();
   const PAGE_SIZE = 20;
 
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -46,6 +49,7 @@ export default function AdminDataTransfer() {
   const [endDate, setEndDate] = useState('');
   const [partialExport, setPartialExport] = useState(false);
   const [sessionPage, setSessionPage] = useState(0);
+  const [sessionLoading, setSessionLoading] = useState(false);
 
   const [sessionExportPassword, setSessionExportPassword] = useState('');
   const [sessionExporting, setSessionExporting] = useState(false);
@@ -87,33 +91,67 @@ export default function AdminDataTransfer() {
   const someDisplayedSelected =
     displayedSessionIds.some((id) => selectedSessionIds.includes(id)) && !allDisplayedSelected;
 
-  const loadSessions = (filters: {
+  type SessionFilters = {
     patientName?: string;
     dob?: string;
     startDate?: string;
     endDate?: string;
-  }) => {
-    const params = new URLSearchParams();
-    if (filters.patientName) params.append('patient_name', filters.patientName);
-    if (filters.dob) params.append('dob', filters.dob);
-    if (filters.startDate) params.append('start_date', filters.startDate);
-    if (filters.endDate) params.append('end_date', filters.endDate);
-    const qs = params.toString();
-    fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setSessions(data);
-        setSelectedSessionIds([]);
-        setSessionPage(0);
-      })
-      .catch(() => {
-        toast({ title: '問診データの取得に失敗しました', status: 'error', duration: 4000 });
-      });
   };
 
+  const loadSessions = useCallback(async (filters: SessionFilters) => {
+    setSessionLoading(true);
+    const params = new URLSearchParams();
+    const trimmedPatient = filters.patientName?.trim();
+    const trimmedDob = filters.dob?.trim();
+    const trimmedStart = filters.startDate?.trim();
+    const trimmedEnd = filters.endDate?.trim();
+    if (trimmedPatient) params.append('patient_name', trimmedPatient);
+    if (trimmedDob) params.append('dob', trimmedDob);
+    if (trimmedStart) params.append('start_date', trimmedStart);
+    if (trimmedEnd) params.append('end_date', trimmedEnd);
+    const qs = params.toString();
+
+    try {
+      const res = await fetch(`/admin/sessions${qs ? `?${qs}` : ''}`);
+      if (!res.ok) {
+        const raw = await res.text();
+        let message = '問診データの取得に失敗しました';
+        try {
+          const parsed = raw ? JSON.parse(raw) : null;
+          if (parsed?.detail) {
+            message = parsed.detail;
+          } else if (raw) {
+            message = raw;
+          }
+        } catch {
+          if (raw) message = raw;
+        }
+        throw new Error(message);
+      }
+
+      const data: unknown = await res.json();
+      if (!Array.isArray(data)) {
+        throw new Error('サーバーから想定外のデータ形式が返されました');
+      }
+
+      setSessions(data as SessionSummary[]);
+      setSelectedSessionIds([]);
+      setSessionPage(0);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: err instanceof Error ? err.message : '問診データの取得に失敗しました',
+        status: 'error',
+        duration: 4000,
+      });
+    } finally {
+      setSessionLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    loadSessions({});
-  }, []);
+    void loadSessions({});
+  }, [loadSessions]);
 
   useEffect(() => {
     if (!partialExport) {
@@ -134,7 +172,7 @@ export default function AdminDataTransfer() {
   }, [sessions.length]);
 
   const handleSearch = () => {
-    loadSessions({ patientName, dob, startDate, endDate });
+    void loadSessions({ patientName, dob, startDate, endDate });
   };
 
   const handleReset = () => {
@@ -142,7 +180,7 @@ export default function AdminDataTransfer() {
     setDob('');
     setStartDate('');
     setEndDate('');
-    loadSessions({});
+    void loadSessions({});
   };
 
   const handleSessionExport = async () => {
@@ -312,43 +350,85 @@ export default function AdminDataTransfer() {
     <VStack align="stretch" spacing={6}>
       <Box>
         <Heading size="lg" mb={2}>バックアップ</Heading>
-        <Text fontSize="sm" color="gray.600">
+        <Text fontSize="sm" color="fg.muted">
           問診データやテンプレート設定のバックアップ・移行を行うことができます。対象を選択し、必要に応じて暗号化パスワードを指定してください。
         </Text>
       </Box>
 
-      <Card variant="outline">
+      <Card variant="outline" borderColor="border.accent" bg="bg.surface" boxShadow="sm" borderRadius="lg">
         <CardHeader pb={2}>
           <Heading size="md">問診データのエクスポート/インポート</Heading>
-          <Text fontSize="sm" color="gray.600">
+          <Text fontSize="sm" color="fg.muted">
             下部の出力は選択済みの問診、もしくは検索条件に一致する全件が対象です。選択がない場合は現在の一覧全てが含まれます。
           </Text>
         </CardHeader>
         <CardBody pt={0}>
           <VStack align="stretch" spacing={5}>
-            <Box>
+            <AccentOutlineBox p={4} borderRadius="lg">
               <Heading size="sm" mb={2}>対象の検索と選択</Heading>
               <VStack align="stretch" spacing={3}>
                 <HStack spacing={4} align="flex-end" wrap="wrap">
                   <FormControl maxW="220px">
                     <FormLabel fontSize="sm">患者名</FormLabel>
-                    <Input value={patientName} onChange={(e) => setPatientName(e.target.value)} />
+                    <Input
+                      value={patientName}
+                      onChange={(e) => setPatientName(e.target.value)}
+                      bg="bg.surface"
+                      _hover={{ bg: 'bg.surface' }}
+                      _focusVisible={{ bg: 'bg.surface' }}
+                    />
                   </FormControl>
                   <FormControl maxW="200px">
                     <FormLabel fontSize="sm">生年月日</FormLabel>
-                    <Input type="date" value={dob} onChange={(e) => setDob(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      bg="bg.surface"
+                      _hover={{ bg: 'bg.surface' }}
+                      _focusVisible={{ bg: 'bg.surface' }}
+                    />
                   </FormControl>
                   <FormControl maxW="200px">
                     <FormLabel fontSize="sm">問診日(開始)</FormLabel>
-                    <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      bg="bg.surface"
+                      _hover={{ bg: 'bg.surface' }}
+                      _focusVisible={{ bg: 'bg.surface' }}
+                    />
                   </FormControl>
                   <FormControl maxW="200px">
                     <FormLabel fontSize="sm">問診日(終了)</FormLabel>
-                    <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+                    <Input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      bg="bg.surface"
+                      _hover={{ bg: 'bg.surface' }}
+                      _focusVisible={{ bg: 'bg.surface' }}
+                    />
                   </FormControl>
                   <HStack spacing={2} alignSelf="flex-end">
-                    <Button onClick={handleSearch} size="sm" colorScheme="primary">検索</Button>
-                    <Button onClick={handleReset} size="sm" variant="ghost">リセット</Button>
+                    <Button
+                      onClick={handleSearch}
+                      size="sm"
+                      colorScheme="primary"
+                      isLoading={sessionLoading}
+                      loadingText="検索中"
+                    >
+                      検索
+                    </Button>
+                    <Button
+                      onClick={handleReset}
+                      size="sm"
+                      variant="ghost"
+                      isDisabled={sessionLoading}
+                    >
+                      リセット
+                    </Button>
                   </HStack>
                 </HStack>
                 <Checkbox
@@ -359,72 +439,82 @@ export default function AdminDataTransfer() {
                   一部のデータのみ出力
                 </Checkbox>
                 {!partialExport && (
-                  <Text fontSize="xs" color="gray.600">
+                  <Text fontSize="xs" color="fg.muted">
                     チェックを入れると、問診データの一覧が表示され対象を選択できます。
                   </Text>
                 )}
                 {partialExport && (
                   <>
-                    <Table size="sm">
-                      <Thead>
-                        <Tr>
-                          <Th width="1%">
-                            <Checkbox
-                              isChecked={allDisplayedSelected}
-                              isIndeterminate={someDisplayedSelected}
-                              onChange={(e) => {
-                                const checked = (e.target as HTMLInputElement).checked;
-                                const displayedSet = new Set(displayedSessionIds);
-                                setSelectedSessionIds((prev) => {
-                                  if (checked) {
-                                    return Array.from(new Set([...prev, ...displayedSessionIds]));
-                                  }
-                                  return prev.filter((id) => !displayedSet.has(id));
-                                });
-                              }}
-                            />
-                          </Th>
-                          <Th>患者名</Th>
-                          <Th>生年月日</Th>
-                          <Th>受診種別</Th>
-                          <Th>確定日時</Th>
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {paginatedSessions.map((s) => (
-                          <Tr key={s.id}>
-                            <Td>
+                    <AccentOutlineBox p={3} borderRadius="lg">
+                      <Table size="sm" variant="simple">
+                        <Thead>
+                          <Tr>
+                            <Th width="1%">
                               <Checkbox
-                                isChecked={selectedSessionIds.includes(s.id)}
+                                isChecked={allDisplayedSelected}
+                                isIndeterminate={someDisplayedSelected}
                                 onChange={(e) => {
                                   const checked = (e.target as HTMLInputElement).checked;
-                                  setSelectedSessionIds((prev) => (
-                                    checked
-                                      ? Array.from(new Set([...prev, s.id]))
-                                      : prev.filter((x) => x !== s.id)
-                                  ));
+                                  const displayedSet = new Set(displayedSessionIds);
+                                  setSelectedSessionIds((prev) => {
+                                    if (checked) {
+                                      return Array.from(new Set([...prev, ...displayedSessionIds]));
+                                    }
+                                    return prev.filter((id) => !displayedSet.has(id));
+                                  });
                                 }}
                               />
-                            </Td>
-                            <Td>{s.patient_name}</Td>
-                            <Td>{s.dob}</Td>
-                            <Td>{visitTypeLabel(s.visit_type)}</Td>
-                            <Td>{s.finalized_at ?? '-'}</Td>
+                            </Th>
+                            <Th>患者名</Th>
+                            <Th>生年月日</Th>
+                            <Th>受診種別</Th>
+                            <Th>確定日時</Th>
                           </Tr>
-                        ))}
-                        {sessions.length === 0 && (
-                          <Tr>
-                            <Td colSpan={5}>
-                              <Text fontSize="sm" color="gray.500" textAlign="center">
-                                条件に一致する問診データがありません。
-                              </Text>
-                            </Td>
-                          </Tr>
-                        )}
-                      </Tbody>
-                    </Table>
+                        </Thead>
+                        <Tbody>
+                          {paginatedSessions.map((s) => {
+                            const selected = selectedSessionIds.includes(s.id);
+                            return (
+                              <Tr
+                                key={s.id}
+                                bg={selected ? 'bg.subtle' : undefined}
+                                borderLeftWidth={selected ? '3px' : undefined}
+                                borderLeftColor={selected ? 'accent.solid' : undefined}
+                              >
+                                <Td>
+                                  <Checkbox
+                                    isChecked={selected}
+                                    onChange={(e) => {
+                                      const checked = (e.target as HTMLInputElement).checked;
+                                      setSelectedSessionIds((prev) => (
+                                        checked
+                                          ? Array.from(new Set([...prev, s.id]))
+                                          : prev.filter((x) => x !== s.id)
+                                      ));
+                                    }}
+                                  />
+                                </Td>
+                                <Td>{s.patient_name}</Td>
+                                <Td>{s.dob}</Td>
+                                <Td>{visitTypeLabel(s.visit_type)}</Td>
+                                <Td>{formatDateTime(s.finalized_at)}</Td>
+                              </Tr>
+                            );
+                          })}
+                          {sessions.length === 0 && (
+                            <Tr>
+                              <Td colSpan={5}>
+                                <Text fontSize="sm" color="fg.muted" textAlign="center">
+                                  条件に一致する問診データがありません。
+                                </Text>
+                              </Td>
+                            </Tr>
+                          )}
+                        </Tbody>
+                      </Table>
+                    </AccentOutlineBox>
                     <HStack justifyContent="space-between" align="center">
-                      <Text fontSize="xs" color="gray.500">
+                      <Text fontSize="xs" color="fg.muted">
                         全体 {sessions.length} 件中 選択 {selectedSessionIds.length} 件
                       </Text>
                       <HStack spacing={3}>
@@ -436,7 +526,7 @@ export default function AdminDataTransfer() {
                         >
                           前のデータ
                         </Button>
-                        <Text fontSize="xs" color="gray.600">
+                        <Text fontSize="xs" color="fg.muted">
                           ページ {sessionPage + 1} / {totalPages}
                         </Text>
                         <Button
@@ -452,13 +542,13 @@ export default function AdminDataTransfer() {
                   </>
                 )}
               </VStack>
-            </Box>
+            </AccentOutlineBox>
 
             <Divider />
 
             <Box>
               <Heading size="sm" mb={1}>問診データの出力</Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
+              <Text fontSize="xs" color="fg.muted" mb={2}>
                 選択がある場合はその問診のみ、未選択の場合は現在の一覧全件が対象です。必要に応じて暗号化パスワードを指定してください。
               </Text>
               <HStack spacing={3} align="flex-end" wrap="wrap">
@@ -487,7 +577,7 @@ export default function AdminDataTransfer() {
 
             <Box>
               <Heading size="sm" mb={1}>問診データのインポート</Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
+              <Text fontSize="xs" color="fg.muted" mb={2}>
                 既存データに追記するか、全件入れ替えるかを選択できます。入れ替えは元のデータが削除されるためご注意ください。
               </Text>
               <VStack align="stretch" spacing={3}>
@@ -518,7 +608,7 @@ export default function AdminDataTransfer() {
                 <Button
                   leftIcon={<FiUpload />}
                   onClick={handleSessionImport}
-                  colorScheme="blue"
+                  colorScheme="primary"
                   isLoading={sessionImporting}
                   isDisabled={!sessionImportFile}
                   alignSelf="flex-start"
@@ -531,10 +621,10 @@ export default function AdminDataTransfer() {
         </CardBody>
       </Card>
 
-      <Card variant="outline">
+      <Card variant="outline" borderColor="border.accent" bg="bg.surface" boxShadow="sm" borderRadius="lg">
         <CardHeader pb={2}>
           <Heading size="md">問診テンプレート設定のエクスポート/インポート</Heading>
-          <Text fontSize="sm" color="gray.600">
+          <Text fontSize="sm" color="fg.muted">
             テンプレート・プロンプト・画像などの設定一式をバックアップできます。
           </Text>
         </CardHeader>
@@ -542,7 +632,7 @@ export default function AdminDataTransfer() {
           <VStack align="stretch" spacing={4}>
             <Box>
               <Heading size="sm" mb={1}>設定ファイルの出力</Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
+              <Text fontSize="xs" color="fg.muted" mb={2}>
                 暗号化したい場合は任意のパスワードを指定してください。
               </Text>
               <HStack align="flex-end" spacing={3} wrap="wrap">
@@ -564,7 +654,7 @@ export default function AdminDataTransfer() {
             <Divider />
             <Box>
               <Heading size="sm" mb={1}>設定ファイルのインポート</Heading>
-              <Text fontSize="xs" color="gray.600" mb={2}>
+              <Text fontSize="xs" color="fg.muted" mb={2}>
                 既存の設定に上書きするか、全て入れ替えるかを選択できます。
               </Text>
               <VStack align="stretch" spacing={3}>
@@ -595,7 +685,7 @@ export default function AdminDataTransfer() {
                 <Button
                   leftIcon={<FiUpload />}
                   onClick={handleTemplateImport}
-                  colorScheme="blue"
+                  colorScheme="primary"
                   isLoading={templateImporting}
                   isDisabled={!templateImportFile}
                   alignSelf="flex-start"

@@ -7,7 +7,7 @@ import logging
 import json
 import threading
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 
 
@@ -23,6 +23,19 @@ DEFAULT_FOLLOWUP_PROMPT = (
 )
 
 
+class ProviderProfile(BaseModel):
+    """プロバイダ単位の設定（LLM有効状態はトップレベルで管理）。"""
+
+    model: str = ""
+    temperature: float = 0.2
+    system_prompt: str = DEFAULT_SYSTEM_PROMPT
+    base_url: str | None = None
+    api_key: str | None = None
+
+    class Config:
+        extra = "ignore"
+
+
 class LLMSettings(BaseModel):
     """LLM に関する設定値。"""
 
@@ -34,6 +47,55 @@ class LLMSettings(BaseModel):
     # リモート接続用設定（任意）。空の場合はスタブ動作を維持する。
     base_url: str | None = None
     api_key: str | None = None
+    provider_profiles: dict[str, ProviderProfile] = Field(default_factory=dict)
+
+    def get_profile(self, provider: str | None = None) -> ProviderProfile:
+        """指定されたプロバイダの設定を取得（存在しない場合は生成）."""
+
+        key = provider or self.provider
+        profiles = self.provider_profiles or {}
+        profile = profiles.get(key)
+        if profile is None:
+            profile = ProviderProfile()
+            # 現在のアクティブプロバイダの場合はトップレベル値を反映
+            if key == self.provider:
+                profile = ProviderProfile(
+                    model=self.model,
+                    temperature=self.temperature,
+                    system_prompt=self.system_prompt,
+                    base_url=self.base_url,
+                    api_key=self.api_key,
+                )
+            profiles = dict(profiles)
+            profiles[key] = profile
+            self.provider_profiles = profiles
+        return profile
+
+    def sync_from_active_profile(self) -> None:
+        """アクティブプロバイダの設定をトップレベルへ反映。"""
+
+        profile = self.get_profile(self.provider)
+        self.model = profile.model or ""
+        # 温度は 0〜2 の範囲に丸める
+        temp = profile.temperature if profile.temperature is not None else 0.2
+        self.temperature = max(0.0, min(2.0, float(temp)))
+        self.system_prompt = profile.system_prompt or ""
+        self.base_url = profile.base_url
+        self.api_key = profile.api_key
+
+    def sync_to_active_profile(self) -> None:
+        """トップレベルの値をアクティブプロバイダ設定へ書き戻す。"""
+
+        profile = ProviderProfile(
+            model=self.model or "",
+            temperature=max(0.0, min(2.0, float(self.temperature if self.temperature is not None else 0.2))),
+            system_prompt=self.system_prompt or "",
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
+        profiles = dict(self.provider_profiles or {})
+        profiles[self.provider] = profile
+        self.provider_profiles = profiles
 
 
 class LLMGateway:
@@ -43,6 +105,9 @@ class LLMGateway:
     """
 
     def __init__(self, settings: LLMSettings) -> None:
+        # 受け取った設定を正規化して保持
+        settings.sync_from_active_profile()
+        settings.sync_to_active_profile()
         self.settings = settings
         # セッション単位での直列化用ロック
         self._locks: dict[str, threading.RLock] = {}
@@ -64,6 +129,9 @@ class LLMGateway:
 
     def update_settings(self, settings: LLMSettings) -> None:
         """設定値を更新する。"""
+
+        settings.sync_from_active_profile()
+        settings.sync_to_active_profile()
         self.settings = settings
 
     def test_connection(self) -> dict[str, str]:

@@ -19,6 +19,7 @@ import AdminSessionDetail from './pages/AdminSessionDetail';
 import LLMChat from './pages/LLMChat';
 import LlmWait from './pages/LlmWait';
 import AdminAppearance from './pages/AdminAppearance';
+import AdminTimezone from './pages/AdminTimezone';
 import AdminManual from './pages/AdminManual';
 import AdminLicense from './pages/AdminLicense';
 import AdminLicenseDeps from './pages/AdminLicenseDeps';
@@ -162,7 +163,13 @@ export default function App() {
       flexDirection="column"
     >
       {!isChatPage && (
-        <Flex as="header" mb={4} align="center">
+        <Flex
+          as="header"
+          mb={4}
+          pb={3}
+          align="center"
+          boxShadow="inset 0 -1px 0 var(--chakra-colors-border-accent)"
+        >
           {/* Logo/Icon */}
           {logo.url && (
             <Box w="28px" h="28px" borderRadius="full" overflow="hidden" bg="gray.100" mr={2}>
@@ -215,6 +222,7 @@ export default function App() {
           <Route path="/admin" element={<Navigate to="/admin/main" replace />} />
           <Route path="/admin/main" element={<AdminLayout><AdminMain /></AdminLayout>} />
           <Route path="/admin/appearance" element={<AdminLayout><AdminAppearance /></AdminLayout>} />
+          <Route path="/admin/timezone" element={<AdminLayout><AdminTimezone /></AdminLayout>} />
           <Route path="/admin/data-transfer" element={<AdminLayout><AdminDataTransfer /></AdminLayout>} />
           <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
           <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
@@ -228,11 +236,11 @@ export default function App() {
       </Box>
 
       {!isChatPage && !isAdminPage && (
-        <Box as="footer" mt={10} color="gray.600" textAlign="center" pb={2}>
+        <Box as="footer" mt={10} color="fg.muted" textAlign="center" pb={2}>
           <Box fontSize="sm">
             本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。
           </Box>
-          <Text mt={1} fontSize="xs" color="gray.500">MonshinMate</Text>
+          <Text mt={1} fontSize="xs" color="fg.accent">MonshinMate</Text>
         </Box>
       )}
 

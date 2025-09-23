@@ -40,7 +40,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
-      { label: '表示設定', to: '/admin/appearance' },
+      { label: '外観設定', to: '/admin/appearance' },
+      { label: 'タイムゾーン設定', to: '/admin/timezone' },
       { label: 'セキュリティ', to: '/admin/security' },
       { label: 'バックアップ', to: '/admin/data-transfer' },
       { label: 'システム説明', to: '/admin/manual' },
@@ -68,7 +69,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           overflowY="auto"
         >
           <VStack align="stretch" spacing={2} height="100%">
-            <Text fontSize="sm" color="gray.500" mb={1}>
+            <Text fontSize="sm" color="fg.muted" mb={1}>
               管理メニュー
             </Text>
             {navItems.map((item) => {
@@ -79,8 +80,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   as={RouterLink}
                   to={item.to}
                   justifyContent="flex-start"
-                  variant={active ? 'solid' : 'ghost'}
-                  colorScheme="primary"
+                  variant="ghost"
+                  bg={active ? 'bg.subtle' : 'transparent'}
+                  color={active ? 'fg.accent' : 'fg.muted'}
+                  borderLeftWidth="4px"
+                  borderLeftColor={active ? 'accent.solid' : 'transparent'}
+                  _hover={{ bg: 'bg.subtle', color: 'fg.accent' }}
+                  _active={{ bg: 'bg.emphasis' }}
+                  transition="all 0.15s"
                 >
                   {item.label}
                 </Button>

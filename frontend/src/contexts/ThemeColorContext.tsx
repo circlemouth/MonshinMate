@@ -1,21 +1,19 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
-import { createTheme } from '../theme';
+import { createThemeArtifacts, AccentPalette } from '../theme';
 
 interface ThemeColorContextType {
   color: string;
   setColor: (c: string) => void;
+  palette: AccentPalette;
 }
 
 const ThemeColorContext = createContext<ThemeColorContextType | undefined>(undefined);
 
 export function ThemeColorProvider({ children }: { children: ReactNode }) {
   const [color, setColor] = useState('#1e88e5');
-  const [theme, setTheme] = useState(createTheme('#1e88e5'));
 
-  useEffect(() => {
-    setTheme(createTheme(color));
-  }, [color]);
+  const artifacts = useMemo(() => createThemeArtifacts(color), [color]);
 
   useEffect(() => {
     fetch('/system/theme-color')
@@ -26,9 +24,14 @@ export function ThemeColorProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
+  const contextValue = useMemo(
+    () => ({ color, setColor, palette: artifacts.accentPalette }),
+    [color, artifacts.accentPalette]
+  );
+
   return (
-    <ThemeColorContext.Provider value={{ color, setColor }}>
-      <ChakraProvider theme={theme}>{children}</ChakraProvider>
+    <ThemeColorContext.Provider value={contextValue}>
+      <ChakraProvider theme={artifacts.theme}>{children}</ChakraProvider>
     </ThemeColorContext.Provider>
   );
 }

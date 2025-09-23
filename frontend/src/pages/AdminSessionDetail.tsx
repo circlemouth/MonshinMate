@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { VStack, Heading, Text, Box, Button, HStack } from '@chakra-ui/react';
 import { ArrowBackIcon } from '@chakra-ui/icons';
 import { formatPersonalInfoLines } from '../utils/personalInfo';
+import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionDetail {
   id: string;
@@ -28,6 +29,7 @@ export default function AdminSessionDetail() {
   const navigate = useNavigate();
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [items, setItems] = useState<TemplateItem[]>([]);
+  const { formatDate } = useTimezone();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -138,7 +140,7 @@ export default function AdminSessionDetail() {
           </Text>
           {/* テンプレートIDの表示は削除 */}
           <Text>
-            <strong>問診日:</strong> {detail.finalized_at ? detail.finalized_at.split('T')[0] : '-'}
+            <strong>問診日:</strong> {formatDate(detail.finalized_at)}
           </Text>
         </VStack>
       </Box>

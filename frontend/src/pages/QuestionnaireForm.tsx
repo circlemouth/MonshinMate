@@ -270,7 +270,13 @@ export default function QuestionnaireForm() {
               isRequired={item.required}
               isInvalid={showError}
             >
-              <FormLabel htmlFor={`item-${item.id}`} fontSize="lg" fontWeight="bold" mb={4}>
+              <FormLabel
+                htmlFor={`item-${item.id}`}
+                fontSize="lg"
+                fontWeight="bold"
+                mb={4}
+                color={item.required ? 'fg.accent' : undefined}
+              >
                 {item.label}
               </FormLabel>
               {helperText && (

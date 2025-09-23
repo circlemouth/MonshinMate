@@ -138,11 +138,13 @@
    - [x] `/done`：完了メッセージと要約（印刷/コピー任意）
 3) **管理向け**
   - [x] `/admin/login`：管理者ログイン
-  - [x] `/admin/main`：メインダッシュボード（再診10件とシステム状態のカードを表示）
+  - [x] `/admin/main`：メインダッシュボード（再診10件、システム情報サマリーバー＋詳細アコーディオン〈2025-09-22 改修〉）
  - [x] `/admin/templates`：一覧/新規/編集/複製/削除
   - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否や対象性別を設定する表とプレビュー
   - [x] `/admin/sessions`：問診結果の一覧
   - [x] `/admin/sessions/:id`：質問と回答の詳細表示
+  - [x] `/admin/appearance`：外観設定（表示名・メッセージ・ブランドカラー・ロゴ）
+  - [x] `/admin/timezone`：タイムゾーン設定（JST既定・変更可）
   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と保存時の自動疎通テスト
 4) **状態管理/永続化**
  - [x] sessionStorageドラフト、画面遷移ガード
@@ -157,7 +159,7 @@
 - `POST /sessions/:id/llm-questions` → `LlmQuestion[]`
 - `POST /sessions/:id/llm-answers` → `{ ok, remaining }`
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
-- 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `POST /admin/login`
+- 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `GET/PUT /system/timezone`, `POST /admin/login`
 - バックアップ系：`POST /admin/questionnaires/export`, `POST /admin/questionnaires/import`, `POST /admin/sessions/export`, `POST /admin/sessions/import`
 - 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`
 
@@ -911,10 +913,28 @@
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`
 - [x] バックエンド自動テスト実行: `cd backend && pytest`
 
-## 114. PDF出力レイアウト刷新と切り替え設定（2026-01-15）
+## 114. ボタン配色のコントラスト改善（2025-09-22）
+- [x] Chakra UI テーマで `accent.solid` に対する `accent.onFilled` を再計算し、ブランドカラーが明るい場合でも文字色が適切に切り替わるよう改修。
+- [x] 変更（フロントエンド）: `frontend/src/theme/index.ts`
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 115. PDF出力レイアウト刷新と切り替え設定（2026-01-15）
 - [x] MarkdownベースのPDF変換を廃止し、`backend/app/pdf_renderer.py` でReportLab Platypusを用いたフォーム型レイアウトを実装。
 - [x] `/admin/sessions/*/download` および一括出力が新レイアウトを利用するよう `backend/app/main.py` を改修し、`PDFLayoutMode` によるレガシー切り替えを追加。
 - [x] `/system/pdf-layout` API を追加し、`backend/tests/test_api.py::test_pdf_layout_setting_toggle` で設定反映を検証。
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `internal_docs/implementation.md`。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`
+
+## 116. LLM設定画面の再構成とプロバイダ別設定保持（2025-09-22）
+- [x] 管理画面の LLM 設定 UI をカード分割＋グレートーンベースで再構成し、ベースURL・モデル名などをプロバイダ単位で保持しつつ LLM有効化スイッチはプロバイダ切替と独立させるよう `frontend/src/pages/AdminLlm.tsx` を全面改修。モデル名入力はシンプルなテキスト入力＋候補補完に統一し、モデル一覧取得ボタンを同セクションへ移動。
+- [x] `backend/app/llm_gateway.py` と `backend/app/main.py` に `provider_profiles` を追加し、選択プロバイダごとの設定を永続化／復元できるよう API を拡張。
+- [x] `backend/tests/test_api.py::test_llm_settings_get_and_update` を更新し、プロバイダ切り替え時に個別設定が保持されることを確認。
+- [ ] バックエンド自動テスト実行: `cd backend && pytest -q`（`couchdb` モジュール未導入のため失敗）（`couchdb` モジュール未導入のため失敗）
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 117. 患者名検索の部分一致強化（2025-09-23）
+- [x] SQLite/CouchDB の患者名フィルタで前後空白および全角・半角スペースを除いた比較を追加。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx` で検索条件送信時に `trim()` を適用。
+- [x] ドキュメント更新: `docs/session_api.md`
+- [ ] バックエンド自動テスト実行: `cd backend && pytest -q`（`couchdb` モジュール未導入のため失敗）
 

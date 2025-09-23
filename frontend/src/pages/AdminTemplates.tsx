@@ -52,6 +52,7 @@ import {
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
 import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
+import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 import {
   personalInfoFields,
@@ -1073,16 +1074,21 @@ export default function AdminTemplates() {
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {templates.map((t) => (
-                      <Tr
-                        key={t.id}
-                        bg={t.id === templateId ? 'blue.100' : 'transparent'}
-                        _hover={{ bg: t.id === templateId ? 'blue.100' : 'gray.100' }}
-                      >
+                    {templates.map((t) => {
+                      const active = t.id === templateId;
+                      return (
+                        <Tr
+                          key={t.id}
+                          bg={active ? 'bg.subtle' : 'transparent'}
+                          borderLeftWidth={active ? '4px' : '0'}
+                          borderLeftColor={active ? 'accent.solid' : 'transparent'}
+                          _hover={{ bg: 'bg.emphasis' }}
+                        >
                         <Td
                           onClick={() => setTemplateId(t.id)}
                           sx={{ cursor: 'pointer' }}
-                          fontWeight={t.id === templateId ? 'bold' : 'normal'}
+                          fontWeight={active ? 'bold' : 'normal'}
+                          color={active ? 'fg.accent' : undefined}
                         >
                           {t.id === 'default' ? '標準テンプレート' : t.id}
                         </Td>
@@ -1118,8 +1124,9 @@ export default function AdminTemplates() {
                         <Td onClick={(e) => e.stopPropagation()}>
                           <Radio value={t.id} />
                         </Td>
-                      </Tr>
-                    ))}
+                        </Tr>
+                      );
+                    })}
                   </Tbody>
                 </Table>
               </TableContainer>
@@ -1280,14 +1287,28 @@ export default function AdminTemplates() {
           </Box>
 
           {/* 問診内容（ラベルのみ）の簡易一覧 */}
-          <Box borderWidth="1px" borderRadius="md" p={3} mb={4}>
-            <Heading size="sm" mb={2}>問診内容一覧(クリックして編集)</Heading>
+          <AccentOutlineBox
+            p={4}
+            mb={4}
+            borderRadius="lg"
+            bg="white"
+            borderColor="neutral.200"
+            boxShadow="sm"
+          >
+            <Heading size="sm" mb={3} color="gray.700">問診内容一覧（クリックして編集）</Heading>
             {items.length === 0 ? (
-              <Text color="gray.500" fontSize="sm">項目がありません。</Text>
+              <Text color="fg.muted" fontSize="sm">項目がありません。</Text>
             ) : (
               <TableContainer overflowX="auto">
-                <Table size="sm" minWidth="100%" variant="striped" colorScheme="gray">
-                  <Thead>
+                <Table
+                  size="sm"
+                  minWidth="100%"
+                  variant="simple"
+                  sx={{
+                    'tbody tr:last-of-type': { borderBottom: 'none' },
+                  }}
+                >
+                  <Thead bg="gray.50">
                     <Tr>
                       <Th width="2.5rem">並び替え</Th>
                       <Th>問診内容</Th>
@@ -1315,8 +1336,8 @@ export default function AdminTemplates() {
                               const rect = el.getBoundingClientRect();
                               const halfway = rect.top + rect.height / 2;
                               const isTop = e.clientY < halfway;
-                              el.style.borderTop = isTop ? '3px solid #3182ce' : '';
-                              el.style.borderBottom = !isTop ? '3px solid #3182ce' : '';
+                              el.style.borderTop = isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
+                              el.style.borderBottom = !isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
                             }}
                             onDragLeave={(e) => {
                               const el = e.currentTarget as HTMLElement;
@@ -1345,8 +1366,10 @@ export default function AdminTemplates() {
                               markDirty();
                             }}
                             onDragEnd={() => setDraggingItemId(null)}
-                            bg={selected ? 'blue.100' : undefined}
-                            _hover={{ bg: selected ? 'blue.200' : 'gray.100' }}
+                            bg={selected ? 'gray.100' : 'white'}
+                            _hover={{ bg: selected ? 'gray.200' : 'gray.50' }}
+                            borderBottomWidth="1px"
+                            borderBottomColor="neutral.100"
                             sx={{ cursor: 'pointer' }}
                             onClick={() => setSelectedItemId(selected ? null : item.id)}
                           >
@@ -1358,7 +1381,7 @@ export default function AdminTemplates() {
                             <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">
                               {item.label}
                               {item.followups && Object.keys(item.followups).length > 0 && (
-                                <Text as="span" color="blue.500" ml={2}>枝</Text>
+                                <Text as="span" color="gray.600" ml={2}>枝</Text>
                               )}
                               {item.image && (
                                 <Icon as={MdImage} ml={2} color="gray.500" />
@@ -1368,6 +1391,7 @@ export default function AdminTemplates() {
                               <Checkbox
                                 isChecked={item.required}
                                 size="sm"
+                                colorScheme="gray"
                                 onChange={(e) => updateItem(idx, 'required', e.target.checked)}
                               />
                             </Td>
@@ -1375,6 +1399,7 @@ export default function AdminTemplates() {
                               <Checkbox
                                 isChecked={item.use_initial}
                                 size="sm"
+                                colorScheme="gray"
                                 onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
                               />
                             </Td>
@@ -1382,6 +1407,7 @@ export default function AdminTemplates() {
                               <Checkbox
                                 isChecked={item.use_followup}
                                 size="sm"
+                                colorScheme="gray"
                                 onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
                               />
                             </Td>
@@ -1389,7 +1415,16 @@ export default function AdminTemplates() {
                           {selected && (
                             <Tr key={`editor-${item.id}`}>
                               <Td colSpan={5} p={0}>
-                                <Box p={4} bg="blue.50" borderTopWidth="1px" position="relative" zIndex={1100} boxShadow="lg" borderRadius="md">
+                                <Box
+                                  p={4}
+                                  bg="gray.50"
+                                  borderWidth="1px"
+                                  borderColor="neutral.200"
+                                  position="relative"
+                                  zIndex={1100}
+                                  boxShadow="sm"
+                                  borderRadius="md"
+                                >
                                   <VStack align="stretch" spacing={3}>
                                     <FormControl>
                                       <FormLabel m={0}>問診内容</FormLabel>
@@ -1672,7 +1707,7 @@ export default function AdminTemplates() {
                                               flex="1"
                                               min={0}
                                               max={110}
-                                              colorScheme="blue"
+                                              colorScheme="primary"
                                               value={[item.min_age ?? 0, item.max_age ?? 110]}
                                               onChange={(vals) => {
                                                 const [minV, maxV] = vals as [number, number];
@@ -1705,16 +1740,26 @@ export default function AdminTemplates() {
               </TableContainer>
             )}
             {!isAddingNewItem && (
-              <Button onClick={() => setIsAddingNewItem(true)} mt={4} colorScheme="teal">
+              <Button onClick={() => setIsAddingNewItem(true)} mt={4} colorScheme="primary">
                 問診項目を追加
               </Button>
             )}
-          </Box>
+          </AccentOutlineBox>
 
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
           {isAddingNewItem && (
-            <Box borderWidth="1px" borderRadius="md" p={4} mt={6} position="relative" zIndex={1100} boxShadow="lg" bg="blue.50">
+            <Box
+              borderWidth="1px"
+              borderRadius="md"
+              p={4}
+              mt={6}
+              position="relative"
+              zIndex={1100}
+              boxShadow="lg"
+              bg="accentAlpha.8"
+              borderColor="border.accent"
+            >
               <Heading size="md" mb={4}>
                 問診項目を追加
               </Heading>
@@ -1967,7 +2012,7 @@ export default function AdminTemplates() {
                           flex="1"
                           min={0}
                           max={110}
-                          colorScheme="blue"
+                          colorScheme="primary"
                           value={[
                             newItem.min_age === '' ? 0 : parseInt(newItem.min_age),
                             newItem.max_age === '' ? 110 : parseInt(newItem.max_age),
@@ -2586,7 +2631,7 @@ export default function AdminTemplates() {
                               flex="1"
                               min={0}
                               max={110}
-                              colorScheme="blue"
+                              colorScheme="primary"
                               value={[fi.min_age ?? 0, fi.max_age ?? 110]}
                               onChange={(vals) => {
                                 const [minV, maxV] = vals as [number, number];
