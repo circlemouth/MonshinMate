@@ -954,3 +954,15 @@
 - [x] 共通部品: `AutoSaveStatusText` と `readErrorMessage` ユーティリティを新設し、フロントエンドから利用。
 - [x] ドキュメント更新: `docs/admin_user_manual.md` と `internal_docs/admin_system_setup.md` を自動保存仕様に更新。
 
+
+## 119. ロゴプレビューとトリミングロック改善（2025-09-23）
+- [x] 外観設定のロゴプレビューをヘッダー実サイズ（28px）の表示に合わせ、クロップ結果をそのまま確認できるよう `AdminAppearance` を調整。
+- [x] 「表示範囲を調整」ボタンでトリミングUIをオンにし、「調整を完了」で枠を固定できるロック機能を追加。数値入力やプリセットボタンは編集中のみ操作可能に変更。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx`。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`, `frontend/dist/docs/admin_user_manual.md`。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`.
+
+## 120. 問診テンプレート画像エクスポートの正規化（2025-09-23）
+- [x] 変更（バックエンド）: `backend/app/main.py` に画像URL正規化ヘルパーを追加し、テンプレートのエクスポート時に絶対パスやクエリ付きURLでも `/questionnaire-item-images/files/<filename>` へ揃えて添付画像を含めるよう修正。インポート時も同じロジックで復元。
+- [x] テスト追加: `backend/tests/test_export_import.py::test_questionnaire_export_normalizes_absolute_image_url` を追加し、絶対URLを含むテンプレートが画像ごと再現できることを検証。
+- [x] バックエンド自動テスト実行: `../venv/bin/python -m pytest tests/test_export_import.py`（3件成功）。

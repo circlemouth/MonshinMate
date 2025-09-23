@@ -51,6 +51,7 @@ const presetValues = colorPresets.map((preset) => preset.value);
 
 const defaultCustomColor = '#000000';
 const defaultCropState = { x: 0, y: 0, w: 1, h: 1 } as const;
+const logoDisplaySizePx = 28;
 
 function getContrastingIconColor(hex: string): 'black' | 'white' {
   if (!hex || hex.length < 7) return 'black';
@@ -133,6 +134,7 @@ export default function AdminAppearance() {
   const dragStartRef = useRef<{ px: number; py: number; crop: { x: number; y: number; w: number; h: number } } | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [isCropEditing, setIsCropEditing] = useState(false);
 
   const saveDisplayName = useCallback(
     async (current: string, signal: AbortSignal) => {
@@ -461,6 +463,14 @@ export default function AdminAppearance() {
     };
   }, [markLogoSynced]);
 
+  useEffect(() => {
+    if (!logoUrl) {
+      setIsCropEditing(false);
+      setDragMode('none');
+      dragStartRef.current = null;
+    }
+  }, [logoUrl]);
+
   const selectPreset = (c: string) => {
     setSelectedColor(c);
     setIsCustom(false);
@@ -481,23 +491,38 @@ export default function AdminAppearance() {
 
   const customButtonIconColor = getContrastingIconColor(customColor);
 
+  const enableCropEditing = () => {
+    setDragMode('none');
+    dragStartRef.current = null;
+    setIsCropEditing(true);
+  };
+
+  const disableCropEditing = () => {
+    setDragMode('none');
+    dragStartRef.current = null;
+    setIsCropEditing(false);
+  };
+
   const iconPreview = useMemo(() => {
+    const baseProps = {
+      w: `${logoDisplaySizePx}px`,
+      h: `${logoDisplaySizePx}px`,
+      borderRadius: 'full',
+      overflow: 'hidden' as const,
+      bg: 'gray.100',
+      _dark: { bg: 'gray.700' },
+      borderWidth: '1px',
+      borderColor: 'gray.200',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    };
     if (!logoUrl) {
       return (
-        <Box
-          w="64px"
-          h="64px"
-          borderRadius="full"
-          bg="gray.100"
-          _dark={{ bg: 'gray.600' }}
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          color="fg.muted"
-          fontSize="xs"
-          fontWeight="semibold"
-        >
-          NO LOGO
+        <Box {...baseProps}>
+          <Text fontSize="xs" color="fg.muted">
+            N/A
+          </Text>
         </Box>
       );
     }
@@ -506,15 +531,7 @@ export default function AdminAppearance() {
     const w = crop.w || 1;
     const transform = `translate(${-x * 100}%, ${-y * 100}%) scale(${1 / (w || 1)})`;
     return (
-      <Box
-        w="64px"
-        h="64px"
-        borderRadius="full"
-        overflow="hidden"
-        bg="gray.100"
-        _dark={{ bg: 'gray.600' }}
-        position="relative"
-      >
+      <Box {...baseProps}>
         <img
           src={logoUrl}
           alt="logo preview"
@@ -544,6 +561,7 @@ export default function AdminAppearance() {
       const url = d.url as string;
       setLogoUrl(url);
       setCrop(defaultCrop);
+      setIsCropEditing(true);
       const res = await fetch('/system/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -731,15 +749,32 @@ export default function AdminAppearance() {
           <FormLabel>クリニックのロゴ/アイコン</FormLabel>
           <VStack align="stretch" spacing={4}>
             <Text fontSize="sm" color="fg.muted">
-              PNG / JPEG 推奨。画像をアップロード後、青い枠をドラッグして表示範囲を調整してください。
+              PNG / JPEG 推奨。画像をアップロード後、「表示範囲を調整」を押して青い枠をドラッグすると表示範囲を変更できます。
             </Text>
             <AutoSaveStatusText status={logoStatus} message={logoError} />
             <HStack align="flex-start" spacing={6} flexWrap="wrap">
-              <VStack spacing={2} align="center">
-                <Text fontSize="sm" color="fg.muted">
-                  プレビュー
+              <VStack spacing={2} align="center" minW="120px">
+                <Text fontSize="sm" color="fg.muted" textAlign="center">
+                  ヘッダー表示例（{logoDisplaySizePx}px）
                 </Text>
                 {iconPreview}
+                {logoUrl ? (
+                  <>
+                    <Button
+                      size="xs"
+                      variant={isCropEditing ? 'solid' : 'outline'}
+                      colorScheme="primary"
+                      onClick={isCropEditing ? disableCropEditing : enableCropEditing}
+                    >
+                      {isCropEditing ? '調整を完了' : '表示範囲を調整'}
+                    </Button>
+                    {!isCropEditing && (
+                      <Text fontSize="xs" color="fg.muted" textAlign="center">
+                        青い枠で再調整する場合はボタンを押してください。
+                      </Text>
+                    )}
+                  </>
+                ) : null}
               </VStack>
               <VStack align="stretch" spacing={3} flex={1} minW="260px">
                 <Input
@@ -754,146 +789,182 @@ export default function AdminAppearance() {
                 {logoUrl ? (
                   <VStack align="stretch" spacing={3}>
                     <Text fontSize="sm" color="fg.muted">
-                      枠の角や辺をドラッグするとサイズを変更できます。内部をドラッグすると位置を移動できます。
+                      {isCropEditing
+                        ? '青い枠の角や辺をドラッグするとサイズを変更できます。内部をドラッグすると位置を移動できます。'
+                        : '現在の表示範囲です。再調整する場合は「表示範囲を調整」を押してください。'}
                     </Text>
                     <Box position="relative" maxW="320px" userSelect="none">
                       <img ref={imageRef} src={logoUrl} alt="logo" style={{ width: '100%', height: 'auto', display: 'block' }} />
-                      <Box
-                        position="absolute"
-                        inset={0}
-                        onPointerDown={(e) => {
-                          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                          const relX = (e.clientX - rect.left) / rect.width;
-                          const relY = (e.clientY - rect.top) / rect.height;
-                          const hx = crop.x, hy = crop.y, hw = crop.w, hh = crop.h;
-                          const left = hx, top = hy, right = hx + hw, bottom = hy + hh;
-                          const edge = 0.02;
-                          let mode: DragMode = 'none';
-                          const near = (v: number, target: number) => Math.abs(v - target) <= edge;
-                          const insideX = relX >= left && relX <= right;
-                          const insideY = relY >= top && relY <= bottom;
-                          if (near(relY, top) && near(relX, left)) mode = 'nw';
-                          else if (near(relY, top) && near(relX, right)) mode = 'ne';
-                          else if (near(relY, bottom) && near(relX, left)) mode = 'sw';
-                          else if (near(relY, bottom) && near(relX, right)) mode = 'se';
-                          else if (insideX && near(relY, top)) mode = 'n';
-                          else if (insideX && near(relY, bottom)) mode = 's';
-                          else if (insideY && near(relX, left)) mode = 'w';
-                          else if (insideY && near(relX, right)) mode = 'e';
-                          else if (insideX && insideY) mode = 'move';
-                          if (mode !== 'none') {
-                            setDragMode(mode);
-                            dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
-                            (e.currentTarget as any).setPointerCapture?.(e.pointerId);
-                          }
-                        }}
-                        onPointerMove={(e) => {
-                          if (dragMode === 'none' || !dragStartRef.current) return;
-                          const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                          const dx = (e.clientX - dragStartRef.current.px) / rect.width;
-                          const dy = (e.clientY - dragStartRef.current.py) / rect.height;
-                          const start = dragStartRef.current.crop;
-                          let nx = start.x, ny = start.y, nw = start.w, nh = start.h;
-                          const minSize = 0.05;
-                          const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-                          const clampRect = (x: number, y: number, w: number, h: number) => {
-                            x = clamp01(x); y = clamp01(y);
-                            w = Math.max(minSize, Math.min(1 - x, w));
-                            h = Math.max(minSize, Math.min(1 - y, h));
-                            return { x, y, w, h };
-                          };
-                          switch (dragMode) {
-                            case 'move':
-                              ({ x: nx, y: ny, w: nw, h: nh } = clampRect(start.x + dx, start.y + dy, nw, nh));
-                              break;
-                            case 'nw':
-                              nx = start.x + dx; ny = start.y + dy; nw = start.w - dx; nh = start.h - dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'ne':
-                              ny = start.y + dy; nw = start.w + dx; nh = start.h - dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'sw':
-                              nx = start.x + dx; nw = start.w - dx; nh = start.h + dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'se':
-                              nw = start.w + dx; nh = start.h + dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'n':
-                              ny = start.y + dy; nh = start.h - dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 's':
-                              nh = start.h + dy; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'w':
-                              nx = start.x + dx; nw = start.w - dx; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                            case 'e':
-                              nw = start.w + dx; ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
-                              break;
-                          }
-                          setCrop({ x: nx, y: ny, w: nw, h: nh });
-                        }}
-                        onPointerUp={(e) => {
-                          (e.currentTarget as any).releasePointerCapture?.(e.pointerId);
-                          setDragMode('none');
-                          dragStartRef.current = null;
-                        }}
-                      >
+                      {isCropEditing ? (
                         <Box
                           position="absolute"
+                          inset={0}
+                          onPointerDown={(e) => {
+                            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                            const relX = (e.clientX - rect.left) / rect.width;
+                            const relY = (e.clientY - rect.top) / rect.height;
+                            const hx = crop.x, hy = crop.y, hw = crop.w, hh = crop.h;
+                            const left = hx, top = hy, right = hx + hw, bottom = hy + hh;
+                            const edge = 0.02;
+                            let mode: DragMode = 'none';
+                            const near = (v: number, target: number) => Math.abs(v - target) <= edge;
+                            const insideX = relX >= left && relX <= right;
+                            const insideY = relY >= top && relY <= bottom;
+                            if (near(relY, top) && near(relX, left)) mode = 'nw';
+                            else if (near(relY, top) && near(relX, right)) mode = 'ne';
+                            else if (near(relY, bottom) && near(relX, left)) mode = 'sw';
+                            else if (near(relY, bottom) && near(relX, right)) mode = 'se';
+                            else if (insideX && near(relY, top)) mode = 'n';
+                            else if (insideX && near(relY, bottom)) mode = 's';
+                            else if (insideY && near(relX, left)) mode = 'w';
+                            else if (insideY && near(relX, right)) mode = 'e';
+                            else if (insideX && insideY) mode = 'move';
+                            if (mode !== 'none') {
+                              setDragMode(mode);
+                              dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
+                              (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+                            }
+                          }}
+                          onPointerMove={(e) => {
+                            if (dragMode === 'none' || !dragStartRef.current) return;
+                            const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
+                            const dx = (e.clientX - dragStartRef.current.px) / rect.width;
+                            const dy = (e.clientY - dragStartRef.current.py) / rect.height;
+                            const start = dragStartRef.current.crop;
+                            let nx = start.x, ny = start.y, nw = start.w, nh = start.h;
+                            const minSize = 0.05;
+                            const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+                            const clampRect = (x: number, y: number, w: number, h: number) => {
+                              x = clamp01(x);
+                              y = clamp01(y);
+                              w = Math.max(minSize, Math.min(1 - x, w));
+                              h = Math.max(minSize, Math.min(1 - y, h));
+                              return { x, y, w, h };
+                            };
+                            switch (dragMode) {
+                              case 'move':
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(start.x + dx, start.y + dy, nw, nh));
+                                break;
+                              case 'nw':
+                                nx = start.x + dx;
+                                ny = start.y + dy;
+                                nw = start.w - dx;
+                                nh = start.h - dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'ne':
+                                ny = start.y + dy;
+                                nw = start.w + dx;
+                                nh = start.h - dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'sw':
+                                nx = start.x + dx;
+                                nw = start.w - dx;
+                                nh = start.h + dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'se':
+                                nw = start.w + dx;
+                                nh = start.h + dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'n':
+                                ny = start.y + dy;
+                                nh = start.h - dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 's':
+                                nh = start.h + dy;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'w':
+                                nx = start.x + dx;
+                                nw = start.w - dx;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                              case 'e':
+                                nw = start.w + dx;
+                                ({ x: nx, y: ny, w: nw, h: nh } = clampRect(nx, ny, nw, nh));
+                                break;
+                            }
+                            setCrop({ x: nx, y: ny, w: nw, h: nh });
+                          }}
+                          onPointerUp={(e) => {
+                            (e.currentTarget as any).releasePointerCapture?.(e.pointerId);
+                            setDragMode('none');
+                            dragStartRef.current = null;
+                          }}
+                        >
+                          <Box
+                            position="absolute"
+                            border="2px solid #3182CE"
+                            boxShadow="0 0 0 100vmax rgba(0,0,0,0.2)"
+                            style={{
+                              left: `${crop.x * 100}%`,
+                              top: `${crop.y * 100}%`,
+                              width: `${crop.w * 100}%`,
+                              height: `${crop.h * 100}%`,
+                              boxSizing: 'border-box',
+                              cursor: dragMode === 'move' ? 'move' : 'default',
+                            }}
+                          >
+                            {['nw', 'ne', 'sw', 'se'].map((pos) => (
+                              <Box
+                                key={pos}
+                                position="absolute"
+                                w="12px"
+                                h="12px"
+                                bg="#3182CE"
+                                borderRadius="2px"
+                                style={{
+                                  left: pos.includes('w') ? '-6px' : pos.includes('e') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
+                                  top: pos.includes('n') ? '-6px' : pos.includes('s') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
+                                }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  setDragMode(pos as DragMode);
+                                  dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
+                                  (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+                                }}
+                              />
+                            ))}
+                            {['n', 's', 'w', 'e'].map((pos) => (
+                              <Box
+                                key={pos}
+                                position="absolute"
+                                bg="transparent"
+                                style={{
+                                  cursor: pos === 'n' || pos === 's' ? 'ns-resize' : 'ew-resize',
+                                  left: pos === 'w' ? '-6px' : pos === 'e' ? 'calc(100% - 6px)' : '0',
+                                  top: pos === 'n' ? '-6px' : pos === 's' ? 'calc(100% - 6px)' : '0',
+                                  width: pos === 'n' || pos === 's' ? '100%' : '12px',
+                                  height: pos === 'w' || pos === 'e' ? '100%' : '12px',
+                                }}
+                                onPointerDown={(e) => {
+                                  e.stopPropagation();
+                                  setDragMode(pos as DragMode);
+                                  dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
+                                  (e.currentTarget as any).setPointerCapture?.(e.pointerId);
+                                }}
+                              />
+                            ))}
+                          </Box>
+                        </Box>
+                      ) : (
+                        <Box
+                          position="absolute"
+                          pointerEvents="none"
                           border="2px solid #3182CE"
-                          boxShadow="0 0 0 100vmax rgba(0,0,0,0.2)"
                           style={{
                             left: `${crop.x * 100}%`,
                             top: `${crop.y * 100}%`,
                             width: `${crop.w * 100}%`,
                             height: `${crop.h * 100}%`,
                             boxSizing: 'border-box',
-                            cursor: dragMode === 'move' ? 'move' : 'default',
                           }}
-                        >
-                          {['nw', 'ne', 'sw', 'se'].map((pos) => (
-                            <Box
-                              key={pos}
-                              position="absolute"
-                              w="12px"
-                              h="12px"
-                              bg="#3182CE"
-                              borderRadius="2px"
-                              style={{
-                                left: pos.includes('w') ? '-6px' : pos.includes('e') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
-                                top: pos.includes('n') ? '-6px' : pos.includes('s') ? 'calc(100% - 6px)' : 'calc(50% - 6px)',
-                              }}
-                              onPointerDown={(e) => {
-                                e.stopPropagation();
-                                setDragMode(pos as DragMode);
-                                dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
-                                (e.currentTarget as any).setPointerCapture?.(e.pointerId);
-                              }}
-                            />
-                          ))}
-                          {['n', 's', 'w', 'e'].map((pos) => (
-                            <Box
-                              key={pos}
-                              position="absolute"
-                              bg="transparent"
-                              style={{
-                                cursor: pos === 'n' || pos === 's' ? 'ns-resize' : 'ew-resize',
-                                left: pos === 'w' ? '-6px' : pos === 'e' ? 'calc(100% - 6px)' : '0',
-                                top: pos === 'n' ? '-6px' : pos === 's' ? 'calc(100% - 6px)' : '0',
-                                width: pos === 'n' || pos === 's' ? '100%' : '12px',
-                                height: pos === 'w' || pos === 'e' ? '100%' : '12px',
-                              }}
-                              onPointerDown={(e) => {
-                                e.stopPropagation();
-                                setDragMode(pos as DragMode);
-                                dragStartRef.current = { px: e.clientX, py: e.clientY, crop: { ...crop } };
-                                (e.currentTarget as any).setPointerCapture?.(e.pointerId);
-                              }}
-                            />
-                          ))}
-                        </Box>
-                      </Box>
+                        />
+                      )}
                     </Box>
                     <HStack spacing={3} align="stretch">
                       <Box flex={1}>
@@ -904,6 +975,7 @@ export default function AdminAppearance() {
                           min={0}
                           max={1}
                           value={crop.x}
+                          isDisabled={!isCropEditing}
                           onChange={(e) => setCrop((c) => ({ ...c, x: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) }))}
                         />
                       </Box>
@@ -915,6 +987,7 @@ export default function AdminAppearance() {
                           min={0}
                           max={1}
                           value={crop.y}
+                          isDisabled={!isCropEditing}
                           onChange={(e) => setCrop((c) => ({ ...c, y: Math.max(0, Math.min(1, parseFloat(e.target.value) || 0)) }))}
                         />
                       </Box>
@@ -928,6 +1001,7 @@ export default function AdminAppearance() {
                           min={0.05}
                           max={1}
                           value={crop.w}
+                          isDisabled={!isCropEditing}
                           onChange={(e) => setCrop((c) => ({ ...c, w: Math.max(0.05, Math.min(1, parseFloat(e.target.value) || 1)) }))}
                         />
                       </Box>
@@ -939,18 +1013,19 @@ export default function AdminAppearance() {
                           min={0.05}
                           max={1}
                           value={crop.h}
+                          isDisabled={!isCropEditing}
                           onChange={(e) => setCrop((c) => ({ ...c, h: Math.max(0.05, Math.min(1, parseFloat(e.target.value) || 1)) }))}
                         />
                       </Box>
                     </HStack>
                     <HStack spacing={2}>
-                      <Button size="sm" onClick={() => setCrop({ x: 0, y: 0, w: 1, h: 1 })}>
+                      <Button size="sm" onClick={() => setCrop({ x: 0, y: 0, w: 1, h: 1 })} isDisabled={!isCropEditing}>
                         全体
                       </Button>
-                      <Button size="sm" onClick={() => setCrop((c) => ({ ...c, h: c.w }))}>
+                      <Button size="sm" onClick={() => setCrop((c) => ({ ...c, h: c.w }))} isDisabled={!isCropEditing}>
                         正方形
                       </Button>
-                      <Button size="sm" onClick={() => setCrop({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 })}>
+                      <Button size="sm" onClick={() => setCrop({ x: 0.25, y: 0.25, w: 0.5, h: 0.5 })} isDisabled={!isCropEditing}>
                         中央にリセット
                       </Button>
                     </HStack>

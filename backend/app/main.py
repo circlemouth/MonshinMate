@@ -17,6 +17,7 @@ import json
 import base64
 import hashlib
 import secrets
+from urllib.parse import urlparse
 try:
     from dotenv import load_dotenv
 except Exception:  # ランタイム環境に dotenv が無い場合でも起動を継続
@@ -131,6 +132,7 @@ DEFAULT_SUMMARY_PROMPT = (
 
 EXPORT_PBKDF_ITERATIONS = 390_000
 IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+IMAGE_STORAGE_SEGMENT = "questionnaire-item-images/files/"
 
 
 def _build_export_envelope(data: Any, export_type: str, password: str | None) -> dict[str, Any]:
@@ -196,32 +198,28 @@ def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str,
     return str(export_type or ""), payload_data
 
 
-def _collect_image_names_from_items(items: list[Any], bucket: set[str]) -> None:
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        image = item.get("image")
-        if isinstance(image, str):
-            if image.startswith("/questionnaire-item-images/files/") or image.startswith(
-                "questionnaire-item-images/files/"
-            ):
-                name = Path(image).name
-                if name:
-                    bucket.add(name)
-        followups = item.get("followups")
-        if isinstance(followups, dict):
-            for sub_items in followups.values():
-                if isinstance(sub_items, list):
-                    _collect_image_names_from_items(sub_items, bucket)
-
-
-def _collect_image_names_from_templates(templates: list[dict[str, Any]]) -> set[str]:
-    names: set[str] = set()
-    for tpl in templates:
-        items = tpl.get("items")
-        if isinstance(items, list):
-            _collect_image_names_from_items(items, names)
-    return names
+def _extract_image_filename(image_url: str | None) -> str | None:
+    if not image_url:
+        return None
+    value = image_url.strip()
+    if not value or value.startswith("data:"):
+        return None
+    parsed = urlparse(value)
+    candidates = [parsed.path or "", value]
+    for candidate in candidates:
+        idx = candidate.find(IMAGE_STORAGE_SEGMENT)
+        if idx == -1:
+            # `/questionnaire-item-images/...` のように先頭に `/` が付くケースを許容
+            if candidate.startswith("/" + IMAGE_STORAGE_SEGMENT):
+                idx = 1
+            elif candidate.startswith(IMAGE_STORAGE_SEGMENT):
+                idx = 0
+        if idx != -1:
+            remainder = candidate[idx + len(IMAGE_STORAGE_SEGMENT) :]
+            filename = remainder.split("/")[0].split("?")[0].split("#")[0]
+            if filename:
+                return filename
+    return None
 
 
 def _sanitize_image_filename(name: str) -> str:
@@ -238,6 +236,65 @@ def _sanitize_image_filename(name: str) -> str:
     if not IMAGE_FILENAME_PATTERN.fullmatch(fallback):
         fallback = f"image_{uuid4().hex[:8]}{suffix}"
     return fallback
+
+
+def _canonicalize_image_field(image: Any, bucket: set[str]) -> str | None:
+    if not isinstance(image, str):
+        return None
+    trimmed = image.strip()
+    if not trimmed:
+        return ""
+    filename = _extract_image_filename(trimmed)
+    if not filename:
+        return trimmed
+    sanitized = _sanitize_image_filename(filename)
+    bucket.add(sanitized)
+    return f"/{IMAGE_STORAGE_SEGMENT}{sanitized}"
+
+
+def _normalize_items_for_transfer(items: list[Any], bucket: set[str]) -> list[Any]:
+    normalized: list[Any] = []
+    for item in items:
+        if not isinstance(item, dict):
+            normalized.append(item)
+            continue
+        item_copy: dict[str, Any] = dict(item)
+        normalized_image = _canonicalize_image_field(item_copy.get("image"), bucket)
+        if normalized_image is None:
+            pass
+        elif normalized_image == "":
+            item_copy.pop("image", None)
+        else:
+            item_copy["image"] = normalized_image
+        followups = item_copy.get("followups")
+        if isinstance(followups, dict):
+            normalized_followups: dict[str, Any] = {}
+            for key, children in followups.items():
+                if isinstance(children, list):
+                    normalized_followups[key] = _normalize_items_for_transfer(children, bucket)
+                else:
+                    normalized_followups[key] = children
+            item_copy["followups"] = normalized_followups
+        normalized.append(item_copy)
+    return normalized
+
+
+def _normalize_templates_for_transfer(
+    templates: list[dict[str, Any]] | None,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    if not templates:
+        return [], set()
+    bucket: set[str] = set()
+    normalized_templates: list[dict[str, Any]] = []
+    for tpl in templates:
+        if not isinstance(tpl, dict):
+            continue
+        tpl_copy = dict(tpl)
+        items = tpl_copy.get("items")
+        if isinstance(items, list):
+            tpl_copy["items"] = _normalize_items_for_transfer(items, bucket)
+        normalized_templates.append(tpl_copy)
+    return normalized_templates, bucket
 
 
 def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
@@ -1143,10 +1200,13 @@ def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingRespon
     """問診テンプレート設定一式をエクスポートする。"""
 
     data = export_questionnaire_settings()
-    templates = data.get("templates") or []
-    image_names = _collect_image_names_from_templates(templates)
+    raw_templates = data.get("templates")
+    normalized_templates, image_names = _normalize_templates_for_transfer(
+        raw_templates if isinstance(raw_templates, list) else []
+    )
     images = _load_image_payloads(image_names)
     export_payload = dict(data)
+    export_payload["templates"] = normalized_templates
     export_payload["images"] = images
     envelope = _build_export_envelope(export_payload, "questionnaire_settings", payload.password or None)
     content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
@@ -1174,6 +1234,11 @@ async def import_questionnaire_settings_api(
     if mode_value not in {"merge", "replace"}:
         raise HTTPException(status_code=400, detail="invalid_mode")
     payload_data = dict(payload)
+    raw_templates = payload_data.get("templates")
+    normalized_templates, _ = _normalize_templates_for_transfer(
+        raw_templates if isinstance(raw_templates, list) else []
+    )
+    payload_data["templates"] = normalized_templates
     images_payload = payload_data.pop("images", {}) or {}
     restored_images = _restore_images(images_payload, mode_value)
     try:

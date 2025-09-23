@@ -109,6 +109,63 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     assert (IMAGE_DIR / "export-test.png").exists()
 
 
+def test_questionnaire_export_normalizes_absolute_image_url() -> None:
+    _reset_database()
+    init_db()
+    _clean_images()
+    image_path = IMAGE_DIR / "export-abs.png"
+    image_path.write_bytes(b"abs-image")
+
+    payload = {
+        "id": "default",
+        "visit_type": "initial",
+        "items": [
+            {
+                "id": "with_image",
+                "label": "画像付き",
+                "type": "string",
+                "required": False,
+                "image": "https://example.com/questionnaire-item-images/files/export-abs.png?rev=1",
+            }
+        ],
+        "llm_followup_enabled": True,
+        "llm_followup_max_questions": 2,
+    }
+    assert client.post("/questionnaires", json=payload).status_code == 200
+
+    export_res = client.post("/admin/questionnaires/export", json={})
+    assert export_res.status_code == 200
+    envelope = json.loads(export_res.content)
+    assert envelope["encryption"] is None
+    payload_export = envelope["payload"]
+    template = next(t for t in payload_export["templates"] if t["id"] == "default" and t["visit_type"] == "initial")
+    assert template["items"][0]["image"] == "/questionnaire-item-images/files/export-abs.png"
+    assert "export-abs.png" in payload_export["images"]
+
+    if (IMAGE_DIR / "export-abs.png").exists():
+        (IMAGE_DIR / "export-abs.png").unlink()
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("DELETE FROM questionnaire_templates")
+    conn.execute("DELETE FROM summary_prompts")
+    conn.execute("DELETE FROM followup_prompts")
+    conn.commit()
+    conn.close()
+
+    import_res = client.post(
+        "/admin/questionnaires/import",
+        data={"mode": "replace"},
+        files={"file": ("settings.json", export_res.content, "application/json")},
+    )
+    assert import_res.status_code == 200
+
+    tpl = db_get_template("default", "initial")
+    assert tpl is not None
+    assert any(
+        it.get("image") == "/questionnaire-item-images/files/export-abs.png" for it in tpl["items"]
+    )
+    assert (IMAGE_DIR / "export-abs.png").exists()
+
+
 def test_session_export_import_roundtrip() -> None:
     _reset_database()
     init_db()
