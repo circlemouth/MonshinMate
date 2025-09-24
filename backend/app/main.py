@@ -1420,15 +1420,37 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
                 from types import SimpleNamespace
 
                 finalized_at_val = None
+
                 try:
+
                     finalized_at = srow.get("finalized_at")
+
                     if finalized_at:
+
                         finalized_at_val = datetime.fromisoformat(finalized_at)
+
                 except Exception:
+
                     finalized_at_val = None
 
-                # save_session() が参照する必須フィールド（gender, followup_prompt など）が
-                # 欠けていると AttributeError になるため、DBの値とデフォルトから補完して作成する
+
+
+                started_at_val = None
+
+                try:
+
+                    started_at_raw = srow.get("started_at")
+
+                    if started_at_raw:
+
+                        started_at_val = datetime.fromisoformat(started_at_raw)
+
+                except Exception:
+
+                    started_at_val = finalized_at_val
+
+
+
                 session_obj = SimpleNamespace(
                     id=srow.get("id"),
                     patient_name=srow.get("patient_name"),
@@ -1446,6 +1468,7 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
                     max_additional_questions=srow.get("max_additional_questions", 5),
                     # 追問プロンプトは空の可能性があるため、デフォルトを補う
                     followup_prompt=srow.get("followup_prompt") or DEFAULT_FOLLOWUP_PROMPT,
+                    started_at=started_at_val,
                     finalized_at=finalized_at_val,
                 )
                 save_session(session_obj)
@@ -2489,7 +2512,9 @@ class Session(BaseModel):
     additional_questions_used: int = 0
     max_additional_questions: int = 5
     pending_llm_questions: list[dict[str, Any]] = []
+    started_at: datetime | None = None
     finalized_at: datetime | None = None
+    interrupted: bool = False
     followup_prompt: str = DEFAULT_FOLLOWUP_PROMPT
     # LLM が提示した追加質問の「質問文」を保持するマップ。
     # キーは `llm_1` のような item_id。
@@ -2519,7 +2544,9 @@ class SessionSummary(BaseModel):
     patient_name: str
     dob: str
     visit_type: str
+    started_at: str | None = None
     finalized_at: str | None = None
+    interrupted: bool = False
 
 
 class SessionDetail(BaseModel):
@@ -2536,7 +2563,9 @@ class SessionDetail(BaseModel):
     # LLM による追加質問の提示文マップ（例: {"llm_1": "いつから症状がありますか？"}）
     llm_question_texts: dict[str, str] | None = None
     summary: str | None = None
+    started_at: str | None = None
     finalized_at: str | None = None
+    interrupted: bool = False
 
 
 class FinalizeRequest(BaseModel):
@@ -2613,9 +2642,11 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         ),
         followup_prompt=prompt_text,
         question_texts=question_texts,
+        started_at=datetime.now(UTC),
     )
     fsm = SessionFSM(session, llm_gateway)
     fsm.update_completion()
+    session.interrupted = session.completion_status != "finalized"
     sessions[session_id] = session
     save_session(session)
     global METRIC_SESSIONS_CREATED
@@ -2718,7 +2749,10 @@ def finalize_session(
     if payload and payload.llm_error:
         suffix = f"[LLMエラー]: {payload.llm_error}"
         session.summary = f"{session.summary}\n{suffix}" if session.summary else suffix
+    if not session.started_at:
+        session.started_at = datetime.now(UTC)
     session.finalized_at = datetime.now(UTC)
+    session.interrupted = False
     session.completion_status = "finalized"
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
@@ -2855,7 +2889,9 @@ def admin_get_session(session_id: str) -> SessionDetail:
         question_texts=s.get("question_texts") or {},
         llm_question_texts=s.get("llm_question_texts") or {},
         summary=s.get("summary"),
+        started_at=s.get("started_at") or s.get("finalized_at"),
         finalized_at=s.get("finalized_at"),
+        interrupted=bool(s.get("interrupted")),
     )
 
 

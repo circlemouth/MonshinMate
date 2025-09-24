@@ -212,6 +212,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 additional_questions_used INTEGER NOT NULL,
                 max_additional_questions INTEGER NOT NULL,
                 followup_prompt TEXT,
+                started_at TEXT,
                 finalized_at TEXT
             )
             """
@@ -225,6 +226,13 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
         try:
             conn.execute(
                 "ALTER TABLE sessions ADD COLUMN gender TEXT"
+            )
+        except Exception:
+            pass
+
+        try:
+            conn.execute(
+                "ALTER TABLE sessions ADD COLUMN started_at TEXT"
             )
         except Exception:
             pass
@@ -742,6 +750,30 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
     for key, text in template_qtexts.items():
         if isinstance(text, str):
             question_texts.setdefault(str(key), text)
+    started_dt = getattr(session, "started_at", None)
+    if isinstance(started_dt, str):
+        try:
+            started_dt = datetime.fromisoformat(started_dt)
+        except Exception:
+            started_dt = None
+    finalized_dt = getattr(session, "finalized_at", None)
+    if isinstance(finalized_dt, str):
+        try:
+            finalized_dt = datetime.fromisoformat(finalized_dt)
+        except Exception:
+            finalized_dt = None
+    if started_dt is None and finalized_dt is not None:
+        try:
+            session.started_at = finalized_dt  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        started_dt = finalized_dt
+    completion_status = getattr(session, "completion_status", "")
+    interrupted_flag = completion_status != "finalized"
+    try:
+        session.interrupted = bool(interrupted_flag)  # type: ignore[attr-defined]
+    except Exception:
+        pass
     for key, text in llm_qtexts.items():
         question_texts[key] = text
     try:
@@ -761,11 +793,13 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             "summary": session.summary,
             "remaining_items": session.remaining_items,
             "completion_status": session.completion_status,
+            "interrupted": bool(interrupted_flag),
             "attempt_counts": session.attempt_counts,
             "additional_questions_used": session.additional_questions_used,
             "max_additional_questions": session.max_additional_questions,
             "followup_prompt": session.followup_prompt,
-            "finalized_at": session.finalized_at.isoformat() if session.finalized_at else None,
+            "started_at": started_dt.isoformat() if started_dt else None,
+            "finalized_at": finalized_dt.isoformat() if finalized_dt else None,
             "llm_question_texts": llm_qtexts,
             "question_texts": question_texts,
         }
@@ -795,8 +829,8 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             INSERT INTO sessions (
                 id, patient_name, dob, gender, visit_type, questionnaire_id, answers_json,
                 summary, remaining_items_json, completion_status, attempt_counts_json,
-                additional_questions_used, max_additional_questions, followup_prompt, finalized_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                additional_questions_used, max_additional_questions, followup_prompt, started_at, finalized_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 patient_name=excluded.patient_name,
                 dob=excluded.dob,
@@ -811,6 +845,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 additional_questions_used=excluded.additional_questions_used,
                 max_additional_questions=excluded.max_additional_questions,
                 followup_prompt=excluded.followup_prompt,
+                started_at=excluded.started_at,
                 finalized_at=excluded.finalized_at
             """,
             (
@@ -828,12 +863,14 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 session.additional_questions_used,
                 session.max_additional_questions,
                 session.followup_prompt,
-                session.finalized_at.isoformat() if session.finalized_at else None,
+                started_dt.isoformat() if started_dt else None,
+                finalized_dt.isoformat() if finalized_dt else None,
             ),
         )
 
         conn.execute("DELETE FROM session_responses WHERE session_id=?", (session.id,))
-        ts = session.finalized_at.isoformat() if session.finalized_at else ""
+        ts_dt = finalized_dt or started_dt
+        ts = ts_dt.isoformat() if ts_dt else ""
         for item_id, ans in session.answers.items():
             stored_id = str(item_id)
             qtext = question_texts.get(stored_id)
@@ -892,25 +929,29 @@ def list_sessions(
                     continue
             if dob and dob != d.get("dob"):
                 continue
-            f_at = d.get("finalized_at")
-            if start_date and f_at and f_at < f"{start_date}T00:00:00":
+            started_at = d.get("started_at") or d.get("finalized_at")
+            if start_date and started_at and started_at < f"{start_date}T00:00:00":
                 continue
-            if end_date and f_at and f_at > f"{end_date}T23:59:59":
+            if end_date and started_at and started_at > f"{end_date}T23:59:59":
                 continue
+            completion_status = d.get("completion_status") or ""
+            interrupted = completion_status != "finalized"
             result.append(
                 {
                     "id": d.get("_id"),
                     "patient_name": d.get("patient_name"),
                     "dob": d.get("dob"),
                     "visit_type": d.get("visit_type"),
+                    "started_at": started_at,
                     "finalized_at": d.get("finalized_at"),
+                    "interrupted": bool(interrupted),
                 }
             )
-        result.sort(key=lambda x: x.get("finalized_at") or "", reverse=True)
+        result.sort(key=lambda x: (x.get("started_at") or "", x.get("finalized_at") or ""), reverse=True)
         return result
     conn = get_conn(db_path)
     try:
-        query = "SELECT id, patient_name, dob, visit_type, finalized_at FROM sessions"
+        query = "SELECT id, patient_name, dob, visit_type, started_at, finalized_at, completion_status FROM sessions"
         conditions: list[str] = []
         params: list[Any] = []
         if patient_name_query:
@@ -926,18 +967,25 @@ def list_sessions(
             conditions.append("dob = ?")
             params.append(dob)
         if start_date and end_date:
-            conditions.append("DATE(finalized_at) BETWEEN ? AND ?")
+            conditions.append("DATE(COALESCE(started_at, finalized_at)) BETWEEN ? AND ?")
             params.extend([start_date, end_date])
         elif start_date:
-            conditions.append("DATE(finalized_at) >= ?")
+            conditions.append("DATE(COALESCE(started_at, finalized_at)) >= ?")
             params.append(start_date)
         elif end_date:
-            conditions.append("DATE(finalized_at) <= ?")
+            conditions.append("DATE(COALESCE(started_at, finalized_at)) <= ?")
             params.append(end_date)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
-        query += " ORDER BY COALESCE(finalized_at, '') DESC"
+        query += " ORDER BY COALESCE(started_at, finalized_at, '') DESC"
         rows = conn.execute(query, params).fetchall()
+        for row in rows:
+            if not row.get("started_at"):
+                row["started_at"] = row.get("finalized_at")
+            completion = row.get("completion_status") or ""
+            row["interrupted"] = completion != "finalized"
+            row.pop("completion_status", None)
+
         return list(rows)
     finally:
         conn.close()
@@ -950,6 +998,9 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         if not doc:
             return None
         doc["id"] = doc.pop("_id")
+        if not doc.get("started_at"):
+            doc["started_at"] = doc.get("finalized_at")
+        doc["interrupted"] = (doc.get("completion_status") or "") != "finalized"
         qtexts = doc.get("question_texts") or {}
         if isinstance(qtexts, dict):
             doc["question_texts"] = {str(k): v for k, v in qtexts.items() if isinstance(v, str)}
@@ -965,6 +1016,9 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         ).fetchone()
         if not srow:
             return None
+        if not srow.get("started_at"):
+            srow["started_at"] = srow.get("finalized_at")
+        srow["interrupted"] = (srow.get("completion_status") or "") != "finalized"
         rrows = conn.execute(
             "SELECT item_id, answer_json, question_text FROM session_responses WHERE session_id=?",
             (session_id,),
@@ -1259,10 +1313,10 @@ def export_sessions_data(
                 continue
             if ids_set and sid not in ids_set:
                 continue
-            finalized_at = doc.get("finalized_at")
-            if start_date and finalized_at and finalized_at < f"{start_date}T00:00:00":
+            started_at = doc.get("started_at") or doc.get("finalized_at")
+            if start_date and started_at and started_at < f"{start_date}T00:00:00":
                 continue
-            if end_date and finalized_at and finalized_at > f"{end_date}T23:59:59":
+            if end_date and started_at and started_at > f"{end_date}T23:59:59":
                 continue
             payload = {
                 "id": sid,
@@ -1275,11 +1329,13 @@ def export_sessions_data(
                 "summary": doc.get("summary"),
                 "remaining_items": doc.get("remaining_items", []),
                 "completion_status": doc.get("completion_status"),
+                "interrupted": (doc.get("completion_status") or "") != "finalized",
                 "attempt_counts": doc.get("attempt_counts", {}),
                 "additional_questions_used": doc.get("additional_questions_used", 0),
                 "max_additional_questions": doc.get("max_additional_questions", 0),
                 "followup_prompt": doc.get("followup_prompt"),
-                "finalized_at": finalized_at,
+                "started_at": started_at,
+                "finalized_at": doc.get("finalized_at"),
                 "llm_question_texts": doc.get("llm_question_texts") or {},
             }
             result.append(payload)
@@ -1295,10 +1351,10 @@ def export_sessions_data(
             conditions.append(f"id IN ({placeholders})")
             params.extend(ids_set)
         if start_date:
-            conditions.append("DATE(finalized_at) >= ?")
+            conditions.append("DATE(COALESCE(started_at, finalized_at)) >= ?")
             params.append(start_date)
         if end_date:
-            conditions.append("DATE(finalized_at) <= ?")
+            conditions.append("DATE(COALESCE(started_at, finalized_at)) <= ?")
             params.append(end_date)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -1344,10 +1400,12 @@ def export_sessions_data(
                     "summary": row.get("summary"),
                     "remaining_items": remaining,
                     "completion_status": row.get("completion_status"),
+                    "interrupted": (row.get("completion_status") or "") != "finalized",
                     "attempt_counts": attempts,
                     "additional_questions_used": row.get("additional_questions_used", 0),
                     "max_additional_questions": row.get("max_additional_questions", 0),
                     "followup_prompt": row.get("followup_prompt"),
+                    "started_at": row.get("started_at") or row.get("finalized_at"),
                     "finalized_at": row.get("finalized_at"),
                     "llm_question_texts": llm_question_texts,
                 }
@@ -1392,6 +1450,7 @@ def import_sessions_data(
                 "additional_questions_used": sess.get("additional_questions_used", 0),
                 "max_additional_questions": sess.get("max_additional_questions", 0),
                 "followup_prompt": sess.get("followup_prompt"),
+                "started_at": sess.get("started_at") or sess.get("finalized_at"),
                 "finalized_at": sess.get("finalized_at"),
                 "llm_question_texts": sess.get("llm_question_texts") or {},
             }
@@ -1420,8 +1479,8 @@ def import_sessions_data(
                     id, patient_name, dob, gender, visit_type, questionnaire_id,
                     answers_json, summary, remaining_items_json, completion_status,
                     attempt_counts_json, additional_questions_used, max_additional_questions,
-                    followup_prompt, finalized_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    followup_prompt, started_at, finalized_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(id) DO UPDATE SET
                     patient_name=excluded.patient_name,
                     dob=excluded.dob,
@@ -1453,11 +1512,12 @@ def import_sessions_data(
                     int(sess.get("additional_questions_used", 0) or 0),
                     int(sess.get("max_additional_questions", 0) or 0),
                     sess.get("followup_prompt"),
+                    sess.get("started_at") or sess.get("finalized_at"),
                     sess.get("finalized_at"),
                 ),
             )
             conn.execute("DELETE FROM session_responses WHERE session_id=?", (sid,))
-            ts = sess.get("finalized_at") or ""
+            ts = sess.get("finalized_at") or sess.get("started_at") or ""
             llm_qtexts = sess.get("llm_question_texts") or {}
             for item_id, ans in answers.items():
                 qtext = None

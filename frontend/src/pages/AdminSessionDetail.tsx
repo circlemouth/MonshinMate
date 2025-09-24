@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { VStack, Heading, Text, Box, Button, HStack } from '@chakra-ui/react';
+import { VStack, Heading, Text, Box, Button, HStack, Tag } from '@chakra-ui/react';
 import { ArrowBackIcon } from '@chakra-ui/icons';
 import { formatPersonalInfoLines } from '../utils/personalInfo';
 import { useTimezone } from '../contexts/TimezoneContext';
@@ -15,7 +15,9 @@ interface SessionDetail {
   question_texts?: Record<string, string>;
   llm_question_texts?: Record<string, string>;
   summary?: string | null;
+  started_at?: string | null;
   finalized_at?: string | null;
+  interrupted?: boolean;
 }
 
 interface TemplateItem {
@@ -139,12 +141,17 @@ export default function AdminSessionDetail() {
             <strong>受診種別:</strong> {visitTypeLabel(detail.visit_type)}
           </Text>
           {/* テンプレートIDの表示は削除 */}
-          <Text>
-            <strong>問診日:</strong> {formatDate(detail.finalized_at)}
-          </Text>
+          <HStack spacing={2}>
+            <Text>
+              <strong>問診日時:</strong> {formatDate(detail.started_at ?? detail.finalized_at)}
+            </Text>
+            <Tag colorScheme={detail.interrupted ? "orange" : "green"} variant="subtle">
+              {detail.interrupted ? "中断" : "完了"}
+            </Tag>
+          </HStack>
+
         </VStack>
       </Box>
-
       <VStack align="stretch" spacing={4}>
         <Heading size="md">回答内容</Heading>
         {questionEntries.map((entry) => (

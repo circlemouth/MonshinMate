@@ -33,7 +33,9 @@ interface SessionSummary {
   patient_name: string;
   dob: string;
   visit_type: string;
+  started_at?: string | null;
   finalized_at?: string | null;
+  interrupted?: boolean;
 }
 
 export default function AdminDataTransfer() {
@@ -500,7 +502,7 @@ export default function AdminDataTransfer() {
                                 <Td>{s.patient_name}</Td>
                                 <Td>{s.dob}</Td>
                                 <Td>{visitTypeLabel(s.visit_type)}</Td>
-                                <Td>{formatDateTime(s.finalized_at)}</Td>
+                                <Td>{formatDateTime(s.started_at ?? s.finalized_at)}</Td>
                               </Tr>
                             );
                           })}

@@ -50,7 +50,9 @@ interface SessionSummary {
   patient_name: string;
   dob: string;
   visit_type: string;
+  started_at?: string | null;
   finalized_at?: string | null;
+  interrupted?: boolean;
 }
 
 /** 管理画面: セッション一覧。 */
@@ -92,14 +94,14 @@ export default function AdminSessions() {
     fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
       .then((r) => r.json())
       .then((data: SessionSummary[]) => {
-        // 並び替え: 問診日時（finalized_at）の新しい順
+        // 最新の開始日時順でソート
         const sorted = [...data].sort((a, b) => {
-          const av = a.finalized_at || '';
-          const bv = b.finalized_at || '';
+          const av = a.started_at || a.finalized_at || '';
+          const bv = b.started_at || b.finalized_at || '';
           return av < bv ? 1 : av > bv ? -1 : 0;
         });
         setSessions(sorted);
-        // 一覧が更新されたら選択状態をクリア
+                <Th>状態</Th>
         setSelectedSessionIds([]);
         setPage(0);
       });
@@ -208,7 +210,9 @@ export default function AdminSessions() {
               `## ${session?.patient_name ?? '患者'} (${session?.dob ?? '-'})`,
               `- 問診ID: ${id}`,
               session?.visit_type ? `- 受診種別: ${visitTypeLabel(session.visit_type)}` : null,
-              session?.finalized_at ? `- 確定日時: ${formatDateTime(session.finalized_at)}` : null,
+              session?.started_at || session?.finalized_at
+                ? `- 問診日時: ${formatDateTime(session?.started_at ?? session?.finalized_at)}`
+                : null,
             ].filter((line): line is string => Boolean(line));
             const separator = index === ids.length - 1 ? '' : '\n\n---\n\n';
             return `${headerLines.join('\n')}\n\n${text.trim()}${separator}`;
@@ -503,8 +507,9 @@ export default function AdminSessions() {
                 </Th>
                 <Th>患者名</Th>
                 <Th>生年月日</Th>
-                <Th>受診種別</Th>
-                <Th>問診日</Th>
+                <Th>問診区分</Th>
+                <Th>問診日時</Th>
+                <Th>状態</Th>
                 <Th>操作</Th>
               </Tr>
             </Thead>
@@ -530,7 +535,12 @@ export default function AdminSessions() {
                     <Td>{s.patient_name}</Td>
                     <Td>{s.dob}</Td>
                     <Td>{visitTypeLabel(s.visit_type)}</Td>
-                    <Td>{formatDate(s.finalized_at)}</Td>
+                    <Td>{formatDate(s.started_at ?? s.finalized_at)}</Td>
+                    <Td>
+                      <Tag colorScheme={s.interrupted ? "orange" : "green"} variant="subtle">
+                        {s.interrupted ? '中断' : '完了'}
+                      </Tag>
+                    </Td>
                     <Td onClick={(e) => e.stopPropagation()}>
                       <HStack spacing={3}>
                         <Menu isLazy>
@@ -574,7 +584,7 @@ export default function AdminSessions() {
               })}
               {sessions.length === 0 && (
                 <Tr>
-                  <Td colSpan={6}>
+                  <Td colSpan={7}>
                     <Text fontSize="sm" color="fg.muted" textAlign="center">
                       条件に一致する問診データがありません。
                     </Text>
@@ -696,9 +706,14 @@ export default function AdminSessions() {
                       <strong>受診種別:</strong> {visitTypeLabel(selectedDetail.visit_type)}
                     </Text>
                     {/* テンプレートIDの表示は削除 */}
-                    <Text>
-                      <strong>問診日:</strong> {formatDate(selectedDetail.finalized_at)}
-                    </Text>
+                    <HStack spacing={2}>
+                      <Text>
+                        <strong>問診日時:</strong> {formatDate(selectedDetail.started_at ?? selectedDetail.finalized_at)}
+                      </Text>
+                      <Tag colorScheme={selectedDetail.interrupted ? "orange" : "green"} variant="subtle">
+                        {selectedDetail.interrupted ? "中断" : "完了"}
+                      </Tag>
+                    </HStack>
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>

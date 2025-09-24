@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   Box,
+  Button,
+  Flex,
   Heading,
   Table,
   Thead,
@@ -11,6 +13,7 @@ import {
   Spinner,
   Text,
   Menu,
+  Tag,
   MenuButton,
   MenuList,
   MenuItem,
@@ -20,8 +23,17 @@ import {
   HStack,
   Tooltip,
   Skeleton,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  Spacer,
+  useDisclosure,
 } from '@chakra-ui/react';
-import { FiCpu, FiDatabase, FiDownload, FiLayers } from 'react-icons/fi';
+import { FiCpu, FiDatabase, FiDownload, FiFile, FiFileText, FiLayers, FiTable } from 'react-icons/fi';
+import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
 import SystemStatusCard from '../components/SystemStatusCard';
 import { useTimezone } from '../contexts/TimezoneContext';
@@ -32,7 +44,9 @@ interface SessionSummary {
   patient_name: string;
   dob: string;
   visit_type: string;
+  started_at?: string | null;
   finalized_at?: string | null;
+  interrupted?: boolean;
 }
 
 interface TemplateEntry {
@@ -89,7 +103,12 @@ export default function AdminMain() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState<boolean>(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
-  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
+  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+
+  const preview = useDisclosure();
 
   const [templates, setTemplates] = useState<TemplateEntry[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState<boolean>(true);
@@ -109,7 +128,7 @@ export default function AdminMain() {
 
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-  const { formatDateTime } = useTimezone();
+  const { formatDateTime, formatDate } = useTimezone();
   const { notify } = useNotify();
 
   const parseCheckedAt = (value: string | null | undefined): Date | null => {
@@ -156,8 +175,8 @@ export default function AdminMain() {
       }
       const data: SessionSummary[] = await res.json();
       const sorted = [...data].sort((a, b) => {
-        const av = a.finalized_at || '';
-        const bv = b.finalized_at || '';
+        const av = a.started_at || a.finalized_at || '';
+        const bv = b.started_at || b.finalized_at || '';
         if (av === bv) return 0;
         return av < bv ? 1 : -1;
       });
@@ -285,27 +304,36 @@ export default function AdminMain() {
     : 'warning';
   const templateSummaryDescription: string | undefined = templateError ?? undefined;
 
-  const copyMarkdownForSession = async (id: string) => {
+  const copyTextToClipboard = async (text: string) => {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  };
+
+  const fetchSessionMarkdown = async (id: string) => {
+    const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
+    if (!res.ok) {
+      throw new Error('failed to fetch markdown');
+    }
+    return res.text();
+  };
+
+  const copyMarkdownForSession = async (id: string, context: 'modal' | 'row') => {
     try {
-      setCopyingId(id);
-      const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
-      if (!res.ok) {
-        throw new Error('failed to fetch markdown');
-      }
-      const text = await res.text();
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
+      const key = context === 'modal' ? 'modal' : `row-${id}`;
+      setCopyingMarkdownTarget(key);
+      const text = await fetchSessionMarkdown(id);
+      await copyTextToClipboard(text);
       notify({
         title: 'Markdownをコピーしました',
         status: 'success',
@@ -321,11 +349,65 @@ export default function AdminMain() {
         duration: 4000,
       });
     } finally {
-      setCopyingId(null);
+      setCopyingMarkdownTarget(null);
     }
   };
 
+  const openPreview = async (id: string) => {
+    try {
+      setPreviewLoading(true);
+      setSelectedDetail(null);
+      setSelectedItems([]);
+      preview.onOpen();
+      const res = await fetch(`/admin/sessions/${id}`);
+      const detail = await res.json();
+      const tpl = await fetch(
+        `/questionnaires/${detail.questionnaire_id}/template?visit_type=${detail.visit_type}`
+      ).then((r) => r.json());
+      setSelectedDetail({ ...detail, id });
+      const templateItems = tpl.items || [];
+      const questionTexts = detail.question_texts ?? {};
+      const baseEntries = templateItems.map((it: any) => ({
+        id: it.id,
+        label: questionTexts[it.id] ?? it.label,
+        answer: detail.answers?.[it.id],
+      }));
+      const templateIds = new Set(templateItems.map((it: any) => it.id));
+      const extraIds = Array.from(
+        new Set([
+          ...Object.keys(questionTexts),
+          ...Object.keys(detail.answers ?? {}),
+        ])
+      )
+        .filter((qid) => !templateIds.has(qid) && !qid.startsWith('llm_'))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+      const additionalEntries = extraIds.map((qid) => ({
+        id: qid,
+        label: questionTexts[qid] ?? qid,
+        answer: detail.answers?.[qid],
+      }));
+      setSelectedItems([...baseEntries, ...additionalEntries]);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const formatAnswer = (answer: any) => {
+    if (answer === null || answer === undefined || answer === '') return <Text color="fg.muted">未回答</Text>;
+    if (Array.isArray(answer)) return <Text>{answer.join(', ')}</Text>;
+    if (typeof answer === 'object')
+      return (
+        <Text as="pre" whiteSpace="pre-wrap">
+          {JSON.stringify(answer, null, 2)}
+        </Text>
+      );
+    return <Text>{String(answer)}</Text>;
+  };
+
+  const formatSummaryText = (summary: string) => summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
+
   const dbStatusMeta = DB_STATUS_MAP[dbStatus];
+
   const llmStatusMeta = LLM_STATUS_MAP[llmStatus];
 
   const dbTone = dbStatus === 'error' ? 'error' : 'success';
@@ -383,17 +465,28 @@ export default function AdminMain() {
               <Thead>
                 <Tr>
                   <Th>患者名</Th>
-                  <Th>受診種別</Th>
+                  <Th>問診区分</Th>
                   <Th>問診日時</Th>
+                  <Th>状態</Th>
                   <Th width="1%">出力</Th>
                 </Tr>
               </Thead>
               <Tbody>
                 {sessions.map((s) => (
-                  <Tr key={s.id}>
+                  <Tr
+                    key={s.id}
+                    onClick={() => openPreview(s.id)}
+                    _hover={{ bg: 'bg.emphasis' }}
+                    sx={{ cursor: 'pointer' }}
+                  >
                     <Td>{s.patient_name || '（未入力）'}</Td>
                     <Td>{visitTypeLabel(s.visit_type)}</Td>
-                    <Td>{formatDateTime(s.finalized_at)}</Td>
+                    <Td>{formatDateTime(s.started_at ?? s.finalized_at)}</Td>
+                    <Td>
+                      <Tag colorScheme={s.interrupted ? "orange" : "green"} variant="subtle">
+                        {s.interrupted ? "中断" : "完了"}
+                      </Tag>
+                    </Td>
                     <Td onClick={(e) => e.stopPropagation()} whiteSpace="nowrap">
                       <Menu isLazy>
                         <Tooltip label="出力" placement="bottom" hasArrow openDelay={150}>
@@ -419,11 +512,8 @@ export default function AdminMain() {
                           >
                             PDF
                           </MenuItem>
-                          <MenuItem
-                            onClick={() => copyMarkdownForSession(s.id)}
-                            isDisabled={copyingId !== null && copyingId !== s.id}
-                          >
-                            {copyingId === s.id ? 'Markdownコピー中…' : 'Markdown'}
+                          <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>
+                            {copyingMarkdownTarget === `row-${s.id}` ? 'Markdownコピー中…' : 'Markdown'}
                           </MenuItem>
                           <MenuItem
                             onClick={() =>
@@ -451,6 +541,135 @@ export default function AdminMain() {
           </Text>
         )}
       </Box>
+
+      <Modal isOpen={preview.isOpen} onClose={preview.onClose} size="4xl" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader pr={14}>
+            <Flex align="center" width="100%">
+              <Heading size="md">問診結果詳細</Heading>
+              <Spacer />
+              {selectedDetail && (
+                <HStack spacing={2}>
+                  <Tooltip label="PDF形式で出力" placement="bottom" hasArrow openDelay={150}>
+                    <Button
+                      size="sm"
+                      colorScheme="primary"
+                      variant="outline"
+                      leftIcon={<FiFile />}
+                      onClick={() =>
+                        window.open(
+                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/pdf`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      PDF
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Markdown形式をコピー" placement="bottom" hasArrow openDelay={150}>
+                    <Button
+                      size="sm"
+                      colorScheme="primary"
+                      variant="outline"
+                      leftIcon={<FiFileText />}
+                      isLoading={copyingMarkdownTarget === 'modal'}
+                      onClick={() => selectedDetail && copyMarkdownForSession(selectedDetail.id, 'modal')}
+                    >
+                      Markdown
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="CSV形式で出力" placement="bottom" hasArrow openDelay={150}>
+                    <Button
+                      size="sm"
+                      colorScheme="primary"
+                      variant="outline"
+                      leftIcon={<FiTable />}
+                      onClick={() =>
+                        window.open(
+                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/csv`,
+                          '_blank'
+                        )
+                      }
+                    >
+                      CSV
+                    </Button>
+                  </Tooltip>
+                </HStack>
+              )}
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            {previewLoading && (
+              <Box py={6} textAlign="center">
+                <Spinner color="accent.solid" />
+              </Box>
+            )}
+            {!previewLoading && selectedDetail && (
+              <VStack align="stretch" spacing={4}>
+                <Box>
+                  <Heading size="sm" mb={2}>
+                    患者情報
+                  </Heading>
+                  <VStack align="stretch" spacing={1}>
+                    <Text>
+                      <strong>患者名:</strong> {selectedDetail.patient_name}
+                    </Text>
+                    <Text>
+                      <strong>生年月日:</strong> {selectedDetail.dob}
+                    </Text>
+                    <Text>
+                      <strong>受診種別:</strong> {visitTypeLabel(selectedDetail.visit_type)}
+                    </Text>
+                    <HStack spacing={2}>
+                      <Text>
+                        <strong>問診日時:</strong> {formatDate(selectedDetail.started_at ?? selectedDetail.finalized_at)}
+                      </Text>
+                      <Tag colorScheme={selectedDetail.interrupted ? "orange" : "green"} variant="subtle">
+                        {selectedDetail.interrupted ? "中断" : "完了"}
+                      </Tag>
+                    </HStack>
+                  </VStack>
+                </Box>
+                <Heading size="sm">回答内容</Heading>
+                {selectedItems.map((entry: any) => (
+                  <AccentOutlineBox key={entry.id} p={3} borderRadius="md">
+                    <Text fontWeight="bold" mb={1}>
+                      {entry.label}
+                    </Text>
+                    {formatAnswer(entry.answer)}
+                  </AccentOutlineBox>
+                ))}
+                {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
+                  <>
+                    <Heading size="sm"></Heading>
+                    {Object.entries(selectedDetail.llm_question_texts)
+                      .sort(([a], [b]) => String(a).localeCompare(String(b), undefined, { numeric: true }))
+                      .map(([qid, qtext]) => (
+                        <AccentOutlineBox key={qid} p={3} borderRadius="md">
+                          <Text fontWeight="bold" mb={1}>
+                            {(selectedDetail.question_texts ?? {})[qid] ?? qtext}
+                          </Text>
+                          {formatAnswer(selectedDetail.answers?.[qid])}
+                        </AccentOutlineBox>
+                      ))}
+                  </>
+                )}
+                {selectedDetail.summary && (
+                  <VStack align="stretch" spacing={2} mt={2}>
+                    <Heading size="sm">自動生成サマリー</Heading>
+                    <AccentOutlineBox p={3} borderRadius="md">
+                      <Text whiteSpace="pre-wrap">{formatSummaryText(selectedDetail.summary)}</Text>
+                    </AccentOutlineBox>
+                  </VStack>
+                )}
+              </VStack>
+            )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
       <Box>
         <Heading size="md" mb={4}>
           システム情報
