@@ -55,6 +55,8 @@ import {
     followups?: Record<string, Item[]>;
   }
 
+const PERSONAL_INFO_EMPTY_VALUE = '該当なし';
+
 const collectAllItems = (items: Item[]): Item[] => {
   const result: Item[] = [];
   const walk = (item: Item) => {
@@ -124,7 +126,14 @@ export default function QuestionnaireForm() {
               if (personalInfoFromEntry) {
                 personalInfoFields.forEach(({ key }) => {
                   if (key === 'name') return;
-                  merged[key] = personalInfoFromEntry[key];
+                  const currentValue = merged[key]?.trim();
+                  const entryValue = personalInfoFromEntry[key];
+                  if (
+                    (!currentValue || currentValue === PERSONAL_INFO_EMPTY_VALUE) &&
+                    entryValue
+                  ) {
+                    merged[key] = entryValue;
+                  }
                 });
               }
               ans[it.id] = merged;

@@ -180,6 +180,7 @@
 - **フッター**：`本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。`
 - **Entry**：初診/再診の選択のみを行い、「問診を始める」で基本情報画面へ遷移。
 - **BasicInfo**：氏名（必須）・生年月日（必須、過去日付のみ）・性別、初診時は住所等の基本情報を入力。
+  - 初診の固定UIで全項目が必須となっており、保存時に `personal_info` 回答としてセッションへ登録されるため、問診フォーム側で同項目を再入力するケースは発生しないことを 2025-09-24 時点で自動テストにより確認済み。
 - **管理ログイン**：/admin/login でID/メール + パスワード。成功で /admin/main へ。
 - **管理**：テンプレCRUD、LLM接続設定（テストボタン）。
 
@@ -1000,3 +1001,16 @@
 - [x] 変更（バックエンド）: `backend/app/main.py::make_default_initial_items` に `personal_info` 項目を再追加し、初診テンプレートで氏名・ふりがな・住所等を回答として保持できるよう復旧。
 - [x] テスト更新: `backend/tests/test_api.py::test_default_template_contains_items` に `personal_info` を期待項目として追加。
 - [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_default_template_contains_items -q`（FastAPI 未インストールのため実行不可）
+
+## 125. 固定UI初診基本情報のテンプレ保存一元化（2025-09-24）
+- [x] 変更（フロントエンド）: `frontend/src/pages/BasicInfo.tsx` で固定UI入力の個人情報をセッション作成時に `personal_info` 回答として送信し、初期回答をセッションストレージへ保存。
+- [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx` でサーバー保存済みの個人情報を尊重しつつ固定UI入力で欠落分のみ補完。
+- [x] テスト更新: `backend/tests/test_api.py::test_create_session` に `personal_info` 回答の正規化検証を追加。
+- [x] ドキュメント更新: `docs/session_api.md` に初診時の `personal_info` 送信要件を追記。
+- [x] バックエンド自動テスト実行: `cd backend && pytest`
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 126. 問診テンプレート設定から患者基本情報項目を不可視化（2025-09-24）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で `personal_info` 項目をテンプレート編集UIから除外しつつ既存データは保持できるようにし、保存時に自動で元の位置へ復元するロジックを追加。
+- [x] ドキュメント更新: `docs/admin_user_manual.md` に患者基本情報が固定UIで必須入力されテンプレート一覧には表示されない旨を追記。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`

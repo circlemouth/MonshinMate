@@ -129,8 +129,10 @@ export default function BasicInfo() {
 
     sessionStorage.setItem('patient_name', name);
     sessionStorage.setItem('gender', gender);
+    let answersPayload: Record<string, any> = {};
     if (visitType === 'initial') {
       const infoToPersist = { ...personalInfo, name };
+      answersPayload = { personal_info: infoToPersist };
       sessionStorage.setItem('personal_info', JSON.stringify(infoToPersist));
     } else {
       sessionStorage.removeItem('personal_info');
@@ -138,7 +140,13 @@ export default function BasicInfo() {
 
     try {
       sessionStorage.setItem('visit_type', visitType);
-      const payload = { patient_name: name, dob, gender, visit_type: visitType, answers: {} };
+      const payload = {
+        patient_name: name,
+        dob,
+        gender,
+        visit_type: visitType,
+        answers: answersPayload,
+      };
       const res = await fetch('/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -147,6 +155,7 @@ export default function BasicInfo() {
       if (!res.ok) throw new Error('failed');
       const data = await res.json();
       sessionStorage.setItem('session_id', data.id);
+      sessionStorage.setItem('answers', JSON.stringify(data.answers ?? {}));
       navigate('/questionnaire');
     } catch (error) {
       notify({

@@ -205,21 +205,68 @@ def test_create_session() -> None:
         "dob": "1990-01-01",
         "gender": "male",
         "visit_type": "initial",
-        "answers": {"chief_complaint": "頭痛"},
+        "answers": {
+            "chief_complaint": "頭痛",
+            "personal_info": {
+                "name": " 山田太郎 ",
+                "kana": "やまだたろう",
+                "postal_code": "123-4567 ",
+                "address": "東京都新宿区1-2-3",
+                "phone": "03-1234-5678",
+            },
+        },
     }
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     data = res.json()
     assert data["answers"]["chief_complaint"] == "頭痛"
+    expected_personal_info = {
+        "name": "山田太郎",
+        "kana": "やまだたろう",
+        "postal_code": "123-4567",
+        "address": "東京都新宿区1-2-3",
+        "phone": "03-1234-5678",
+    }
+    assert data["answers"]["personal_info"] == expected_personal_info
     assert "id" in data
     assert data["status"] == "created"
     session_id = data["id"]
+    stored = db_get_session(session_id)
+    assert stored is not None
+    assert stored["answers"].get("personal_info") == expected_personal_info
 
     # 追加質問の取得と回答
     q_res = client.post(f"/sessions/{session_id}/llm-questions")
     assert q_res.status_code == 200
     q_data = q_res.json()
     assert q_data["questions"]
+
+
+def test_initial_session_marks_personal_info_complete() -> None:
+    """初診セッションでは個人情報が残タスクにならないことを確認する。"""
+    on_startup()
+    payload = {
+        "patient_name": "山田太郎",
+        "dob": "1990-01-01",
+        "gender": "male",
+        "visit_type": "initial",
+        "answers": {
+            "personal_info": {
+                "name": "山田太郎",
+                "kana": "やまだたろう",
+                "postal_code": "123-4567",
+                "address": "東京都新宿区1-2-3",
+                "phone": "03-1234-5678",
+            }
+        },
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    data = res.json()
+    # 返却された回答に personal_info が保存され、欠落項目扱いになっていないことを確認
+    assert "personal_info" in data["answers"]
+    assert data["answers"]["personal_info"]["kana"] == "やまだたろう"
+    assert "personal_info" not in data["remaining_items"]
 
 
 def test_upload_and_delete_question_item_image(tmp_path) -> None:
