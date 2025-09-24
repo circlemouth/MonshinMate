@@ -9,7 +9,9 @@
   - `dob` (str): 生年月日 (YYYY-MM-DD)
   - `gender` (str): 性別 (`male` or `female`)
   - `visit_type` (str): 初診/再診などの種別
-  - `answers` (object): 既知の回答
+- `answers` (object): 既知の回答。初診 (`visit_type=initial`) の場合は `personal_info` キーに
+  `{ name, kana, postal_code, address, phone }` を含め、固定UIで入力された患者基本情報を
+  サーバーに送信する。
 - レスポンス:
   - `status` (str): 作成結果。固定値 `created`
   - `id` (str): セッションID

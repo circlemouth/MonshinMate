@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import {
   VStack,
   FormControl,
@@ -53,18 +53,14 @@ import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
-import {
-  personalInfoFields,
-  mergePersonalInfoValue,
-} from '../utils/personalInfo';
 import { useNotify } from '../contexts/NotificationContext';
 import { useDialog } from '../contexts/DialogContext';
 // removed: postal-code address lookup logic
 
-  interface Item {
-    id: string;
-    label: string;
-    type: string;
+interface Item {
+  id: string;
+  label: string;
+  type: string;
     required: boolean;
     options?: string[];
     use_initial: boolean;
@@ -79,8 +75,11 @@ import { useDialog } from '../contexts/DialogContext';
     min?: number;
     max?: number;
     image?: string;
-    followups?: Record<string, Item[]>;
-  }
+  followups?: Record<string, Item[]>;
+}
+
+type FollowupPathSegment = { parentId: string; optionKey: string };
+type HiddenPersonalInfoEntry = { path: FollowupPathSegment[]; index: number; item: Item };
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
@@ -129,6 +128,102 @@ export default function AdminTemplates() {
     min: '0',
     max: '10',
   });
+
+  const hiddenPersonalInfoRef = useRef<HiddenPersonalInfoEntry[]>([]);
+
+  const cloneItems = (source: Item[]): Item[] =>
+    source.map((it) => {
+      const followups = it.followups
+        ? Object.fromEntries(
+            Object.entries(it.followups).map(([key, arr]) => [key, cloneItems(arr ?? [])])
+          )
+        : undefined;
+      return {
+        ...it,
+        followups,
+      };
+    });
+
+  const insertHiddenItem = (
+    target: Item[],
+    entry: HiddenPersonalInfoEntry,
+    depth: number
+  ) => {
+    if (depth === entry.path.length) {
+      const insertAt = Math.min(entry.index, target.length);
+      target.splice(insertAt, 0, cloneItems([entry.item])[0]);
+      return;
+    }
+    const segment = entry.path[depth];
+    const parent = target.find((it) => it.id === segment.parentId);
+    if (!parent) {
+      return;
+    }
+    if (!parent.followups) {
+      parent.followups = {};
+    }
+    if (!parent.followups[segment.optionKey]) {
+      parent.followups[segment.optionKey] = [];
+    }
+    insertHiddenItem(parent.followups[segment.optionKey]!, entry, depth + 1);
+  };
+
+  const restoreHiddenPersonalInfo = (visibleItems: Item[]): Item[] => {
+    const restored = cloneItems(visibleItems);
+    const sortedHidden = [...hiddenPersonalInfoRef.current].sort((a, b) => {
+      if (a.path.length !== b.path.length) {
+        return a.path.length - b.path.length;
+      }
+      for (let i = 0; i < a.path.length; i += 1) {
+        const segA = a.path[i];
+        const segB = b.path[i];
+        if (segA.parentId !== segB.parentId) {
+          return segA.parentId.localeCompare(segB.parentId);
+        }
+        if (segA.optionKey !== segB.optionKey) {
+          return segA.optionKey.localeCompare(segB.optionKey);
+        }
+      }
+      return a.index - b.index;
+    });
+    sortedHidden.forEach((entry) => {
+      insertHiddenItem(restored, entry, 0);
+    });
+    return restored;
+  };
+
+  const extractVisibleItems = (source: Item[]): Item[] => {
+    const hidden: HiddenPersonalInfoEntry[] = [];
+    const traverse = (itemsToFilter: Item[], path: FollowupPathSegment[]): Item[] => {
+      const result: Item[] = [];
+      itemsToFilter.forEach((item, idx) => {
+        if (item.type === 'personal_info') {
+          hidden.push({
+            path,
+            index: idx,
+            item: cloneItems([item])[0],
+          });
+          return;
+        }
+        let nextItem: Item = { ...item };
+        if (item.followups) {
+          const nextFollowupsEntries = Object.entries(item.followups).map(([key, arr]) => {
+            const filtered = traverse(arr ?? [], [...path, { parentId: item.id, optionKey: key }]);
+            return [key, filtered] as const;
+          });
+          nextItem = {
+            ...nextItem,
+            followups: Object.fromEntries(nextFollowupsEntries),
+          };
+        }
+        result.push(nextItem);
+      });
+      return result;
+    };
+    const filtered = traverse(source, []);
+    hiddenPersonalInfoRef.current = hidden;
+    return filtered;
+  };
   const [templateId, setTemplateId] = useState<string | null>(null);
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
   const [newTemplateId, setNewTemplateId] = useState('');
@@ -539,6 +634,7 @@ export default function AdminTemplates() {
     if (templateId && templates.some((t) => t.id === templateId)) {
       loadTemplates(templateId);
     } else {
+      hiddenPersonalInfoRef.current = [];
       setItems([]);
       setInitialPrompt("");
       setFollowupPrompt("");
@@ -625,7 +721,8 @@ export default function AdminTemplates() {
         }
       });
       const arr = Array.from(map.values());
-      setItems(arr);
+      const visibleItems = extractVisibleItems(arr);
+      setItems(visibleItems);
       setInitialPrompt(pInit?.prompt || "");
       setFollowupPrompt(pFollow?.prompt || "");
       setInitialEnabled(!!pInit?.enabled);
@@ -770,6 +867,7 @@ export default function AdminTemplates() {
   const saveTemplate = async () => {
     if (!templateId) return;
     // Validate: image_annotation requires image
+    const allItems = restoreHiddenPersonalInfo(items);
     const missingImageErrors: string[] = [];
     const checkItem = (it: Item) => {
       const enabledInAny = !!(it.use_initial || it.use_followup);
@@ -787,7 +885,7 @@ export default function AdminTemplates() {
         });
       }
     };
-    items.forEach(checkItem);
+    allItems.forEach(checkItem);
     if (missingImageErrors.length > 0) {
       setSaveStatus('error');
       notify({
@@ -801,13 +899,13 @@ export default function AdminTemplates() {
 
     setSaveStatus('saving');
     try {
-      const initialItems = items
+      const initialItems = allItems
         .filter((it) => it.use_initial)
         .map(({ use_initial, use_followup, description, ...rest }) => ({
           ...rest,
           ...(description ? { description } : {}),
         }));
-      const followupItems = items
+      const followupItems = allItems
         .filter((it) => it.use_followup)
         .map(({ use_initial, use_followup, description, ...rest }) => ({
           ...rest,
@@ -953,6 +1051,7 @@ export default function AdminTemplates() {
     }
     setTemplates([...templates, { id: newId }]);
     setTemplateId(newId);
+    hiddenPersonalInfoRef.current = [];
     // 新規テンプレート作成時のデフォルト問診項目は「質問文形式」をベースに、
     // 発症時期は複数選択＋自由記述をあらかじめ用意する
     setItems([
@@ -1521,25 +1620,14 @@ export default function AdminTemplates() {
                                     <HStack justifyContent="space-between">
                                     <FormControl maxW="360px">
                                       <FormLabel m={0}>入力方法</FormLabel>
-                                      {item.type === 'personal_info' ? (
-                                        <Box>
-                                          <Text fontSize="sm" color="gray.600">
-                                            患者基本情報セット（新規追加不可）
-                                          </Text>
-                                          <Text fontSize="xs" color="gray.500">
-                                            不要な場合は項目自体を削除してください。
-                                          </Text>
-                                        </Box>
-                                      ) : (
-                                        <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                                          <option value="string">テキスト</option>
-                                          <option value="multi">複数選択</option>
-                                          <option value="yesno">はい/いいえ</option>
-                                          <option value="date">日付</option>
-                                          <option value="slider">スライドバー</option>
-                                          <option value="image_annotation">画像注釈（タップ・線）</option>
-                                        </Select>
-                                      )}
+                                      <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
+                                        <option value="string">テキスト</option>
+                                        <option value="multi">複数選択</option>
+                                        <option value="yesno">はい/いいえ</option>
+                                        <option value="date">日付</option>
+                                        <option value="slider">スライドバー</option>
+                                        <option value="image_annotation">画像注釈（タップ・線）</option>
+                                      </Select>
                                     </FormControl>
                                       <IconButton
                                         aria-label="項目を削除"
@@ -1686,16 +1774,6 @@ export default function AdminTemplates() {
                                           </NumberInput>
                                         </FormControl>
                                       </HStack>
-                                    )}
-                                    {item.type === 'personal_info' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>含まれる入力欄</FormLabel>
-                                        <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
-                                          {personalInfoFields.map((field) => (
-                                            <Text key={field.key}>・{field.label}</Text>
-                                          ))}
-                                        </VStack>
-                                      </Box>
                                     )}
                                     {/* 性別制限（チェックボックス + プッシュボタン） */}
                                     <FormControl alignSelf="flex-start">
@@ -2261,36 +2339,6 @@ export default function AdminTemplates() {
                               value={previewAnswers[item.id] || ''}
                               onChange={(val) => setPreviewAnswers({ ...previewAnswers, [item.id]: val })}
                             />
-                          ) : item.type === 'personal_info' ? (
-                            (() => {
-                              const current = mergePersonalInfoValue(previewAnswers[item.id]);
-                              // removed: postal-code lookup state and digit check
-                              return (
-                                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                                  {personalInfoFields.map((field) => {
-                                    const onChange = (e: ChangeEvent<HTMLInputElement>) => {
-                                      const next = { ...current, [field.key]: e.target.value };
-                                      setPreviewAnswers({ ...previewAnswers, [item.id]: next });
-                                    };
-                                    const input = (
-                                      <Input
-                                        placeholder={field.placeholder}
-                                        value={current[field.key]}
-                                        onChange={onChange}
-                                        autoComplete={field.autoComplete}
-                                        inputMode={field.inputMode}
-                                      />
-                                    );
-                                    return (
-                                      <FormControl key={field.key}>
-                                        <FormLabel fontSize="sm">{field.label}</FormLabel>
-                                        {input}
-                                      </FormControl>
-                                    );
-                                  })}
-                                </SimpleGrid>
-                              );
-                            })()
                           ) : item.type === 'image_annotation' ? (
                             <Box>
                               <Text color="gray.500" mb={2}>画像にタップ/線でマーキング（プレビュー）</Text>
@@ -2404,25 +2452,14 @@ export default function AdminTemplates() {
                   </FormControl>
                     <FormControl mt={2} maxW="200px">
                       <FormLabel m={0}>入力方法</FormLabel>
-                      {fi.type === 'personal_info' ? (
-                        <Box>
-                          <Text fontSize="sm" color="gray.600">
-                            患者基本情報セット（新規追加不可）
-                          </Text>
-                          <Text fontSize="xs" color="gray.500">
-                            不要な場合は項目自体を削除してください。
-                          </Text>
-                        </Box>
-                      ) : (
-                        <Select value={fi.type} onChange={(e) => changeFollowupType(fIdx, e.target.value)}>
-                          <option value="string">テキスト</option>
-                          <option value="multi">複数選択</option>
-                          <option value="yesno">はい/いいえ</option>
-                          <option value="date">日付</option>
-                          <option value="slider">スライドバー</option>
-                          <option value="image_annotation">画像注釈（タップ・線）</option>
-                        </Select>
-                      )}
+                      <Select value={fi.type} onChange={(e) => changeFollowupType(fIdx, e.target.value)}>
+                        <option value="string">テキスト</option>
+                        <option value="multi">複数選択</option>
+                        <option value="yesno">はい/いいえ</option>
+                        <option value="date">日付</option>
+                        <option value="slider">スライドバー</option>
+                        <option value="image_annotation">画像注釈（タップ・線）</option>
+                      </Select>
                     </FormControl>
                     {/* type-specific UI */}
                     {fi.type === 'slider' && (
@@ -2458,16 +2495,6 @@ export default function AdminTemplates() {
                           </NumberInput>
                         </FormControl>
                       </HStack>
-                    )}
-                    {fi.type === 'personal_info' && (
-                      <Box mt={2}>
-                        <FormLabel m={0} mb={2}>含まれる入力欄</FormLabel>
-                        <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
-                          {personalInfoFields.map((field) => (
-                            <Text key={field.key}>・{field.label}</Text>
-                          ))}
-                        </VStack>
-                      </Box>
                     )}
                     {fi.type === 'multi' && (
                       <Box mt={2}>
