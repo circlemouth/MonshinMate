@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 from typing import Any
+from dataclasses import dataclass
 from uuid import uuid4
 import time
 from datetime import datetime, timedelta, UTC
@@ -1330,21 +1331,155 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
     return llm_gateway.settings
 
 
-def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) -> list[str]:
+@dataclass
+class QuestionnaireRow:
+    """問診票の1項目分の出力情報。"""
+
+    label: str
+    values: list[str]
+    item_type: str | None = None
+    is_free_text: bool = False
+
+    def joined_text(self, separator: str = " / ") -> str:
+        """値を指定区切りで結合し、未入力時は"未回答"を返す。"""
+
+        if not self.values:
+            return "未回答"
+        return separator.join(self.values)
+
+
+def _format_datetime_for_display(value: str | None) -> str:
+    """ISO8601文字列を日本語表示向けに整形する。"""
+
+    if not value:
+        return ""
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError:
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+    if dt.tzinfo:
+        dt = dt.astimezone()
+    return dt.strftime("%Y年%m月%d日 %H:%M")
+
+
+def _is_free_text_item(item: dict | None) -> bool:
+    """項目が自由記述を想定しているかを判定する。"""
+
+    if not item:
+        return False
+    if item.get("type") == "string":
+        return True
+    return bool(item.get("allow_freetext"))
+
+
+def _normalize_answer_values(answer: Any, is_free_text: bool) -> list[str]:
+    """回答をPDF/Markdown出力向けの文字列リストに変換する。"""
+
+    if answer is None:
+        return []
+    if isinstance(answer, bool):
+        return ["はい" if answer else "いいえ"]
+    if isinstance(answer, str):
+        text = answer.strip()
+        if not text:
+            return []
+        if is_free_text and text == "該当なし":
+            return []
+        return [text]
+    if isinstance(answer, list):
+        values: list[str] = []
+        for item in answer:
+            if item is None:
+                continue
+            if isinstance(item, bool):
+                values.append("はい" if item else "いいえ")
+                continue
+            if isinstance(item, str):
+                text = item.strip()
+                if not text:
+                    continue
+                if is_free_text and text == "該当なし":
+                    continue
+                values.append(text)
+                continue
+            if isinstance(item, (int, float)):
+                values.append(str(item))
+                continue
+            try:
+                values.append(json.dumps(item, ensure_ascii=False))
+            except TypeError:
+                values.append(str(item))
+        if not values and is_free_text:
+            return []
+        return values
+    if isinstance(answer, dict):
+        try:
+            return [json.dumps(answer, ensure_ascii=False)]
+        except TypeError:
+            return [str(answer)]
+    return [str(answer)]
+
+
+def build_export_rows(s: dict) -> tuple[list[QuestionnaireRow], str]:
+    """セッション情報から出力用の行データと受診種別ラベルを取得する。"""
+
+    tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
+    answers = s.get("answers") or {}
+    rows: list[QuestionnaireRow] = []
+    for item in tpl.get("items", []):
+        iid = item.get("id")
+        label = item.get("label")
+        if not iid or not label:
+            continue
+        is_free_text = _is_free_text_item(item)
+        values = _normalize_answer_values(answers.get(iid), is_free_text)
+        rows.append(
+            QuestionnaireRow(
+                label=str(label),
+                values=[str(v) for v in values],
+                item_type=item.get("type"),
+                is_free_text=is_free_text,
+            )
+        )
+    for iid, qtext in (s.get("llm_question_texts") or {}).items():
+        if not qtext:
+            continue
+        values = _normalize_answer_values(answers.get(iid), True)
+        rows.append(
+            QuestionnaireRow(
+                label=str(qtext),
+                values=[str(v) for v in values],
+                item_type=None,
+                is_free_text=True,
+            )
+        )
+    vt = s.get("visit_type")
+    vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt or "")
+    return rows, vt_label
+
+
+def build_markdown_lines(s: dict, rows: list[QuestionnaireRow], vt_label: str) -> list[str]:
     """セッション情報からMarkdown形式の行リストを生成する。"""
-    lines = [
-        "# 問診結果",
-        "",
-        "## 患者情報",
-        f"- 患者名: {s['patient_name']}",
-        f"- 生年月日: {s['dob']}",
-        f"- 受診種別: {vt_label}",
-        f"- テンプレートID: {s['questionnaire_id']}",
-        "",
-        "## 回答",
-    ]
-    for label, ans in rows:
-        lines.append(f"- {label}: {ans or '未回答'}")
+
+    lines = ["# 問診結果", ""]
+    fill_date = _format_datetime_for_display(s.get("finalized_at"))
+    lines.extend(
+        [
+            "## 患者情報",
+            f"- 患者名: {s.get('patient_name', '')}",
+            f"- 生年月日: {s.get('dob', '')}",
+            f"- 受診種別: {vt_label}",
+            f"- テンプレートID: {s.get('questionnaire_id', '')}",
+            f"- 問診票記入日: {fill_date or '未確定'}",
+            "",
+            "## 回答",
+        ]
+    )
+    for row in rows:
+        lines.append(f"- {row.label}: {row.joined_text()}")
     if s.get("summary"):
         lines.append("")
         lines.append("## 自動生成サマリー")
@@ -1352,59 +1487,125 @@ def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) ->
     return lines
 
 
-def markdown_to_pdf(lines: list[str]) -> bytes:
-    """Markdown形式の行リストを簡易フォーマットでPDFに変換する。"""
+def markdown_to_pdf(_lines: list[str], s: dict, rows: list[QuestionnaireRow], vt_label: str) -> bytes:
+    """問診結果をPDFとして描画する。"""
+
     pdfmetrics.registerFont(UnicodeCIDFont("HeiseiMin-W3"))
     pdfmetrics.registerFont(UnicodeCIDFont("HeiseiKakuGo-W5"))
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     normal_font = "HeiseiMin-W3"
     bold_font = "HeiseiKakuGo-W5"
-    y = 800
+    page_width, page_height = A4
+    margin_left = 40
+    margin_top = 40
+    margin_bottom = 40
+    y = page_height - margin_top
 
     def new_page() -> None:
         nonlocal y
         c.showPage()
-        y = 800
+        y = page_height - margin_top
 
-    def write_line(text: str, font: str = normal_font, size: int = 12, x: int = 40) -> None:
+    def ensure_space(height: float) -> None:
         nonlocal y
-        c.setFont(font, size)
-        c.drawString(x, y, text)
-        y -= size + 2
-        if y < 40:
+        if y - height < margin_bottom:
             new_page()
 
-    for line in lines:
-        if line.startswith("## "):
-            write_line(line[3:], bold_font, 14)
-            y -= 2
-        elif line.startswith("# "):
-            write_line(line[2:], bold_font, 16)
-            y -= 4
-        elif line.startswith("- "):
-            content = line[2:]
-            if ": " in content:
-                label, value = content.split(": ", 1)
-                c.setFont(normal_font, 12)
-                c.drawString(60, y, "・")
-                x = 60 + c.stringWidth("・", normal_font, 12)
-                c.setFont(bold_font, 12)
-                c.drawString(x, y, label)
-                x += c.stringWidth(label, bold_font, 12)
-                c.setFont(normal_font, 12)
-                c.drawString(x, y, f": {value}")
-                y -= 14
-                if y < 40:
-                    new_page()
-            else:
-                c.setFont(normal_font, 12)
-                c.drawString(60, y, f"・ {content}")
-                y -= 14
-                if y < 40:
-                    new_page()
-        else:
-            write_line(line)
+    c.setFont(bold_font, 16)
+    c.drawString(margin_left, y, "問診結果")
+    header_date = _format_datetime_for_display(s.get("finalized_at"))
+    if header_date:
+        header_text = f"問診票記入日: {header_date}"
+        c.setFont(normal_font, 11)
+        text_width = c.stringWidth(header_text, normal_font, 11)
+        c.drawString(page_width - margin_left - text_width, y, header_text)
+    y -= 24
+
+    patient_info_entries: list[tuple[str, str]] = [
+        ("患者名", str(s.get("patient_name", "") or "")),
+        ("生年月日", str(s.get("dob", "") or "")),
+        ("受診種別", vt_label),
+        ("テンプレートID", str(s.get("questionnaire_id", "") or "")),
+    ]
+    if header_date:
+        patient_info_entries.append(("問診票記入日", header_date))
+
+    col_count = 3
+    row_height = 18
+    col_width = (page_width - margin_left * 2) / col_count
+    if patient_info_entries:
+        rows_needed = (len(patient_info_entries) + col_count - 1) // col_count
+        table_height = rows_needed * row_height
+        ensure_space(table_height)
+        for idx, (label, value) in enumerate(patient_info_entries):
+            row_index = idx // col_count
+            col_index = idx % col_count
+            current_y = y - row_index * row_height
+            x = margin_left + col_index * col_width
+            label_text = f"{label}："
+            c.setFont(bold_font, 11)
+            c.drawString(x, current_y, label_text)
+            label_width = c.stringWidth(label_text, bold_font, 11)
+            c.setFont(normal_font, 11)
+            c.drawString(x + label_width + 2, current_y, value)
+        y -= table_height
+        y -= 12
+
+    ensure_space(18)
+    c.setFont(bold_font, 14)
+    c.drawString(margin_left, y, "回答")
+    y -= 20
+
+    line_height = 16
+    indent_text = "　" * 2
+    for row in rows:
+        display_values = row.values if row.values else ["未回答"]
+        display_values = [str(v) for v in display_values]
+        value_groups = [val.splitlines() or [""] for val in display_values]
+        line_count = sum(len(group) for group in value_groups) or 1
+        block_height = line_count * line_height + 4
+        ensure_space(block_height)
+
+        label_text = f"{row.label}："
+        c.setFont(bold_font, 12)
+        c.drawString(margin_left, y, label_text)
+        label_width = c.stringWidth(label_text, bold_font, 12)
+        value_x = margin_left + label_width + 2
+
+        c.setFont(normal_font, 12)
+        first_group = value_groups[0]
+        first_line = first_group[0] if first_group else "未回答"
+        c.drawString(value_x, y, first_line or "未回答")
+        y -= line_height
+        for extra_line in first_group[1:]:
+            c.drawString(value_x, y, extra_line)
+            y -= line_height
+
+        for group in value_groups[1:]:
+            if not group:
+                c.drawString(value_x, y, indent_text)
+                y -= line_height
+                continue
+            c.drawString(value_x, y, f"{indent_text}{group[0]}")
+            y -= line_height
+            for extra_line in group[1:]:
+                c.drawString(value_x, y, extra_line)
+                y -= line_height
+
+        y -= 4
+
+    summary_text = s.get("summary")
+    if summary_text:
+        ensure_space(18)
+        c.setFont(bold_font, 14)
+        c.drawString(margin_left, y, "自動生成サマリー")
+        y -= 20
+        c.setFont(normal_font, 12)
+        for line in str(summary_text).splitlines():
+            ensure_space(line_height)
+            c.drawString(margin_left, y, line)
+            y -= line_height
 
     c.save()
     buf.seek(0)
@@ -2404,30 +2605,6 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         name = name.strip().replace(" ", "_")
         return name or "session"
 
-    def build_rows(s: dict) -> tuple[list[tuple[str, str]], str]:
-        tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
-        labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
-        answers = s.get("answers", {})
-
-        def fmt_answer(ans: Any) -> str:
-            if ans is None or ans == "":
-                return ""
-            if isinstance(ans, list):
-                return ", ".join(map(str, ans))
-            if isinstance(ans, dict):
-                return json.dumps(ans, ensure_ascii=False)
-            return str(ans)
-
-        rows: list[tuple[str, str]] = []
-        for iid, label in labels.items():
-            rows.append((label, fmt_answer(answers.get(iid))))
-        for iid, qtext in (s.get("llm_question_texts") or {}).items():
-            rows.append((qtext, fmt_answer(answers.get(iid))))
-        vt = s.get("visit_type")
-        vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
-        return rows, vt_label
-
-
     # CSV は「全件を1枚の集計CSV」で返す
     if fmt == "csv":
         sbuf = io.StringIO()
@@ -2438,8 +2615,8 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
             s = db_get_session(sid)
             if not s:
                 continue
-            rows, vt_label = build_rows(s)
-            answers_text_lines = [f"- {label}: {ans or '未回答'}" for label, ans in rows]
+            rows, vt_label = build_export_rows(s)
+            answers_text_lines = [f"- {row.label}: {row.joined_text(', ')}" for row in rows]
             answers_text = "\n".join(answers_text_lines)
             writer.writerow([
                 sid,
@@ -2466,14 +2643,14 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
             s = db_get_session(sid)
             if not s:
                 continue
-            rows, vt_label = build_rows(s)
+            rows, vt_label = build_export_rows(s)
             base = sanitize_filename(f"{s.get('patient_name','')}_{s.get('dob','')}_{sid}")
             lines = build_markdown_lines(s, rows, vt_label)
             if fmt == "md":
                 content = "\n".join(lines).encode("utf-8")
                 zf.writestr(f"{base}.md", content)
             elif fmt == "pdf":
-                pdf_bytes = markdown_to_pdf(lines)
+                pdf_bytes = markdown_to_pdf(lines, s, rows, vt_label)
                 zf.writestr(f"{base}.pdf", pdf_bytes)
 
     zip_buf.seek(0)
@@ -2491,27 +2668,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
     s = db_get_session(session_id)
     if not s:
         raise HTTPException(status_code=404, detail="session not found")
-    tpl = db_get_template(s.get("questionnaire_id"), s.get("visit_type")) or {}
-    labels = {it.get("id"): it.get("label") for it in tpl.get("items", [])}
-    answers = s.get("answers", {})
-
-    def fmt_answer(ans: Any) -> str:
-        if ans is None or ans == "":
-            return ""
-        if isinstance(ans, list):
-            return ", ".join(map(str, ans))
-        if isinstance(ans, dict):
-            return json.dumps(ans, ensure_ascii=False)
-        return str(ans)
-
-    rows: list[tuple[str, str]] = []
-    for iid, label in labels.items():
-        rows.append((label, fmt_answer(answers.get(iid))))
-    for iid, qtext in (s.get("llm_question_texts") or {}).items():
-        rows.append((qtext, fmt_answer(answers.get(iid))))
-
-    vt = s.get("visit_type")
-    vt_label = "初診" if vt == "initial" else "再診" if vt == "followup" else str(vt)
+    rows, vt_label = build_export_rows(s)
 
     lines = build_markdown_lines(s, rows, vt_label)
     if fmt == "md":
@@ -2525,8 +2682,8 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["項目", "回答"])
-        for label, ans in rows:
-            writer.writerow([label, ans])
+        for row in rows:
+            writer.writerow([row.label, row.joined_text(", ")])
         content = buf.getvalue()
         return Response(
             content,
@@ -2534,7 +2691,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
             headers={"Content-Disposition": f"attachment; filename=session-{session_id}.csv"},
         )
     if fmt == "pdf":
-        pdf_bytes = markdown_to_pdf(lines)
+        pdf_bytes = markdown_to_pdf(lines, s, rows, vt_label)
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",

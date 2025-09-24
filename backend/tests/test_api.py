@@ -4,11 +4,16 @@ import base64
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app.main import app, on_startup  # type: ignore[import]
+from app.main import (
+    app,
+    on_startup,
+    build_export_rows,
+    build_markdown_lines,
+    markdown_to_pdf,
+)  # type: ignore[import]
 from app.db import get_session as db_get_session
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
-import base64
 
 
 client = TestClient(app)
@@ -864,3 +869,41 @@ def test_summary_prompt_api_default() -> None:
     data = res.json()
     assert data["prompt"].startswith("あなたは医療記録作成の専門家です")
     assert data["enabled"] is False
+
+
+def test_export_rows_formatting_and_pdf_layout() -> None:
+    """PDF/Markdown出力用の整形処理を確認する。"""
+
+    on_startup()
+    session = {
+        "id": "dummy",
+        "patient_name": "田中一郎",
+        "dob": "1980-04-05",
+        "visit_type": "initial",
+        "gender": "male",
+        "questionnaire_id": "default",
+        "answers": {
+            "chief_complaint": "該当なし",
+            "symptom_location": ["顔", "首"],
+            "llm_1": "該当なし",
+        },
+        "llm_question_texts": {"llm_1": "追加質問"},
+        "summary": "",
+        "finalized_at": "2024-01-02T12:34:00",
+    }
+
+    rows, vt_label = build_export_rows(session)
+    assert vt_label == "初診"
+
+    row_map = {row.label: row for row in rows}
+    assert row_map["どういった症状で受診されましたか？"].joined_text() == "未回答"
+    assert row_map["症状があるのはどこですか？"].values == ["顔", "首"]
+    assert row_map["追加質問"].joined_text() == "未回答"
+
+    lines = build_markdown_lines(session, rows, vt_label)
+    assert any("問診票記入日: 2024年01月02日 12:34" in line for line in lines)
+    assert any("どういった症状で受診されましたか？: 未回答" in line for line in lines)
+    assert any(line.endswith("顔 / 首") for line in lines)
+
+    pdf_bytes = markdown_to_pdf(lines, session, rows, vt_label)
+    assert pdf_bytes.startswith(b"%PDF")
