@@ -131,11 +131,13 @@
    - [x] ルーティング骨格、ヘッダー/フッター（注意文常時表示）
    - [x] 管理画面ルートではヘッダー右上ボタンを「戻る」に切替（元の画面へ戻れるよう改善）
 2) **患者向け**
-   - [x] `/`：氏名・生年月日＋受診種別の入力（選択後にセッション作成→`/questionnaire` へ）
+   - [x] `/`：受診種別の選択（初診/再診ボタン）。選択後に基本情報入力画面へ遷移。
+   - [x] `/basic-info`：氏名・生年月日・性別と（初診時のみ）患者基本情報を入力し、セッション作成後に`/questionnaire`へ遷移。
    - [x] `/questionnaire`：テンプレに基づくフォーム（軽量条件表示、ドラフト保存）
    - [x] 性別に応じた問診項目の出し分け
    - [x] `/questions`：LLM追加質問（モーダル or カード列）と進行インジケータ
    - [x] `/done`：完了メッセージと要約（印刷/コピー任意）
+   - [x] 初診/再診の選択を大型ボタンで切り替え、初診フォームでは「よみがな→氏名→住所・連絡先」を一体化して入力＆回答データへ自動反映（2025-09-24）
 3) **管理向け**
   - [x] `/admin/login`：管理者ログイン
   - [x] `/admin/main`：メインダッシュボード（問診最新10件〈初診/再診〉、システム情報サマリーバー＋詳細アコーディオン〈2025-09-22 改修〉）
@@ -176,7 +178,8 @@
 ## 4. 画面/ルーティング仕様（要点）
 - **ヘッダー**：左ロゴ、右上「管理画面」ボタン（常時）。
 - **フッター**：`本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。`
-- **Entry**：氏名（必須）・生年月日（必須、過去日付のみ）
+- **Entry**：初診/再診の選択のみを行い、「問診を始める」で基本情報画面へ遷移。
+- **BasicInfo**：氏名（必須）・生年月日（必須、過去日付のみ）・性別、初診時は住所等の基本情報を入力。
 - **管理ログイン**：/admin/login でID/メール + パスワード。成功で /admin/main へ。
 - **管理**：テンプレCRUD、LLM接続設定（テストボタン）。
 
@@ -985,3 +988,15 @@
 - [x] 変更（フロントエンド）: `frontend/src/components/license/LicenseDependencyList.tsx`（新規）、`frontend/src/pages/AdminLicenseDeps.tsx` を導入し、検索・フィルタ・Accordion 展開・コピー/外部リンク導線を実装。
 - [x] ユーティリティ追加: `frontend/src/types/license.ts`, `frontend/src/utils/license.ts` を新設（ライセンス種別判定・取得ヘルパー）。
 - [x] フロントエンドビルド確認: `cd frontend && npm run build`（警告のみ、ビルド成功）。
+
+## 123. 患者基本情報入力方法の管理画面からの撤去（2025-09-24）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で `personal_info` タイプを入力方法の選択肢から削除し、既存項目は読み取り専用表示に変更。
+- [x] 変更（バックエンド）: `backend/app/main.py::make_default_initial_items` から患者基本情報項目を削除し、デフォルト初診テンプレートを更新。
+- [x] テスト更新: `backend/tests/test_api.py::test_default_template_contains_items` の期待値を新テンプレートに合わせて修正。
+- [x] バックエンド自動テスト実行: `../venv/bin/python -m pytest tests/test_api.py::test_default_template_contains_items -q`（1件成功、DeprecationWarning のみ）。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（チャンクサイズ警告のみ、ビルド成功）。
+
+## 124. 初診基本情報の永続化修正（2025-09-24）
+- [x] 変更（バックエンド）: `backend/app/main.py::make_default_initial_items` に `personal_info` 項目を再追加し、初診テンプレートで氏名・ふりがな・住所等を回答として保持できるよう復旧。
+- [x] テスト更新: `backend/tests/test_api.py::test_default_template_contains_items` に `personal_info` を期待項目として追加。
+- [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_default_template_contains_items -q`（FastAPI 未インストールのため実行不可）

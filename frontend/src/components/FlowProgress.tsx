@@ -14,7 +14,7 @@ export default function FlowProgress() {
     switch (pathname) {
       case '/':
         return 16;
-      case '/visit-type':
+      case '/basic-info':
         return 32;
       case '/questionnaire':
         return 56;

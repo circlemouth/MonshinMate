@@ -8,6 +8,7 @@ import { useAuth } from './contexts/AuthContext';
 
 // Pages
 import Entry from './pages/Entry';
+import BasicInfo from './pages/BasicInfo';
 import QuestionnaireForm from './pages/QuestionnaireForm';
 import Questions from './pages/Questions';
 import Done from './pages/Done';
@@ -223,6 +224,7 @@ export default function App() {
         {!isChatPage && <FlowProgress />}
         <Routes>
           <Route path="/" element={<Entry />} />
+          <Route path="/basic-info" element={<BasicInfo />} />
           <Route path="/questionnaire" element={<QuestionnaireForm />} />
           <Route path="/llm-wait" element={<LlmWait />} />
           <Route path="/questions" element={<Questions />} />

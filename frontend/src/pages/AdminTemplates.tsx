@@ -1519,18 +1519,28 @@ export default function AdminTemplates() {
                                     </FormControl>
                                     {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
                                     <HStack justifyContent="space-between">
-                                      <FormControl maxW="360px">
-                                        <FormLabel m={0}>入力方法</FormLabel>
+                                    <FormControl maxW="360px">
+                                      <FormLabel m={0}>入力方法</FormLabel>
+                                      {item.type === 'personal_info' ? (
+                                        <Box>
+                                          <Text fontSize="sm" color="gray.600">
+                                            患者基本情報セット（新規追加不可）
+                                          </Text>
+                                          <Text fontSize="xs" color="gray.500">
+                                            不要な場合は項目自体を削除してください。
+                                          </Text>
+                                        </Box>
+                                      ) : (
                                         <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
                                           <option value="string">テキスト</option>
                                           <option value="multi">複数選択</option>
                                           <option value="yesno">はい/いいえ</option>
                                           <option value="date">日付</option>
                                           <option value="slider">スライドバー</option>
-                                          <option value="personal_info">患者基本情報セット</option>
                                           <option value="image_annotation">画像注釈（タップ・線）</option>
                                         </Select>
-                                      </FormControl>
+                                      )}
+                                    </FormControl>
                                       <IconButton
                                         aria-label="項目を削除"
                                         icon={<DeleteIcon />}
@@ -1890,7 +1900,6 @@ export default function AdminTemplates() {
                     <option value="yesno">はい/いいえ</option>
                     <option value="date">日付</option>
                     <option value="slider">スライドバー</option>
-                    <option value="personal_info">患者基本情報セット</option>
                     <option value="image_annotation">画像注釈（タップ・線）</option>
                   </Select>
                 </FormControl>
@@ -1964,16 +1973,6 @@ export default function AdminTemplates() {
                       </NumberInput>
                     </FormControl>
                   </HStack>
-                )}
-                {newItem.type === 'personal_info' && (
-                  <Box>
-                    <FormLabel>含まれる入力欄</FormLabel>
-                    <VStack align="stretch" spacing={1} fontSize="sm" color="gray.600">
-                      {personalInfoFields.map((field) => (
-                        <Text key={field.key}>・{field.label}</Text>
-                      ))}
-                    </VStack>
-                  </Box>
                 )}
                 <HStack>
                   <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
@@ -2405,18 +2404,25 @@ export default function AdminTemplates() {
                   </FormControl>
                     <FormControl mt={2} maxW="200px">
                       <FormLabel m={0}>入力方法</FormLabel>
-                      <Select
-                        value={fi.type}
-                        onChange={(e) => changeFollowupType(fIdx, e.target.value)}
-                      >
-                        <option value="string">テキスト</option>
-                        <option value="multi">複数選択</option>
-                        <option value="yesno">はい/いいえ</option>
-                        <option value="date">日付</option>
-                        <option value="slider">スライドバー</option>
-                        <option value="personal_info">患者基本情報セット</option>
-                        <option value="image_annotation">画像注釈（タップ・線）</option>
-                      </Select>
+                      {fi.type === 'personal_info' ? (
+                        <Box>
+                          <Text fontSize="sm" color="gray.600">
+                            患者基本情報セット（新規追加不可）
+                          </Text>
+                          <Text fontSize="xs" color="gray.500">
+                            不要な場合は項目自体を削除してください。
+                          </Text>
+                        </Box>
+                      ) : (
+                        <Select value={fi.type} onChange={(e) => changeFollowupType(fIdx, e.target.value)}>
+                          <option value="string">テキスト</option>
+                          <option value="multi">複数選択</option>
+                          <option value="yesno">はい/いいえ</option>
+                          <option value="date">日付</option>
+                          <option value="slider">スライドバー</option>
+                          <option value="image_annotation">画像注釈（タップ・線）</option>
+                        </Select>
+                      )}
                     </FormControl>
                     {/* type-specific UI */}
                     {fi.type === 'slider' && (

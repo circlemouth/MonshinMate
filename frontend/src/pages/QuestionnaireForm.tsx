@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   VStack,
   FormControl,
@@ -19,7 +19,6 @@ import {
   SliderFilledTrack,
   SliderThumb,
   Text,
-  SimpleGrid,
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
@@ -80,6 +79,16 @@ export default function QuestionnaireForm() {
   const [freeTextChecks, setFreeTextChecks] = useState<Record<string, boolean>>({});
   const [sessionId] = useState<string | null>(sessionStorage.getItem('session_id'));
   const visitType = sessionStorage.getItem('visit_type') || 'initial';
+  const patientName = sessionStorage.getItem('patient_name') || '';
+  const personalInfoFromEntry = useMemo(() => {
+    const raw = sessionStorage.getItem('personal_info');
+    if (!raw) return null;
+    try {
+      return mergePersonalInfoValue(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  }, []);
   const gender = sessionStorage.getItem('gender') || '';
   const dob = sessionStorage.getItem('dob') || '';
   const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
@@ -108,7 +117,17 @@ export default function QuestionnaireForm() {
               ans[it.id] = { points: [], paths: [] };
             }
             if (it.type === 'personal_info') {
-              ans[it.id] = mergePersonalInfoValue(ans[it.id]);
+              const merged = mergePersonalInfoValue(ans[it.id]);
+              if (patientName) {
+                merged.name = patientName;
+              }
+              if (personalInfoFromEntry) {
+                personalInfoFields.forEach(({ key }) => {
+                  if (key === 'name') return;
+                  merged[key] = personalInfoFromEntry[key];
+                });
+              }
+              ans[it.id] = merged;
             }
           });
           setAnswers(ans);
@@ -119,7 +138,7 @@ export default function QuestionnaireForm() {
             data.llm_followup_enabled ? '1' : '0'
           );
         });
-    }, [visitType, sessionId, navigate, gender, age]);
+    }, [visitType, sessionId, navigate, gender, age, patientName, personalInfoFromEntry]);
 
   useEffect(() => {
     const all = collectAllItems(items);
@@ -220,6 +239,9 @@ export default function QuestionnaireForm() {
   const buildVisibleItems = (list: Item[]): Item[] => {
     const result: Item[] = [];
     const walk = (item: Item) => {
+      if (item.type === 'personal_info') {
+        return;
+      }
       if (item.gender_enabled && item.gender && item.gender !== gender) return;
       if (item.age_enabled) {
         if (item.min_age !== undefined && age !== undefined && age < item.min_age) return;
@@ -273,8 +295,6 @@ export default function QuestionnaireForm() {
       {visibleItems.map((item) => {
         const helperText = item.description || defaultHelperTexts[item.id];
         const value = answers[item.id];
-        const personalValue = item.type === 'personal_info' ? mergePersonalInfoValue(value) : null;
-        const personalMissing = item.type === 'personal_info' ? personalInfoMissingKeys(personalValue) : [];
         const showError = attempted && item.required && isMissingValue(item, value);
         // removed: postal-code lookup loading state and digit check
         return (
@@ -401,44 +421,6 @@ export default function QuestionnaireForm() {
                     value={answers[item.id] || ''}
                     onChange={(val) => setAnswers({ ...answers, [item.id]: val })}
                   />
-                ) : item.type === 'personal_info' && personalValue ? (
-                  <VStack align="stretch" spacing={4}>
-                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-                      {personalInfoFields.map((field) => {
-                        const fieldMissing = attempted && item.required && personalMissing.includes(field.key);
-                        const commonProps = {
-                          value: personalValue[field.key],
-                          placeholder: field.placeholder,
-                          autoComplete: field.autoComplete,
-                          inputMode: field.inputMode,
-                          onChange: (e: ChangeEvent<HTMLInputElement>) => {
-                            const nextVal = e.target.value;
-                            setAnswers((prev) => {
-                              const merged = mergePersonalInfoValue(prev[item.id]);
-                              const updatedValue = { ...merged, [field.key]: nextVal };
-                              const nextAnswers = { ...prev, [item.id]: updatedValue };
-                              sessionStorage.setItem('answers', JSON.stringify(nextAnswers));
-                              return nextAnswers;
-                            });
-                          },
-                        };
-                        const input = (
-                          <Input
-                            {...commonProps}
-                          />
-                        );
-                        return (
-                          <FormControl key={field.key} isRequired isInvalid={fieldMissing}>
-                            <FormLabel fontSize="sm">{field.label}</FormLabel>
-                            {input}
-                            {fieldMissing && (
-                              <FormErrorMessage>{field.label}を入力してください</FormErrorMessage>
-                            )}
-                          </FormControl>
-                        );
-                      })}
-                    </SimpleGrid>
-                  </VStack>
                 ) : item.type === 'image_annotation' && item.image ? (
                   // 画像注釈コンポーネント
                   <ImageAnnotator
@@ -460,12 +442,7 @@ export default function QuestionnaireForm() {
                   />
                 )}
                 <FormErrorMessage>
-                  {item.type === 'personal_info' && personalValue
-                    ? personalInfoFields
-                        .filter((field) => personalMissing.includes(field.key))
-                        .map((field) => field.label)
-                        .join('・') || `${item.label}を入力してください`
-                    : `${item.label}を入力してください`}
+                  {`${item.label}を入力してください`}
                 </FormErrorMessage>
               </FormControl>
           </Box>

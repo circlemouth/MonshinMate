@@ -30,9 +30,8 @@ def test_default_template_contains_items() -> None:
     res = client.get("/questionnaires/default/template?visit_type=initial")
     assert res.status_code == 200
     ids = {item["id"] for item in res.json()["items"]}
-    # 氏名(name)・生年月日(dob)はセッション作成時に別途入力するためテンプレートから除外
     expected = {
-        "patient_contact",
+        "personal_info",
         "chief_complaint",
         "symptom_location",
         "onset",

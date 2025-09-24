@@ -364,10 +364,11 @@ def make_default_initial_items() -> list[dict[str, Any]]:
 
     return [
         {
-            "id": "patient_contact",
-            "label": "患者さまの基本情報を入力してください",
+            "id": "personal_info",
+            "label": "患者基本情報",
             "type": "personal_info",
             "required": True,
+            "description": "氏名・よみがな・住所・電話番号を入力してください。",
         },
         {
             "id": "chief_complaint",

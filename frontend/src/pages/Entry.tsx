@@ -1,43 +1,40 @@
-import { VStack, FormControl, FormLabel, Input, Button, FormErrorMessage, FormHelperText, RadioGroup, HStack, Radio, Select, Flex, Box } from '@chakra-ui/react';
+import {
+  VStack,
+  FormControl,
+  FormLabel,
+  Button,
+  FormErrorMessage,
+  FormHelperText,
+  SimpleGrid,
+  Text,
+  Flex,
+} from '@chakra-ui/react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { track } from '../metrics';
 import { refreshLlmStatus } from '../utils/llmStatus';
-import { useNotify } from '../contexts/NotificationContext';
 
-/** 患者名と生年月日を入力するエントリページ。 */
+const VISIT_OPTIONS = [
+  {
+    value: 'initial',
+    main: 'はい',
+    caption: '（初診）',
+  },
+  {
+    value: 'followup',
+    main: 'いいえ',
+    caption: '（再診）',
+  },
+] as const;
+
+/** 初診/再診の選択を行うエントリページ。 */
 export default function Entry() {
-  const [name, setName] = useState('');
-  const [dob, setDob] = useState('');
-  const [gender, setGender] = useState('');
-  const thisYear = new Date().getFullYear();
-  const years = Array.from({ length: 120 }, (_, i) => thisYear - i); // 過去120年分
-  const months = Array.from({ length: 12 }, (_, i) => i + 1);
-  const [dobYear, setDobYear] = useState<number | ''>('');
-  const [dobMonth, setDobMonth] = useState<number | ''>('');
-  const [dobDay, setDobDay] = useState<number | ''>('');
-  const [entryMessage, setEntryMessage] = useState('不明点があれば受付にお知らせください'); // New state
-
-  const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const maxDay = typeof dobYear === 'number' && typeof dobMonth === 'number' ? daysInMonth(dobYear, dobMonth) : 31;
-  const days = Array.from({ length: maxDay }, (_, i) => i + 1);
-
-  // 年月日セレクトの変更に合わせて ISO 形式 (YYYY-MM-DD) を生成
-  useEffect(() => {
-    if (dobYear && dobMonth && dobDay) {
-      const mm = String(dobMonth).padStart(2, '0');
-      const dd = String(Math.min(dobDay, daysInMonth(dobYear, dobMonth))).padStart(2, '0');
-      setDob(`${dobYear}-${mm}-${dd}`);
-    } else {
-      setDob('');
-    }
-  }, [dobYear, dobMonth, dobDay]);
-  const [visitType, setVisitType] = useState('');
-  const [attempted, setAttempted] = useState(false);
   const navigate = useNavigate();
-  const { notify } = useNotify();
 
-  // 新規セッション開始時に前回のデータをクリア
+  const [visitType, setVisitType] = useState('');
+  const [entryMessage, setEntryMessage] = useState('不明点があれば受付にお知らせください');
+  const [attempted, setAttempted] = useState(false);
+
   useEffect(() => {
     [
       'session_id',
@@ -49,178 +46,121 @@ export default function Entry() {
       'patient_name',
       'dob',
       'gender',
+      'personal_info',
     ].forEach((k) => sessionStorage.removeItem(k));
   }, []);
 
-  // エントリ画面表示時のみ LLM 疎通チェックを実行し、グローバルへ状態通知
   useEffect(() => {
     refreshLlmStatus();
   }, []);
 
-  const handleNext = async () => {
-    setAttempted(true);
-    const errs: string[] = [];
-    const today = new Date().toISOString().slice(0, 10);
-    if (!name) errs.push('氏名を入力してください');
-    if (!gender) errs.push('性別を選択してください');
-    if (!dob) errs.push('生年月日を入力してください');
-    if (dob && dob > today) errs.push('生年月日に未来の日付は指定できません');
-    if (!visitType) errs.push('当院の受診は初めてか、選択してください');
-    if (errs.length) {
-      track('validation_failed', { page: 'Entry', count: errs.length });
-      return;
-    }
-    sessionStorage.setItem('patient_name', name);
-    sessionStorage.setItem('dob', dob);
-    sessionStorage.setItem('gender', gender);
-    try {
-      const payload = { patient_name: name, dob, gender, visit_type: visitType, answers: {} };
-      const res = await fetch('/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error('failed');
-      const data = await res.json();
-      sessionStorage.setItem('session_id', data.id);
-      sessionStorage.setItem('visit_type', visitType);
-      navigate('/questionnaire');
-    } catch (e) {
-      notify({
-        title: 'セッションの作成に失敗しました。',
-        description: '時間をおいて再度お試しください。',
-        status: 'error',
-        channel: 'patient',
-        actionLabel: '再試行',
-        onAction: () => {
-          void handleNext();
-        },
-      });
-    }
-  };
-
-  // 最初のエラーへ自動フォーカス
-  useEffect(() => {
-    if (!attempted) return;
-    const today = new Date().toISOString().slice(0, 10);
-    if (!name) {
-      document.getElementById('patient_name')?.focus();
-      return;
-    }
-    if (!gender) {
-      document.getElementsByName('gender')?.[0]?.focus();
-      return;
-    }
-    if (!dob || (dob && dob > today)) {
-      // 年→月→日の順にフォーカス
-      if (!dobYear) {
-        document.getElementById('dob-year')?.focus();
-        return;
-      }
-      if (!dobMonth) {
-        document.getElementById('dob-month')?.focus();
-        return;
-      }
-      document.getElementById('dob-day')?.focus();
-      return;
-    }
-  }, [attempted, name, dob, gender]);
-
-  // Fetch entry message
   useEffect(() => {
     fetch('/system/entry-message')
       .then((r) => r.json())
       .then((d) => setEntryMessage(d.message || '不明点があれば受付にお知らせください'));
   }, []);
 
+  useEffect(() => {
+    if (attempted && !visitType) {
+      document.getElementById('visit-type-initial')?.focus();
+    }
+  }, [attempted, visitType]);
+
+  const handleVisitTypeSelect = (value: string) => {
+    setVisitType(value);
+    setAttempted(false);
+  };
+
+  const handleStart = () => {
+    setAttempted(true);
+    if (!visitType) {
+      track('validation_failed', { page: 'Entry', count: 1 });
+      return;
+    }
+
+    sessionStorage.setItem('visit_type', visitType);
+    [
+      'patient_name',
+      'dob',
+      'gender',
+      'personal_info',
+      'session_id',
+      'answers',
+      'questionnaire_items',
+      'summary',
+      'llm_error',
+    ].forEach((k) => sessionStorage.removeItem(k));
+
+    navigate('/basic-info');
+  };
+
   return (
     <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
-    <VStack spacing={4} align="stretch">
-      <FormControl isRequired isInvalid={attempted && !name}>
-        <FormLabel htmlFor="patient_name">氏名</FormLabel>
-        <Input
-          id="patient_name"
-          name="__noauto_patient_name"
-          placeholder="問診　太郎"
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-        />
-        <FormErrorMessage>氏名を入力してください</FormErrorMessage>
-      </FormControl>
-      <FormControl isRequired isInvalid={attempted && !gender}>
-        <FormLabel>性別</FormLabel>
-        <RadioGroup value={gender} onChange={setGender}>
-          <HStack spacing={4}>
-            <Radio value="male" name="gender">男</Radio>
-            <Radio value="female" name="gender">女</Radio>
-          </HStack>
-        </RadioGroup>
-        <FormErrorMessage>性別を選択してください</FormErrorMessage>
-      </FormControl>
-      <FormControl
-        isRequired
-        isInvalid={
-          attempted && (!dob || (dob && dob > new Date().toISOString().slice(0, 10)))
-        }
-      >
-        <FormLabel>生年月日</FormLabel>
-        <HStack>
-          <Select id="dob-year" placeholder="年" value={dobYear}
-                  onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')} autoComplete="off">
-            {years.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </Select>
-          <Select id="dob-month" placeholder="月" value={dobMonth}
-                  onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')} autoComplete="off">
-            {months.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </Select>
-          <Select id="dob-day" placeholder="日" value={dobDay}
-                  onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
-                  isDisabled={!dobYear || !dobMonth} autoComplete="off">
-            {days.map((d) => (
-              <option key={d} value={d}>{d}</option>
-            ))}
-          </Select>
-        </HStack>
-        <FormErrorMessage>
-          {dob && dob > new Date().toISOString().slice(0, 10)
-            ? '生年月日に未来の日付は指定できません'
-            : '生年月日を入力してください'}
-        </FormErrorMessage>
-      </FormControl>
-      <FormControl isRequired isInvalid={attempted && !visitType}>
-        <FormLabel>当院の受診は初めてですか？</FormLabel>
-        <RadioGroup value={visitType} onChange={setVisitType} aria-describedby="visit-type-help">
-          <HStack spacing={4}>
-            <Radio value="initial">初めて</Radio>
-            <Radio value="followup">受診したことがある</Radio>
-          </HStack>
-        </RadioGroup>
-        <FormHelperText id="visit-type-help" textAlign="center">{entryMessage}</FormHelperText>
-        <FormErrorMessage>選択してください</FormErrorMessage>
-      </FormControl>
-      <Flex justifyContent="center">
-        <Button
-          onClick={handleNext}
-          colorScheme="primary"
-          size="lg"
-          w={{ base: '100%', sm: '280px' }}
-          maxW="400px"
-          py={6}
-          fontSize="lg"
-        >
-          問診を始める
-        </Button>
-      </Flex>
-    </VStack>
+      <VStack spacing={6} align="stretch">
+        <FormControl isRequired isInvalid={attempted && !visitType}>
+          <FormLabel textAlign="center" fontSize="2xl" fontWeight="bold">
+            当院の受診は初めてですか？
+          </FormLabel>
+          <SimpleGrid
+            columns={{ base: 1, md: 2 }}
+            spacing={5}
+            maxW="640px"
+            mx="auto"
+            w="full"
+          >
+            {VISIT_OPTIONS.map((option) => {
+              const isSelected = visitType === option.value;
+              return (
+                <Button
+                  key={option.value}
+                  id={`visit-type-${option.value}`}
+                  onClick={() => handleVisitTypeSelect(option.value)}
+                  variant="outline"
+                  height="104px"
+                  py={5}
+                  px={4}
+                  borderRadius="lg"
+                  borderWidth={isSelected ? 2 : 1}
+                  w="full"
+                  boxShadow={isSelected ? 'md' : 'base'}
+                  aria-pressed={isSelected}
+                  bg={isSelected ? 'accent.subtle' : 'white'}
+                  color="fg.default"
+                  borderColor={isSelected ? 'border.accent' : 'neutral.300'}
+                  _hover={{ bg: isSelected ? 'accent.muted' : 'bg.subtle' }}
+                  _active={{ bg: isSelected ? 'accent.muted' : 'bg.emphasis' }}
+                >
+                  <VStack spacing={1}>
+                    <Text fontSize="lg" fontWeight="bold" textAlign="center">
+                      {option.main}
+                    </Text>
+                    <Text fontSize="sm" color="fg.muted" textAlign="center">
+                      {option.caption}
+                    </Text>
+                  </VStack>
+                </Button>
+              );
+            })}
+          </SimpleGrid>
+          <FormHelperText textAlign="center">{entryMessage}</FormHelperText>
+          <FormErrorMessage>選択してください</FormErrorMessage>
+        </FormControl>
+
+        <Flex justifyContent="center">
+          <Button
+            onClick={handleStart}
+            colorScheme="primary"
+            size="lg"
+            w={{ base: '100%', sm: '280px' }}
+            maxW="400px"
+            py={6}
+            fontSize="lg"
+            isDisabled={!visitType}
+          >
+            問診を始める
+          </Button>
+        </Flex>
+      </VStack>
     </form>
   );
 }
