@@ -631,40 +631,72 @@ def _render_structured_pdf(
     question_nodes, personal_info_values = _collect_personal_info_for_header(nodes, answers)
 
     # 受診種別欄は削除
-    patient_rows = [
-        ("患者氏名", session.get("patient_name") or "未登録"),
-        ("よみがな", _personal_info_header_value(personal_info_values, "kana")),
-        ("生年月日", _format_date(session.get("dob")) or "未登録"),
-        ("性別", _format_gender(session.get("gender"))),
-        ("郵便番号", _personal_info_header_value(personal_info_values, "postal_code")),
-        ("住所", _personal_info_header_value(personal_info_values, "address")),
-        ("電話番号", _personal_info_header_value(personal_info_values, "phone")),
+    name_text = session.get("patient_name") or "未登録"
+    kana_text = _personal_info_header_value(personal_info_values, "kana")
+    dob_text = _format_date(session.get("dob")) or "未登録"
+    gender_text = _format_gender(session.get("gender"))
+    postal_code_text = _personal_info_header_value(personal_info_values, "postal_code")
+    address_text = _personal_info_header_value(personal_info_values, "address")
+    phone_text = _personal_info_header_value(personal_info_values, "phone")
+
+    def _label_cell(text: str) -> Paragraph:
+        return Paragraph(f"<b>{escape(text)}</b>", styles["base"])
+
+    def _value_cell(text: str) -> Paragraph:
+        display = text if text else PERSONAL_INFO_EMPTY
+        return Paragraph(escape(display).replace("\n", "<br/>"), styles["value"])
+
+    kana_line = kana_text if kana_text and kana_text != PERSONAL_INFO_EMPTY else "未回答"
+    kana_color = "#888888" if kana_text == PERSONAL_INFO_EMPTY else "#555555"
+    name_markup = (
+        f"<font size=8 color='{kana_color}'>よみがな: {escape(kana_line)}</font>"
+        f"<br/><font size=12>{escape(name_text)}</font>"
+    )
+
+    label_width = 28 * mm
+    remaining_width = doc.width - (label_width * 2)
+    left_value_width = remaining_width * 0.4
+    right_value_width = remaining_width - left_value_width
+
+    patient_table_data = [
+        [
+            _label_cell("患者氏名"),
+            Paragraph(name_markup, styles["value"]),
+            _label_cell("生年月日"),
+            _value_cell(dob_text),
+        ],
+        [
+            _label_cell("性別"),
+            _value_cell(gender_text),
+            _label_cell("電話番号"),
+            _value_cell(phone_text),
+        ],
+        [
+            _label_cell("郵便番号"),
+            _value_cell(postal_code_text),
+            _label_cell("住所"),
+            _value_cell(address_text),
+        ],
     ]
-    patient_table_rows = []
-    for label, value in patient_rows:
-        display_text = str(value) if value is not None else ""
-        patient_table_rows.append(
-            [
-                Paragraph(f"<b>{escape(label)}</b>", styles["base"]),
-                Paragraph(escape(display_text).replace("\n", "<br/>"), styles["value"]),
-            ]
-        )
+
     patient_table = Table(
-        patient_table_rows,
-        colWidths=[45 * mm, doc.width - 45 * mm],
+        patient_table_data,
+        colWidths=[label_width, left_value_width, label_width, right_value_width],
         hAlign="LEFT",
     )
     patient_table.setStyle(
         TableStyle(
             [
                 ("BOX", (0, 0), (-1, -1), 0.6, colors.black),
-                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.grey),
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f5f5f5")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#d6dde3")),
+                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f5f7fa")),
+                ("BACKGROUND", (2, 0), (2, -1), colors.HexColor("#f5f7fa")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("TOPPADDING", (0, 0), (-1, -1), 6),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (1, 0), (1, 0), 10),
             ]
         )
     )
