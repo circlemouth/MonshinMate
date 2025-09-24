@@ -19,7 +19,6 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.platypus import (
     Flowable,
-    KeepInFrame,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
@@ -298,70 +297,42 @@ def _render_multi_answer(
     if isinstance(options, tuple):
         options = list(options)
     options = [str(opt) for opt in options]
-    allow_freetext = bool(_item_attr(node.item, "allow_freetext", False))
     selected_values = _normalize_multi_answer(answer)
-    option_set = set(options)
-    selected_options = [opt for opt in selected_values if opt in option_set]
-    others = [opt for opt in selected_values if opt not in option_set]
-
-    table_rows: list[list[tuple[Any, bool]]] = []
-    row_cells: list[tuple[Any, bool]] = []
-    if options:
-        for opt in options:
-            is_selected = opt in selected_options
-            mark = "☑" if is_selected else "☐"
-            # 選択肢のボックス囲みを廃止し、選択された項目はボールド表示にする
-            cell_style = styles["bold"] if is_selected else styles["value"]
-            cell_flowable = Paragraph(f"{mark} {escape(opt)}", cell_style)
-            row_cells.append((cell_flowable, is_selected))
-            if len(row_cells) == 2:
-                table_rows.append(row_cells)
-                row_cells = []
-        if row_cells:
-            while len(row_cells) < 2:
-                row_cells.append((Paragraph("", styles["value"]), False))
-            table_rows.append(row_cells)
-    else:
+    if not options:
         text = ", ".join(selected_values) if selected_values else "未回答"
         return _render_text_answer(text, styles, value_width)
 
-    table_data: list[list[Any]] = [[cell for cell, _ in row] for row in table_rows]
+    option_set = set(options)
+    selected_set = {val for val in selected_values if val in option_set}
+    selected_options = [opt for opt in options if opt in selected_set]
+    free_text_values = [opt for opt in selected_values if opt not in option_set]
 
-    checkbox_table = Table(
-        table_data,
-        colWidths=[value_width / 2, value_width / 2],
-        hAlign="LEFT",
-    )
-    checkbox_table.setStyle(
-        TableStyle(
-            [
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-                ("TOPPADDING", (0, 0), (-1, -1), 2),
-            ]
-        )
-    )
+    lines: list[str] = []
+    for opt in selected_options:
+        lines.append(f"・{escape(opt)}")
+    for val in free_text_values:
+        formatted = escape(val).replace("\n", "<br/>")
+        lines.append(f"・自由記述: {formatted}")
 
-    flows: list[Flowable] = [checkbox_table]
-    if allow_freetext:
-        if others:
-            for val in others:
-                flows.append(Paragraph(f"※ 自由記述: {escape(val)}", styles["note"]))
-        elif not selected_options:
-            flows.append(Paragraph("※ 自由記述: （未記入）", styles["note"]))
-    if len(flows) == 1:
-        return flows[0]
-    return KeepInFrame(value_width, 40 * mm, flows, hAlign="LEFT", mergeSpace=True)
+    if not lines:
+        return Paragraph("未回答", styles["value"])
+
+    text = "<br/>".join(lines)
+    return Paragraph(text, styles["value"])
 
 
 def _render_yesno_answer(answer: Any, styles: dict[str, ParagraphStyle]) -> Flowable:
     value = str(answer or "").strip()
-    yes_mark = "☑" if value == "yes" else "☐"
-    no_mark = "☑" if value == "no" else "☐"
-    text = f"{yes_mark} はい　　{no_mark} いいえ"
-    return Paragraph(text, styles["value"])
+    if not value:
+        return Paragraph("未回答", styles["value"])
+    normalized = value.lower()
+    if normalized == "yes":
+        display = "はい"
+    elif normalized == "no":
+        display = "いいえ"
+    else:
+        display = value
+    return Paragraph(escape(display), styles["value"])
 
 
 def _render_number_answer(answer: Any, styles: dict[str, ParagraphStyle], value_width: float) -> Flowable:
@@ -421,6 +392,46 @@ def _render_personal_info_answer(
         )
     )
     return table
+
+
+def _collect_personal_info_for_header(
+    nodes: Sequence[ItemNode],
+    answers: Mapping[str, Any],
+) -> tuple[list[ItemNode], dict[str, str]]:
+    filtered_nodes: list[ItemNode] = []
+    collected: dict[str, str] = {}
+    for node in nodes:
+        item_type = str(_item_attr(node.item, "type", "") or "")
+        if item_type != "personal_info":
+            filtered_nodes.append(node)
+            continue
+        item_id_raw = _item_attr(node.item, "id")
+        if item_id_raw is None:
+            continue
+        item_id = str(item_id_raw)
+        answer_value = answers.get(item_id)
+        if answer_value is None and item_id_raw != item_id:
+            try:
+                answer_value = answers.get(item_id_raw)  # type: ignore[arg-type]
+            except Exception:  # pragma: no cover - defensive fallback
+                answer_value = None
+        data = personal_info_coerce(answer_value)
+        if data is None:
+            continue
+        for key, value in data.items():
+            text = value.strip()
+            if not text or text == PERSONAL_INFO_NORMALIZED:
+                continue
+            if key not in collected or not collected[key].strip():
+                collected[key] = text
+    return filtered_nodes, collected
+
+
+def _personal_info_header_value(values: Mapping[str, str], key: str) -> str:
+    text = values.get(key, "").strip()
+    if not text or text == PERSONAL_INFO_NORMALIZED:
+        return PERSONAL_INFO_EMPTY
+    return text
 
 
 def _render_date_answer(answer: Any, styles: dict[str, ParagraphStyle], value_width: float) -> Flowable:
@@ -616,14 +627,30 @@ def _render_structured_pdf(
     story.append(Paragraph(escape(title_label), styles["title"]))
     story.append(Spacer(0, 5 * mm))
 
+    nodes = _flatten_items(template_items)
+    question_nodes, personal_info_values = _collect_personal_info_for_header(nodes, answers)
+
     # 受診種別欄は削除
     patient_rows = [
         ("患者氏名", session.get("patient_name") or "未登録"),
+        ("よみがな", _personal_info_header_value(personal_info_values, "kana")),
         ("生年月日", _format_date(session.get("dob")) or "未登録"),
         ("性別", _format_gender(session.get("gender"))),
+        ("郵便番号", _personal_info_header_value(personal_info_values, "postal_code")),
+        ("住所", _personal_info_header_value(personal_info_values, "address")),
+        ("電話番号", _personal_info_header_value(personal_info_values, "phone")),
     ]
+    patient_table_rows = []
+    for label, value in patient_rows:
+        display_text = str(value) if value is not None else ""
+        patient_table_rows.append(
+            [
+                Paragraph(f"<b>{escape(label)}</b>", styles["base"]),
+                Paragraph(escape(display_text).replace("\n", "<br/>"), styles["value"]),
+            ]
+        )
     patient_table = Table(
-        [[Paragraph(f"<b>{escape(label)}</b>", styles["base"]), Paragraph(escape(str(value)), styles["value"])] for label, value in patient_rows],
+        patient_table_rows,
         colWidths=[45 * mm, doc.width - 45 * mm],
         hAlign="LEFT",
     )
@@ -645,8 +672,7 @@ def _render_structured_pdf(
     story.append(Spacer(0, 6 * mm))
 
     story.append(Paragraph("問診回答", styles["section"]))
-    nodes = _flatten_items(template_items)
-    question_table = _make_question_table(nodes, answers, styles, doc.width)
+    question_table = _make_question_table(question_nodes, answers, styles, doc.width)
     if question_table:
         story.append(question_table)
     else:

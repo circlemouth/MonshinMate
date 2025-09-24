@@ -971,3 +971,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx`。
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`, `frontend/dist/docs/admin_user_manual.md`。
 - [x] フロントエンドビルド確認: `cd frontend && npm run build`。
+
+## 121. PDF出力の基本情報欄統合と回答表示の簡素化（2026-02-06）
+- [x] 変更（バックエンド）: `backend/app/pdf_renderer.py` で個人情報項目をヘッダへ統合し、よみがな・郵便番号・住所・電話番号を患者基本情報として個別表示。問診表の設問一覧から `personal_info` 項目を除外し、回答欄では複数選択／はい・いいえ設問が選択済み項目のみを表示するよう調整。自由記述も同一レイアウトで表示。
+- [x] ドキュメント更新: 本ファイル。
+- [x] バックエンド自動テスト実行: `cd backend && pytest -q`
