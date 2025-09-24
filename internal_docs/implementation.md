@@ -977,3 +977,11 @@
 - [x] 変更（バックエンド）: `backend/app/pdf_renderer.py` の初診問診票ヘッダで患者基本情報（氏名・よみがな・生年月日・性別・郵便番号・住所・電話番号）を二段組レイアウト化し、氏名上に小サイズの「よみがな」を併記するよう調整（2025-09-24 改修）。
 - [x] ドキュメント更新: 本ファイル。
 - [x] バックエンド自動テスト実行: `cd backend && pytest -q`
+
+## 122. ライセンス画面のUI刷新と依存ライブラリエクスポート拡張（2025-09-24）
+- [x] 変更（バックエンド）: `backend/tools/collect_licenses.py` に Node.js 依存収集ロジックとメタ情報（component/category/homepage/license_url など）を追加。未インストールの Python ライブラリは既存JSONから補完するフォールバックを実装。
+- [x] 既存 JSON: `frontend/public/docs/dependency_licenses.json` を再生成し、`source`・`component`・`category` を含む32件へ更新。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLicense.tsx` をカード＋タブ構成へ刷新し、GPL要約カード・遵守チェックリスト・依存ライブラリ統計を追加。全文表示タブにコピー導線を実装。
+- [x] 変更（フロントエンド）: `frontend/src/components/license/LicenseDependencyList.tsx`（新規）、`frontend/src/pages/AdminLicenseDeps.tsx` を導入し、検索・フィルタ・Accordion 展開・コピー/外部リンク導線を実装。
+- [x] ユーティリティ追加: `frontend/src/types/license.ts`, `frontend/src/utils/license.ts` を新設（ライセンス種別判定・取得ヘルパー）。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（警告のみ、ビルド成功）。

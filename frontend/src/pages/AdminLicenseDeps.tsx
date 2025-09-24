@@ -1,36 +1,31 @@
 import { useEffect, useState } from 'react';
-import { Box, Spinner, Text } from '@chakra-ui/react';
+import { Box, Heading } from '@chakra-ui/react';
+import LicenseDependencyList from '../components/license/LicenseDependencyList';
+import { LicenseEntry } from '../types/license';
+import { fetchDependencyLicenses } from '../utils/license';
 
 /**
  * 管理画面: 依存ライブラリのライセンス一覧を表示するページ。
  */
 export default function AdminLicenseDeps() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<LicenseEntry[]>([]);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/docs/dependency_licenses.json')
-      .then((r) => {
-        if (!r.ok) throw new Error();
-        return r.json();
-      })
-      .then((d) => setItems(d))
-      .catch(() => setError('ライセンス情報の取得に失敗しました'));
+    setLoading(true);
+    fetchDependencyLicenses()
+      .then((data) => setItems(data))
+      .catch(() => setError('ライセンス情報の取得に失敗しました'))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (error) return <Text color="red.500" fontSize="sm">{error}</Text>;
-  if (!items.length) return <Spinner />;
-
   return (
-    <Box fontSize="sm">
-      {items.map((item) => (
-        <Box key={item.name} mb={6}>
-          <Text fontWeight="bold">{item.name} {item.version} ({item.license})</Text>
-          <Box as="pre" whiteSpace="pre-wrap" fontSize="xs" bg="gray.50" p={2}>
-            {item.text}
-          </Box>
-        </Box>
-      ))}
+    <Box>
+      <Heading size="lg" mb={4}>
+        依存ライブラリライセンス一覧
+      </Heading>
+      <LicenseDependencyList entries={items} isLoading={loading} error={error} />
     </Box>
   );
 }
