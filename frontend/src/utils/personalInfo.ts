@@ -43,10 +43,39 @@ export const personalInfoMissingKeys = (value: PersonalInfoValue): PersonalInfoK
     .filter(({ key }) => !value[key].trim())
     .map(({ key }) => key);
 
-export const formatPersonalInfoLines = (value: any): string[] => {
-  const normalized = mergePersonalInfoValue(value);
-  return personalInfoFields.map(({ key, label }) => {
-    const text = normalized[key].trim();
-    return `${label}: ${text || '未回答'}`;
-  });
+export interface PersonalInfoEntry {
+  key: PersonalInfoKey;
+  label: string;
+  value: string;
+  hasValue: boolean;
+}
+
+export interface BuildPersonalInfoOptions {
+  defaults?: Partial<PersonalInfoValue>;
+  skipKeys?: PersonalInfoKey[];
+  hideEmpty?: boolean;
+  placeholder?: string;
+}
+
+export const buildPersonalInfoEntries = (
+  value: any,
+  options?: BuildPersonalInfoOptions
+): PersonalInfoEntry[] => {
+  const normalized = mergePersonalInfoValue(value, options?.defaults);
+  const skipSet = new Set(options?.skipKeys ?? []);
+  const placeholder = options?.placeholder ?? '未回答';
+
+  return personalInfoFields
+    .filter(({ key }) => !skipSet.has(key))
+    .map(({ key, label }) => {
+      const raw = typeof normalized[key] === 'string' ? normalized[key].trim() : '';
+      const hasValue = raw.length > 0;
+      const displayValue = hasValue ? raw : placeholder;
+      const entry: PersonalInfoEntry = { key, label, value: displayValue, hasValue };
+      return entry;
+    })
+    .filter((entry) => !options?.hideEmpty || entry.hasValue);
 };
+
+export const formatPersonalInfoLines = (value: any): string[] =>
+  buildPersonalInfoEntries(value).map(({ label, value }) => `${label}: ${value}`);

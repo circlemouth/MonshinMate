@@ -44,6 +44,11 @@ import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
+import {
+  buildPersonalInfoEntries,
+  formatPersonalInfoLines,
+  isPersonalInfoValue,
+} from '../utils/personalInfo';
 
 interface SessionSummary {
   id: string;
@@ -131,6 +136,23 @@ export default function AdminSessions() {
   }, [sessions.length]);
 
   const visitTypeLabel = (type: string) => (type === 'initial' ? '初診' : type === 'followup' ? '再診' : type);
+
+  const genderLabel = (value: string | null | undefined) => {
+    switch (value) {
+      case 'male':
+        return '男性';
+      case 'female':
+        return '女性';
+      case 'other':
+        return 'その他';
+      case '':
+      case undefined:
+      case null:
+        return '未設定';
+      default:
+        return value;
+    }
+  };
 
   // 一覧の複数選択（行）用
   const [selectedSessionIds, setSelectedSessionIds] = useState<string[]>([]);
@@ -259,11 +281,14 @@ export default function AdminSessions() {
       setSelectedDetail({ ...detail, id });
       const templateItems = tpl.items || [];
       const questionTexts = detail.question_texts ?? {};
-      const baseEntries = templateItems.map((it: any) => ({
-        id: it.id,
-        label: questionTexts[it.id] ?? it.label,
-        answer: detail.answers?.[it.id],
-      }));
+      const baseEntries = templateItems
+        .map((it: any) => ({
+          id: it.id,
+          label: questionTexts[it.id] ?? it.label,
+          answer: detail.answers?.[it.id],
+          type: it.type,
+        }))
+        .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type));
       const templateIds = new Set(templateItems.map((it: any) => it.id));
       const extraIds = Array.from(
         new Set([
@@ -273,18 +298,43 @@ export default function AdminSessions() {
       )
         .filter((qid) => !templateIds.has(qid) && !qid.startsWith('llm_'))
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      const additionalEntries = extraIds.map((qid) => ({
-        id: qid,
-        label: questionTexts[qid] ?? qid,
-        answer: detail.answers?.[qid],
-      }));
+      const additionalEntries = extraIds
+        .map((qid) => ({
+          id: qid,
+          label: questionTexts[qid] ?? qid,
+          answer: detail.answers?.[qid],
+        }))
+        .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer));
       setSelectedItems([...baseEntries, ...additionalEntries]);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatAnswer = (answer: any) => {
+  const isPersonalInfoEntry = (
+    entryId?: string,
+    entryLabel?: string,
+    value?: any,
+    entryType?: string
+  ) => {
+    if (entryType === 'personal_info') return true;
+    if (entryId === 'personal_info') return true;
+    if (entryLabel && entryLabel.includes('患者基本情報')) return true;
+    if (isPersonalInfoValue(value)) return true;
+    return false;
+  };
+
+  const formatAnswer = (answer: any, entryId?: string, entryLabel?: string, entryType?: string) => {
+    if (isPersonalInfoEntry(entryId, entryLabel, answer, entryType)) {
+      const lines = formatPersonalInfoLines(answer);
+      return (
+        <VStack align="stretch" spacing={1}>
+          {lines.map((line) => (
+            <Text key={line}>{line}</Text>
+          ))}
+        </VStack>
+      );
+    }
     if (answer === null || answer === undefined || answer === '') return <Text color="fg.muted">未回答</Text>;
     if (Array.isArray(answer)) return <Text>{answer.join(', ')}</Text>;
     if (typeof answer === 'object')
@@ -297,6 +347,14 @@ export default function AdminSessions() {
   };
 
   const formatSummaryText = (summary: string) => summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
+
+  const personalInfoEntriesForModal = selectedDetail
+    ? buildPersonalInfoEntries(selectedDetail.answers?.personal_info, {
+        defaults: { name: selectedDetail.patient_name ?? '' },
+        skipKeys: ['name'],
+        hideEmpty: selectedDetail.visit_type !== 'initial',
+      })
+    : [];
 
   const reloadWithCurrentFilters = () => {
     loadSessions({ patientName, dob, startDate, endDate });
@@ -703,6 +761,9 @@ export default function AdminSessions() {
                       <strong>生年月日:</strong> {selectedDetail.dob}
                     </Text>
                     <Text>
+                      <strong>性別:</strong> {genderLabel(selectedDetail.gender)}
+                    </Text>
+                    <Text>
                       <strong>受診種別:</strong> {visitTypeLabel(selectedDetail.visit_type)}
                     </Text>
                     {/* テンプレートIDの表示は削除 */}
@@ -714,6 +775,15 @@ export default function AdminSessions() {
                         {selectedDetail.interrupted ? "中断" : "完了"}
                       </Tag>
                     </HStack>
+                    {personalInfoEntriesForModal.length > 0 && (
+                      <VStack align="stretch" spacing={1} pt={2}>
+                        {personalInfoEntriesForModal.map((entry) => (
+                          <Text key={entry.key}>
+                            <strong>{entry.label}:</strong> {entry.value}
+                          </Text>
+                        ))}
+                      </VStack>
+                    )}
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>
@@ -722,7 +792,7 @@ export default function AdminSessions() {
                     <Text fontWeight="bold" mb={1}>
                       {entry.label}
                     </Text>
-                    {formatAnswer(entry.answer)}
+                    {formatAnswer(entry.answer, entry.id, entry.label, entry.type)}
                   </AccentOutlineBox>
                 ))}
                 {selectedDetail.llm_question_texts && Object.keys(selectedDetail.llm_question_texts).length > 0 && (
@@ -735,7 +805,11 @@ export default function AdminSessions() {
                           <Text fontWeight="bold" mb={1}>
                             {(selectedDetail.question_texts ?? {})[qid] ?? qtext}
                           </Text>
-                          {formatAnswer(selectedDetail.answers?.[qid])}
+                          {formatAnswer(
+                            selectedDetail.answers?.[qid],
+                            qid,
+                            (selectedDetail.question_texts ?? {})[qid] ?? qtext
+                          )}
                         </AccentOutlineBox>
                       ))}
                   </>

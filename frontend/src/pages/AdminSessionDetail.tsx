@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { VStack, Heading, Text, Box, Button, HStack, Tag } from '@chakra-ui/react';
 import { ArrowBackIcon } from '@chakra-ui/icons';
-import { formatPersonalInfoLines } from '../utils/personalInfo';
+import {
+  buildPersonalInfoEntries,
+  formatPersonalInfoLines,
+  isPersonalInfoValue,
+} from '../utils/personalInfo';
 import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionDetail {
@@ -23,6 +27,7 @@ interface SessionDetail {
 interface TemplateItem {
   id: string;
   label: string;
+  type?: string;
 }
 
 /** 管理画面: セッション詳細。 */
@@ -55,9 +60,23 @@ export default function AdminSessionDetail() {
 
   if (!detail) return null; // ローディング表示を追加しても良い
 
-  const formatAnswer = (itemId: string, answer: any) => {
+  const isPersonalInfoEntry = (
+    itemId: string,
+    label: string | undefined,
+    value: any,
+    itemType?: string
+  ) => {
+    if (itemType === 'personal_info') return true;
+    if (itemId === 'personal_info') return true;
+    if (label && label.includes('患者基本情報')) return true;
+    if (isPersonalInfoValue(value)) return true;
+    return false;
+  };
+
+  const formatAnswer = (itemId: string, answer: any, label?: string, itemType?: string) => {
     const itemMeta = items.find((it) => it.id === itemId);
-    if (itemMeta?.type === 'personal_info') {
+    const effectiveType = itemType ?? itemMeta?.type;
+    if (isPersonalInfoEntry(itemId, label, answer, effectiveType)) {
       const lines = formatPersonalInfoLines(answer);
       return (
         <VStack align="stretch" spacing={1}>
@@ -90,17 +109,33 @@ export default function AdminSessionDetail() {
     }
   };
 
+  const genderLabel = (value: string) => {
+    switch (value) {
+      case 'male':
+        return '男性';
+      case 'female':
+        return '女性';
+      case 'other':
+        return 'その他';
+      default:
+        return value || '未設定';
+    }
+  };
+
   /** サマリー文字列を改行付きで整形する。 */
   const formatSummaryText = (summary: string) => {
     return summary.replace(/^要約:\s*/, '').replace(/,\s*/g, '\n');
   };
 
   const questionTexts = detail.question_texts ?? {};
-  const baseEntries = items.map((it) => ({
-    id: it.id,
-    label: questionTexts[it.id] ?? it.label,
-    answer: detail.answers[it.id],
-  }));
+  const baseEntries = items
+    .map((it) => ({
+      id: it.id,
+      label: questionTexts[it.id] ?? it.label,
+      answer: detail.answers[it.id],
+      type: it.type,
+    }))
+    .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type));
   const templateIds = new Set(items.map((it) => it.id));
   const extraIds = Array.from(
     new Set([
@@ -110,12 +145,21 @@ export default function AdminSessionDetail() {
   )
     .filter((id) => !templateIds.has(id) && !id.startsWith('llm_'))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const additionalEntries = extraIds.map((id) => ({
-    id,
-    label: questionTexts[id] ?? id,
-    answer: detail.answers[id],
-  }));
+  const additionalEntries = extraIds
+    .map((id) => ({
+      id,
+      label: questionTexts[id] ?? id,
+      answer: detail.answers[id],
+      type: undefined as string | undefined,
+    }))
+    .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer));
   const questionEntries = [...baseEntries, ...additionalEntries];
+
+  const personalInfoEntries = buildPersonalInfoEntries(detail.answers?.personal_info, {
+    defaults: { name: detail.patient_name ?? '' },
+    skipKeys: ['name'],
+    hideEmpty: detail.visit_type !== 'initial',
+  });
 
   return (
     <VStack align="stretch" spacing={6}>
@@ -138,6 +182,9 @@ export default function AdminSessionDetail() {
             <strong>生年月日:</strong> {detail.dob}
           </Text>
           <Text>
+            <strong>性別:</strong> {genderLabel(detail.gender)}
+          </Text>
+          <Text>
             <strong>受診種別:</strong> {visitTypeLabel(detail.visit_type)}
           </Text>
           {/* テンプレートIDの表示は削除 */}
@@ -149,7 +196,15 @@ export default function AdminSessionDetail() {
               {detail.interrupted ? "中断" : "完了"}
             </Tag>
           </HStack>
-
+          {personalInfoEntries.length > 0 && (
+            <VStack align="stretch" spacing={1} pt={2}>
+              {personalInfoEntries.map((entry) => (
+                <Text key={entry.key}>
+                  <strong>{entry.label}:</strong> {entry.value}
+                </Text>
+              ))}
+            </VStack>
+          )}
         </VStack>
       </Box>
       <VStack align="stretch" spacing={4}>
@@ -159,7 +214,7 @@ export default function AdminSessionDetail() {
             <Text fontWeight="bold" mb={1}>
               {entry.label}
             </Text>
-            {formatAnswer(entry.id, entry.answer)}
+            {formatAnswer(entry.id, entry.answer, entry.label, entry.type)}
           </Box>
         ))}
       </VStack>
@@ -174,7 +229,7 @@ export default function AdminSessionDetail() {
                 <Text fontWeight="bold" mb={1}>
                   {questionTexts[qid] ?? qtext}
                 </Text>
-                {formatAnswer(qid, detail.answers[qid])}
+                {formatAnswer(qid, detail.answers[qid], questionTexts[qid] ?? qtext)}
               </Box>
             ))}
         </VStack>
