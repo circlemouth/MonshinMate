@@ -1,0 +1,64 @@
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 3be1f9b..0000000 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@
+-ACCESS_TOKEN_EXPIRE_MINUTES = 15
++ACCESS_TOKEN_EXPIRE_MINUTES = 15
++MAX_PASSWORD_BYTES = 72
++
++
++def _ensure_password_max_length(password: str, *, context: str = "パスワード") -> None:
++    """bcrypt の 72 バイト制限を超えないように入力長を検証する。"""
++    try:
++        byte_length = len(password.encode("utf-8"))
++    except UnicodeEncodeError as exc:
++        raise HTTPException(
++            status_code=400,
++            detail=f"{context}に使用できない文字が含まれています。",
++        ) from exc
++    if byte_length > MAX_PASSWORD_BYTES:
++        raise HTTPException(
++            status_code=400,
++            detail=f"{context}は最大72バイト（概ね72文字）まで設定できます。それを超える値は使用できません。",
++        )
+@@
+ def admin_change_password(payload: AdminPasswordChangeRequest) -> dict:
+     """現在のパスワードを検証したあとで新しいパスワードに変更する。"""
++    _ensure_password_max_length(payload.current_password, context="現在のパスワード")
+     if len(payload.new_password) < 8:
+         raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
++    _ensure_password_max_length(payload.new_password, context="新しいパスワード")
+     admin_user = get_user_by_username("admin")
+     if not admin_user or not verify_password(payload.current_password, admin_user["hashed_password"]):
+         try:
+@@
+ def admin_login(payload: AdminLoginRequest) -> dict:
+     """管理画面へのログイン。パスワード検証のみ。"""
++    _ensure_password_max_length(payload.password)
+     admin_user = get_user_by_username("admin")
+     if not admin_user or not verify_password(payload.password, admin_user["hashed_password"]):
+         try:
+@@
+ def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
+     """リセットトークンを検証し、パスワードを更新する。"""
+     try:
+         decoded_token = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
+         username: str | None = decoded_token.get("sub")
+@@
+-    if len(payload.new_password) < 8:
+-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
++    if len(payload.new_password) < 8:
++        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
++    _ensure_password_max_length(payload.new_password, context="新しいパスワード")
+@@
+ def emergency_password_reset(payload: EmergencyPasswordResetRequest) -> dict:
+@@
+-    if len(payload.new_password) < 8:
+-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
++    if len(payload.new_password) < 8:
++        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
++    _ensure_password_max_length(payload.new_password, context="新しいパスワード")
+@@
+-    update_password("admin", payload.new_password)
++    update_password("admin", payload.new_password)
