@@ -129,6 +129,7 @@ export default function App() {
 
   const isChatPage = location.pathname === '/chat';
   const isAdminPage = location.pathname.startsWith('/admin');
+  const isAdditionalQuestionPage = location.pathname === '/questions';
 
   useAutoFontSize(systemNameRef, isAdminPage ? '管理画面' : displayName, { minSize: 12 });
 
@@ -251,10 +252,10 @@ export default function App() {
         </Routes>
       </Box>
 
-      {!isChatPage && !isAdminPage && (
+      {isAdditionalQuestionPage && (
         <Box as="footer" mt={10} color="fg.muted" textAlign="center" pb={2}>
           <Box fontSize="sm">
-            本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。
+            質問文はローカルAIが生成しています。分かる範囲でご回答をお願いします。
           </Box>
           <Text mt={1} fontSize="xs" color="fg.accent">MonshinMate</Text>
         </Box>
