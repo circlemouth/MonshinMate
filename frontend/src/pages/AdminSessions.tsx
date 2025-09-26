@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import {
   Table,
   Thead,
@@ -39,6 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogBody,
   AlertDialogFooter,
+  SimpleGrid,
 } from '@chakra-ui/react';
 import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
@@ -355,6 +356,57 @@ export default function AdminSessions() {
         hideEmpty: selectedDetail.visit_type !== 'initial',
       })
     : [];
+
+  type ModalInfoItem = {
+    key: string;
+    label: string;
+    value: ReactNode;
+  };
+
+  const normalizedModalPersonalEntries: ModalInfoItem[] = personalInfoEntriesForModal.map((entry) => ({
+    key: entry.key,
+    label: entry.label,
+    value: entry.value && entry.value !== '' ? entry.value : '未設定',
+  }));
+
+  const modalStatusLabel = selectedDetail?.interrupted ? '中断' : '完了';
+  const modalStatusColor = selectedDetail?.interrupted ? 'orange' : 'green';
+  const consultationTimestampForModal = selectedDetail?.finalized_at ?? selectedDetail?.started_at;
+  const consultationDateTextForModal = consultationTimestampForModal
+    ? formatDate(consultationTimestampForModal)
+    : '未取得';
+
+  const modalPatientInfoItems: ModalInfoItem[] = selectedDetail
+    ? [
+        {
+          key: 'dob',
+          label: '生年月日',
+          value: selectedDetail.dob && selectedDetail.dob !== '' ? selectedDetail.dob : '未設定',
+        },
+        {
+          key: 'gender',
+          label: '性別',
+          value: genderLabel(selectedDetail.gender),
+        },
+        {
+          key: 'visitType',
+          label: '受診種別',
+          value: visitTypeLabel(selectedDetail.visit_type),
+        },
+        ...normalizedModalPersonalEntries,
+      ]
+    : [];
+
+  const renderInfoValue = (value: ReactNode) => {
+    if (typeof value === 'string') {
+      return (
+        <Text fontSize="md" color="gray.900" _dark={{ color: 'gray.100' }}>
+          {value}
+        </Text>
+      );
+    }
+    return value;
+  };
 
   const reloadWithCurrentFilters = () => {
     loadSessions({ patientName, dob, startDate, endDate });
@@ -749,41 +801,47 @@ export default function AdminSessions() {
             )}
             {!loading && selectedDetail && (
               <VStack align="stretch" spacing={4}>
-                <Box>
-                  <Heading size="sm" mb={2}>
-                    患者情報
-                  </Heading>
-                  <VStack align="stretch" spacing={1}>
-                    <Text>
-                      <strong>患者名:</strong> {selectedDetail.patient_name}
-                    </Text>
-                    <Text>
-                      <strong>生年月日:</strong> {selectedDetail.dob}
-                    </Text>
-                    <Text>
-                      <strong>性別:</strong> {genderLabel(selectedDetail.gender)}
-                    </Text>
-                    <Text>
-                      <strong>受診種別:</strong> {visitTypeLabel(selectedDetail.visit_type)}
-                    </Text>
-                    {/* テンプレートIDの表示は削除 */}
-                    <HStack spacing={2}>
-                      <Text>
-                        <strong>問診日時:</strong> {formatDate(selectedDetail.started_at ?? selectedDetail.finalized_at)}
-                      </Text>
-                      <Tag colorScheme={selectedDetail.interrupted ? "orange" : "green"} variant="subtle">
-                        {selectedDetail.interrupted ? "中断" : "完了"}
-                      </Tag>
-                    </HStack>
-                    {personalInfoEntriesForModal.length > 0 && (
-                      <VStack align="stretch" spacing={1} pt={2}>
-                        {personalInfoEntriesForModal.map((entry) => (
-                          <Text key={entry.key}>
-                            <strong>{entry.label}:</strong> {entry.value}
-                          </Text>
-                        ))}
+                <Box borderWidth="1px" borderRadius="md" p={4}>
+                  <VStack align="stretch" spacing={4}>
+                    <Flex
+                      direction={{ base: 'column', md: 'row' }}
+                      justify="space-between"
+                      align={{ base: 'flex-start', md: 'flex-end' }}
+                      gap={3}
+                    >
+                      <Box>
+                        <Heading size="sm" mb={1}>
+                          患者情報
+                        </Heading>
+                        <Text fontSize="lg" fontWeight="semibold">
+                          {selectedDetail.patient_name && selectedDetail.patient_name !== ''
+                            ? selectedDetail.patient_name
+                            : '未設定'}
+                        </Text>
+                      </Box>
+                      <VStack align={{ base: 'flex-start', md: 'flex-end' }} spacing={1}>
+                        <Text fontSize="xs" color="gray.500">
+                          問診日時
+                        </Text>
+                        <HStack spacing={2}>
+                          <Text fontSize="sm">{consultationDateTextForModal}</Text>
+                          <Tag colorScheme={modalStatusColor} variant="subtle">
+                            {modalStatusLabel}
+                          </Tag>
+                        </HStack>
                       </VStack>
-                    )}
+                    </Flex>
+
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacingX={6} spacingY={3}>
+                      {modalPatientInfoItems.map((item) => (
+                        <Box key={item.key}>
+                          <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase">
+                            {item.label}
+                          </Text>
+                          <Box mt={1}>{renderInfoValue(item.value)}</Box>
+                        </Box>
+                      ))}
+                    </SimpleGrid>
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>

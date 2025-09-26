@@ -1,6 +1,16 @@
-import { useEffect, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { VStack, Heading, Text, Box, Button, HStack, Tag } from '@chakra-ui/react';
+import {
+  VStack,
+  Heading,
+  Text,
+  Box,
+  Button,
+  HStack,
+  Tag,
+  SimpleGrid,
+  Flex,
+} from '@chakra-ui/react';
 import { ArrowBackIcon } from '@chakra-ui/icons';
 import {
   buildPersonalInfoEntries,
@@ -22,6 +32,7 @@ interface SessionDetail {
   started_at?: string | null;
   finalized_at?: string | null;
   interrupted?: boolean;
+  gender?: string | null;
 }
 
 interface TemplateItem {
@@ -161,6 +172,55 @@ export default function AdminSessionDetail() {
     hideEmpty: detail.visit_type !== 'initial',
   });
 
+  type InfoItem = {
+    key: string;
+    label: string;
+    value: ReactNode;
+  };
+
+  const normalizedPersonalEntries: InfoItem[] = personalInfoEntries.map((entry) => ({
+    key: entry.key,
+    label: entry.label,
+    value: entry.value && entry.value !== '' ? entry.value : '未設定',
+  }));
+
+  const statusLabel = detail.interrupted ? '中断' : '完了';
+  const statusColor = detail.interrupted ? 'orange' : 'green';
+  const consultationTimestamp = detail.finalized_at ?? detail.started_at;
+  const consultationDateText = consultationTimestamp
+    ? formatDate(consultationTimestamp)
+    : '未取得';
+
+  const patientInfoItems: InfoItem[] = [
+    {
+      key: 'dob',
+      label: '生年月日',
+      value: detail.dob && detail.dob !== '' ? detail.dob : '未設定',
+    },
+    {
+      key: 'gender',
+      label: '性別',
+      value: genderLabel(detail.gender ?? ''),
+    },
+    {
+      key: 'visitType',
+      label: '受診種別',
+      value: visitTypeLabel(detail.visit_type),
+    },
+    ...normalizedPersonalEntries,
+  ];
+
+  const renderInfoValue = (value: ReactNode) => {
+    if (typeof value === 'string') {
+      return (
+        <Text fontSize="md" color="gray.900" _dark={{ color: 'gray.100' }}>
+          {value}
+        </Text>
+      );
+    }
+    return value;
+  };
+
   return (
     <VStack align="stretch" spacing={6}>
       <HStack justifyContent="space-between">
@@ -171,40 +231,44 @@ export default function AdminSessionDetail() {
       </HStack>
 
       <Box borderWidth="1px" borderRadius="md" p={4}>
-        <Heading size="md" mb={3}>
-          患者情報
-        </Heading>
-        <VStack align="stretch" spacing={2}>
-          <Text>
-            <strong>患者名:</strong> {detail.patient_name}
-          </Text>
-          <Text>
-            <strong>生年月日:</strong> {detail.dob}
-          </Text>
-          <Text>
-            <strong>性別:</strong> {genderLabel(detail.gender)}
-          </Text>
-          <Text>
-            <strong>受診種別:</strong> {visitTypeLabel(detail.visit_type)}
-          </Text>
-          {/* テンプレートIDの表示は削除 */}
-          <HStack spacing={2}>
-            <Text>
-              <strong>問診日時:</strong> {formatDate(detail.started_at ?? detail.finalized_at)}
-            </Text>
-            <Tag colorScheme={detail.interrupted ? "orange" : "green"} variant="subtle">
-              {detail.interrupted ? "中断" : "完了"}
-            </Tag>
-          </HStack>
-          {personalInfoEntries.length > 0 && (
-            <VStack align="stretch" spacing={1} pt={2}>
-              {personalInfoEntries.map((entry) => (
-                <Text key={entry.key}>
-                  <strong>{entry.label}:</strong> {entry.value}
-                </Text>
-              ))}
+        <VStack align="stretch" spacing={4}>
+          <Flex
+            direction={{ base: 'column', md: 'row' }}
+            justify="space-between"
+            align={{ base: 'flex-start', md: 'flex-end' }}
+            gap={3}
+          >
+            <Box>
+              <Heading size="md" mb={1}>
+                患者情報
+              </Heading>
+              <Text fontSize="xl" fontWeight="semibold">
+                {detail.patient_name && detail.patient_name !== '' ? detail.patient_name : '未設定'}
+              </Text>
+            </Box>
+            <VStack align={{ base: 'flex-start', md: 'flex-end' }} spacing={1}>
+              <Text fontSize="sm" color="gray.500">
+                問診日時
+              </Text>
+              <HStack spacing={2}>
+                <Text fontSize="md">{consultationDateText}</Text>
+                <Tag colorScheme={statusColor} variant="subtle">
+                  {statusLabel}
+                </Tag>
+              </HStack>
             </VStack>
-          )}
+          </Flex>
+
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacingX={8} spacingY={3}>
+            {patientInfoItems.map((item) => (
+              <Box key={item.key}>
+                <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase">
+                  {item.label}
+                </Text>
+                <Box mt={1}>{renderInfoValue(item.value)}</Box>
+              </Box>
+            ))}
+          </SimpleGrid>
         </VStack>
       </Box>
       <VStack align="stretch" spacing={4}>

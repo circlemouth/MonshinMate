@@ -1014,3 +1014,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で `personal_info` 項目をテンプレート編集UIから除外しつつ既存データは保持できるようにし、保存時に自動で元の位置へ復元するロジックを追加。
 - [x] ドキュメント更新: `docs/admin_user_manual.md` に患者基本情報が固定UIで必須入力されテンプレート一覧には表示されない旨を追記。
 - [x] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 127. 管理画面問診結果の患者情報レイアウト整理（2025-09-26）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessionDetail.tsx` の患者情報カードを2段組の情報グリッドへ刷新し、患者名・問診日時・状態タグをヘッダーにまとめて視認性を向上。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminSessions.tsx` のダッシュボード詳細モーダルでも同様のグリッドレイアウトを適用し、個人情報項目を一目で確認できるよう整列。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（チャンクサイズ警告のみ、ビルド成功）。
