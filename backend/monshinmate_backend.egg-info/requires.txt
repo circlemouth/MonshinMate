@@ -10,3 +10,4 @@ reportlab
 python-dotenv
 couchdb
 python-multipart
+bcrypt<4

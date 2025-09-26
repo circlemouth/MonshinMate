@@ -365,6 +365,7 @@ export default function AdminTemplates() {
             <Td />
             <Td />
             <Td />
+            <Td />
           </Tr>
         );
         if (fi.followups) {
@@ -862,6 +863,21 @@ export default function AdminTemplates() {
       setSelectedItemId(updated.length > 0 ? updated[0].id : null);
     }
     markDirty();
+  };
+
+  const confirmRemoveItem = async (index: number) => {
+    const target = items[index];
+    if (!target) return;
+    const label = target.label?.trim() || '名称未設定';
+    const confirmed = await confirm({
+      title: `問診項目「${label}」を削除しますか？`,
+      description: '削除すると元に戻せません。',
+      confirmText: '削除する',
+      cancelText: 'キャンセル',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    await removeItem(index);
   };
 
   const saveTemplate = async () => {
@@ -1447,6 +1463,7 @@ export default function AdminTemplates() {
                     <Tr>
                       <Th width="2.5rem">並び替え</Th>
                       <Th>問診内容</Th>
+                      <Th textAlign="center" width="4.5rem">削除</Th>
                       <Th textAlign="center" width="4.5rem">必須</Th>
                       <Th textAlign="center" width="4.5rem">初診</Th>
                       <Th textAlign="center" width="4.5rem">再診</Th>
@@ -1523,6 +1540,18 @@ export default function AdminTemplates() {
                               )}
                             </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                              <IconButton
+                                aria-label="問診項目を削除"
+                                icon={<DeleteIcon />}
+                                size="sm"
+                                colorScheme="red"
+                                variant="ghost"
+                                onClick={() => {
+                                  void confirmRemoveItem(idx);
+                                }}
+                              />
+                            </Td>
+                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 isChecked={item.required}
                                 size="sm"
@@ -1549,7 +1578,7 @@ export default function AdminTemplates() {
                           </Tr>
                           {selected && (
                             <Tr key={`editor-${item.id}`}>
-                              <Td colSpan={5} p={0}>
+                              <Td colSpan={6} p={0}>
                                 <Box
                                   p={4}
                                   bg="gray.50"
@@ -1636,7 +1665,7 @@ export default function AdminTemplates() {
                                         colorScheme="red"
                                         variant="outline"
                                         onClick={() => {
-                                          void removeItem(idx);
+                                          void confirmRemoveItem(idx);
                                         }}
                                       />
                                     </HStack>
