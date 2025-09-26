@@ -785,3 +785,8 @@
 2025-09-26 10:33:54,718 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-09-26 10:33:54,938 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-09-26 10:34:01,389 INFO admin_login_success
+2025-09-26 05:43:37,318 INFO startup_admin_status exists=True is_initial=False default_pw_match=False totp_enabled=True totp_mode=reset_only db=/app/app/app.sqlite3
+2025-09-26 05:49:53,135 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=reset_only
+2025-09-26 05:49:57,589 INFO admin_login_failed
+2025-09-26 05:50:06,311 INFO admin_login_success
+2025-09-26 05:50:06,536 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=reset_only

@@ -1646,7 +1646,6 @@ export default function AdminTemplates() {
                                       )}
                                     </FormControl>
                                     {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
-                                    <HStack justifyContent="space-between">
                                     <FormControl maxW="360px">
                                       <FormLabel m={0}>入力方法</FormLabel>
                                       <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
@@ -1658,17 +1657,6 @@ export default function AdminTemplates() {
                                         <option value="image_annotation">画像注釈（タップ・線）</option>
                                       </Select>
                                     </FormControl>
-                                      <IconButton
-                                        aria-label="項目を削除"
-                                        icon={<DeleteIcon />}
-                                        size="sm"
-                                        colorScheme="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          void confirmRemoveItem(idx);
-                                        }}
-                                      />
-                                    </HStack>
                                     {item.type === 'multi' && (
                                       <Box>
                                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
@@ -1804,80 +1792,101 @@ export default function AdminTemplates() {
                                         </FormControl>
                                       </HStack>
                                     )}
-                                    {/* 性別制限（チェックボックス + プッシュボタン） */}
-                                    <FormControl alignSelf="flex-start">
-                                      <Checkbox
-                                        isChecked={item.gender_enabled}
-                                        onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
-                                      >
-                                        性別で表示を制限
-                                      </Checkbox>
-                                      {item.gender_enabled && (
-                                        <HStack mt={2}>
-                                          <Button
-                                            variant={item.gender === 'male' ? 'solid' : 'outline'}
-                                            colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
-                                            onClick={() => {
-                                              if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                              updateItem(idx, 'gender', 'male' as any);
-                                            }}
-                                          >
-                                            男性のみに質問
-                                          </Button>
-                                          <Button
-                                            variant={item.gender === 'female' ? 'solid' : 'outline'}
-                                            colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
-                                            onClick={() => {
-                                              if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                              updateItem(idx, 'gender', 'female' as any);
-                                            }}
-                                          >
-                                            女性のみに質問
-                                          </Button>
-                                        </HStack>
-                                      )}
-                                    </FormControl>
-                                    {/* 年齢制限（範囲スライダーに統一） */}
-                                    <FormControl alignSelf="flex-start">
-                                      <HStack justifyContent="space-between" w="full">
+                                    {/* 表示制限（性別・年齢） */}
+                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
+                                      <FormControl alignSelf="flex-start">
                                         <Checkbox
-                                          isChecked={item.age_enabled}
-                                          onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
+                                          isChecked={item.gender_enabled}
+                                          onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
                                         >
-                                          年齢で表示を制限
+                                          性別で表示を制限
                                         </Checkbox>
-                                        {item.age_enabled && (
-                                          <Text fontSize="sm" color="gray.600">
-                                            {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
-                                          </Text>
-                                        )}
-                                      </HStack>
-                                      {item.age_enabled && (
-                                        <Box px={2} mt={2} display="flex" justifyContent="center">
-                                          <HStack w="66%" spacing={2} alignItems="center">
-                                            <Text fontSize="sm" color="gray.600">0歳</Text>
-                                            <RangeSlider
-                                              flex="1"
-                                              min={0}
-                                              max={110}
-                                              colorScheme="primary"
-                                              value={[item.min_age ?? 0, item.max_age ?? 110]}
-                                              onChange={(vals) => {
-                                                const [minV, maxV] = vals as [number, number];
-                                                setItemAgeRange(idx, minV, maxV);
+                                        {item.gender_enabled && (
+                                          <HStack mt={2}>
+                                            <Button
+                                              variant={item.gender === 'male' ? 'solid' : 'outline'}
+                                              colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
+                                              onClick={() => {
+                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
+                                                updateItem(idx, 'gender', 'male' as any);
                                               }}
                                             >
-                                              <RangeSliderTrack>
-                                                <RangeSliderFilledTrack />
-                                              </RangeSliderTrack>
-                                              <RangeSliderThumb index={0} />
-                                              <RangeSliderThumb index={1} />
-                                            </RangeSlider>
-                                            <Text fontSize="sm" color="gray.600">110歳</Text>
+                                              男性のみに質問
+                                            </Button>
+                                            <Button
+                                              variant={item.gender === 'female' ? 'solid' : 'outline'}
+                                              colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
+                                              onClick={() => {
+                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
+                                                updateItem(idx, 'gender', 'female' as any);
+                                              }}
+                                            >
+                                              女性のみに質問
+                                            </Button>
                                           </HStack>
-                                        </Box>
-                                      )}
-                                    </FormControl>
+                                        )}
+                                      </FormControl>
+                                      <FormControl alignSelf="flex-start">
+                                        <HStack justifyContent="space-between" w="full">
+                                          <Checkbox
+                                            isChecked={item.age_enabled}
+                                            onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
+                                          >
+                                            年齢で表示を制限
+                                          </Checkbox>
+                                          {item.age_enabled && (
+                                            <Text fontSize="sm" color="gray.600">
+                                              {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
+                                            </Text>
+                                          )}
+                                        </HStack>
+                                        {item.age_enabled && (
+                                          <Box px={2} mt={2} display="flex" justifyContent="center">
+                                            <HStack w="66%" spacing={2} alignItems="center">
+                                              <Text fontSize="sm" color="gray.600">0歳</Text>
+                                              <RangeSlider
+                                                flex="1"
+                                                min={0}
+                                                max={110}
+                                                colorScheme="primary"
+                                                value={[item.min_age ?? 0, item.max_age ?? 110]}
+                                                onChange={(vals) => {
+                                                  const [minV, maxV] = vals as [number, number];
+                                                  setItemAgeRange(idx, minV, maxV);
+                                                }}
+                                              >
+                                                <RangeSliderTrack>
+                                                  <RangeSliderFilledTrack />
+                                                </RangeSliderTrack>
+                                                <RangeSliderThumb index={0} />
+                                                <RangeSliderThumb index={1} />
+                                              </RangeSlider>
+                                              <Text fontSize="sm" color="gray.600">110歳</Text>
+                                            </HStack>
+                                          </Box>
+                                        )}
+                                      </FormControl>
+                                    </SimpleGrid>
+                                    <HStack justifyContent="flex-end" spacing={3} mt={2}>
+                                      <IconButton
+                                        aria-label="項目を削除"
+                                        icon={<DeleteIcon />}
+                                        size="sm"
+                                        colorScheme="red"
+                                        variant="outline"
+                                        onClick={() => {
+                                          void confirmRemoveItem(idx);
+                                        }}
+                                      />
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        colorScheme="gray"
+                                        onClick={() => setSelectedItemId(null)}
+                                      >
+                                        編集終了
+                                      </Button>
+                                    </HStack>
                                   
                                   </VStack>
                                 </Box>
@@ -2098,83 +2107,84 @@ export default function AdminTemplates() {
                     再診に含める
                   </Checkbox>
                 </HStack>
-                {/* 性別制限（チェックボックス + プッシュボタン） */}
-                <FormControl alignSelf="flex-start">
-                  <Checkbox
-                    isChecked={newItem.gender_enabled}
-                    onChange={(e) => setNewItem({ ...newItem, gender_enabled: e.target.checked })}
-                  >
-                    性別で表示を制限
-                  </Checkbox>
-                  {newItem.gender_enabled && (
-                    <HStack mt={2}>
-                      <Button
-                        variant={newItem.gender === 'male' ? 'solid' : 'outline'}
-                        colorScheme={newItem.gender === 'male' ? 'teal' : 'gray'}
-                        onClick={() => setNewItem({ ...newItem, gender: 'male' })}
-                      >
-                        男性のみに質問
-                      </Button>
-                      <Button
-                        variant={newItem.gender === 'female' ? 'solid' : 'outline'}
-                        colorScheme={newItem.gender === 'female' ? 'teal' : 'gray'}
-                        onClick={() => setNewItem({ ...newItem, gender: 'female' })}
-                      >
-                        女性のみに質問
-                      </Button>
-                    </HStack>
-                  )}
-                </FormControl>
-                {/* 年齢制限（範囲スライダーに統一） */}
-                <FormControl alignSelf="flex-start">
-                  <HStack justifyContent="space-between" w="full">
+                {/* 表示制限（性別・年齢） */}
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
+                  <FormControl alignSelf="flex-start">
                     <Checkbox
-                      isChecked={newItem.age_enabled}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setNewItem({ ...newItem, age_enabled: true, min_age: String(newItem.min_age || 0), max_age: String(newItem.max_age || 110) });
-                        } else {
-                          setNewItem({ ...newItem, age_enabled: false });
-                        }
-                      }}
+                      isChecked={newItem.gender_enabled}
+                      onChange={(e) => setNewItem({ ...newItem, gender_enabled: e.target.checked })}
                     >
-                      年齢で表示を制限
+                      性別で表示を制限
                     </Checkbox>
-                    {newItem.age_enabled && (
-                      <Text fontSize="sm" color="gray.600">
-                        {(newItem.min_age === '' ? 0 : parseInt(newItem.min_age))} 歳 〜 {(newItem.max_age === '' ? 110 : parseInt(newItem.max_age))} 歳
-                      </Text>
-                    )}
-                  </HStack>
-                  {newItem.age_enabled && (
-                    <Box px={2} mt={2} display="flex" justifyContent="center">
-                      <HStack w="66%" spacing={2} alignItems="center">
-                        <Text fontSize="sm" color="gray.600">0歳</Text>
-                        <RangeSlider
-                          flex="1"
-                          min={0}
-                          max={110}
-                          colorScheme="primary"
-                          value={[
-                            newItem.min_age === '' ? 0 : parseInt(newItem.min_age),
-                            newItem.max_age === '' ? 110 : parseInt(newItem.max_age),
-                          ]}
-                          onChange={(vals) => {
-                            const [minV, maxV] = vals as [number, number];
-                            setNewItem({ ...newItem, min_age: String(minV), max_age: String(maxV) });
-                          }}
+                    {newItem.gender_enabled && (
+                      <HStack mt={2}>
+                        <Button
+                          variant={newItem.gender === 'male' ? 'solid' : 'outline'}
+                          colorScheme={newItem.gender === 'male' ? 'teal' : 'gray'}
+                          onClick={() => setNewItem({ ...newItem, gender: 'male' })}
                         >
-                          <RangeSliderTrack>
-                            <RangeSliderFilledTrack />
-                          </RangeSliderTrack>
-                          <RangeSliderThumb index={0} />
-                          <RangeSliderThumb index={1} />
-                        </RangeSlider>
-                        <Text fontSize="sm" color="gray.600">110歳</Text>
+                          男性のみに質問
+                        </Button>
+                        <Button
+                          variant={newItem.gender === 'female' ? 'solid' : 'outline'}
+                          colorScheme={newItem.gender === 'female' ? 'teal' : 'gray'}
+                          onClick={() => setNewItem({ ...newItem, gender: 'female' })}
+                        >
+                          女性のみに質問
+                        </Button>
                       </HStack>
-                    </Box>
-                  )}
-                </FormControl>
+                    )}
+                  </FormControl>
+                  <FormControl alignSelf="flex-start">
+                    <HStack justifyContent="space-between" w="full">
+                      <Checkbox
+                        isChecked={newItem.age_enabled}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setNewItem({ ...newItem, age_enabled: true, min_age: String(newItem.min_age || 0), max_age: String(newItem.max_age || 110) });
+                          } else {
+                            setNewItem({ ...newItem, age_enabled: false });
+                          }
+                        }}
+                      >
+                        年齢で表示を制限
+                      </Checkbox>
+                      {newItem.age_enabled && (
+                        <Text fontSize="sm" color="gray.600">
+                          {(newItem.min_age === '' ? 0 : parseInt(newItem.min_age))} 歳 〜 {(newItem.max_age === '' ? 110 : parseInt(newItem.max_age))} 歳
+                        </Text>
+                      )}
+                    </HStack>
+                    {newItem.age_enabled && (
+                      <Box px={2} mt={2} display="flex" justifyContent="center">
+                        <HStack w="66%" spacing={2} alignItems="center">
+                          <Text fontSize="sm" color="gray.600">0歳</Text>
+                          <RangeSlider
+                            flex="1"
+                            min={0}
+                            max={110}
+                            colorScheme="primary"
+                            value={[
+                              newItem.min_age === '' ? 0 : parseInt(newItem.min_age),
+                              newItem.max_age === '' ? 110 : parseInt(newItem.max_age),
+                            ]}
+                            onChange={(vals) => {
+                              const [minV, maxV] = vals as [number, number];
+                              setNewItem({ ...newItem, min_age: String(minV), max_age: String(maxV) });
+                            }}
+                          >
+                            <RangeSliderTrack>
+                              <RangeSliderFilledTrack />
+                            </RangeSliderTrack>
+                            <RangeSliderThumb index={0} />
+                            <RangeSliderThumb index={1} />
+                          </RangeSlider>
+                          <Text fontSize="sm" color="gray.600">110歳</Text>
+                        </HStack>
+                      </Box>
+                    )}
+                  </FormControl>
+                </SimpleGrid>
                 <HStack justifyContent="flex-end">
                   <Button
                     onClick={async () => {
