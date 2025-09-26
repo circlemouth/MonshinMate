@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import type { DragEvent } from 'react';
 import {
   VStack,
   FormControl,
@@ -79,6 +80,31 @@ interface Item {
 }
 
 type FollowupPathSegment = { parentId: string; optionKey: string };
+
+type OptionDragContext = (
+  | { kind: 'item'; itemIndex: number; optionIndex: number }
+  | { kind: 'new'; optionIndex: number }
+  | { kind: 'followup'; followupIndex: number; optionIndex: number }
+);
+
+const reorderList = <T,>(list: T[], from: number, to: number): T[] => {
+  const next = [...list];
+  if (from < 0 || from >= list.length) {
+    return next;
+  }
+  const [moved] = next.splice(from, 1);
+  let targetIndex = to;
+  if (to >= list.length) {
+    targetIndex = next.length;
+  } else if (from < to) {
+    targetIndex = Math.max(0, to - 1);
+  }
+  if (targetIndex < 0) targetIndex = 0;
+  if (targetIndex > next.length) targetIndex = next.length;
+  next.splice(targetIndex, 0, moved);
+  return next;
+};
+
 type HiddenPersonalInfoEntry = { path: FollowupPathSegment[]; index: number; item: Item };
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -423,6 +449,79 @@ export default function AdminTemplates() {
   };
 
   const currentFollowup = followupStack[followupStack.length - 1];
+
+  const optionDragContextRef = useRef<OptionDragContext | null>(null);
+
+  const isSameOptionContext = (a: OptionDragContext, b: OptionDragContext) => {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'item' && b.kind === 'item') {
+      return a.itemIndex === b.itemIndex;
+    }
+    if (a.kind === 'followup' && b.kind === 'followup') {
+      return a.followupIndex === b.followupIndex;
+    }
+    return true;
+  };
+
+  const handleOptionDragStart = (ctx: OptionDragContext) => (event: DragEvent<HTMLElement>) => {
+    optionDragContextRef.current = ctx;
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', '');
+    }
+  };
+
+  const handleOptionDragOver = (ctx: OptionDragContext) => (event: DragEvent<HTMLElement>) => {
+    const active = optionDragContextRef.current;
+    if (!active || !isSameOptionContext(active, ctx)) {
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleOptionDrop = (ctx: OptionDragContext) => (event: DragEvent<HTMLElement>) => {
+    const active = optionDragContextRef.current;
+    if (!active || !isSameOptionContext(active, ctx)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const from = active.optionIndex;
+    const to = ctx.optionIndex;
+    if (from === to) {
+      optionDragContextRef.current = null;
+      return;
+    }
+    if (ctx.kind === 'item') {
+      const target = items[ctx.itemIndex];
+      if (!target?.options) {
+        optionDragContextRef.current = null;
+        return;
+      }
+      updateItem(ctx.itemIndex, 'options', reorderList(target.options, from, to));
+    } else if (ctx.kind === 'new') {
+      setNewItem((prev) => ({
+        ...prev,
+        options: reorderList(prev.options, from, to),
+      }));
+    } else if (ctx.kind === 'followup') {
+      const options = currentFollowup?.items[ctx.followupIndex]?.options;
+      if (!options) {
+        optionDragContextRef.current = null;
+        return;
+      }
+      updateFollowupItem(ctx.followupIndex, 'options', reorderList(options, from, to));
+    }
+    optionDragContextRef.current = null;
+  };
+
+  const handleOptionDragEnd = () => {
+    optionDragContextRef.current = null;
+  };
 
   const updateFollowupItem = (index: number, field: keyof Item, value: any) => {
     if (!currentFollowup) return;
@@ -1660,10 +1759,35 @@ export default function AdminTemplates() {
                                     {item.type === 'multi' && (
                                       <Box>
                                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
-                                        <VStack align="stretch">
+                                        <VStack
+                                          align="stretch"
+                                          onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
+                                          onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
+                                        >
                                           {item.options?.map((opt, optIdx) => (
-                                            <HStack key={optIdx}>
+                                            <HStack
+                                              key={optIdx}
+                                              spacing={2}
+                                              align="center"
+                                              onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                              onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                            >
+                                              <Box
+                                                aria-label="ドラッグして順序を変更"
+                                                cursor="grab"
+                                                color="gray.500"
+                                                draggable
+                                                onDragStart={handleOptionDragStart({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                                onDragEnd={handleOptionDragEnd}
+                                                role="button"
+                                                tabIndex={-1}
+                                                lineHeight={0}
+                                                pr={1}
+                                              >
+                                                <DragHandleIcon />
+                                              </Box>
                                               <Input
+                                                flex="1"
                                                 value={opt}
                                                 onChange={(e) => {
                                                   const newOptions = [...(item.options || [])];
@@ -1728,12 +1852,14 @@ export default function AdminTemplates() {
                                               const newOptions = [...(item.options || []), ''];
                                               updateItem(idx, 'options', newOptions);
                                             }}
-                                            isDisabled={item.options?.some(opt => !opt.trim())}
+                                            isDisabled={item.options?.some((option) => !option.trim())}
                                             alignSelf="flex-end"
                                           >
                                             選択肢を追加
                                           </Button>
                                         </VStack>
+
+
                                       </Box>
                                     )}
                                     {item.type === 'yesno' && (
@@ -2023,10 +2149,35 @@ export default function AdminTemplates() {
                 {['multi'].includes(newItem.type) && (
                   <FormControl>
                     <FormLabel>選択肢</FormLabel>
-                    <VStack align="stretch">
+                    <VStack
+                      align="stretch"
+                      onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: newItem.options.length })}
+                      onDrop={handleOptionDrop({ kind: 'new', optionIndex: newItem.options.length })}
+                    >
                       {newItem.options.map((opt, optIdx) => (
-                        <HStack key={optIdx}>
+                        <HStack
+                          key={optIdx}
+                          spacing={2}
+                          align="center"
+                          onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: optIdx })}
+                          onDrop={handleOptionDrop({ kind: 'new', optionIndex: optIdx })}
+                        >
+                          <Box
+                            aria-label="ドラッグして順序を変更"
+                            cursor="grab"
+                            color="gray.500"
+                            draggable
+                            onDragStart={handleOptionDragStart({ kind: 'new', optionIndex: optIdx })}
+                            onDragEnd={handleOptionDragEnd}
+                            role="button"
+                            tabIndex={-1}
+                            lineHeight={0}
+                            pr={1}
+                          >
+                            <DragHandleIcon />
+                          </Box>
                           <Input
+                            flex="1"
                             value={opt}
                             onChange={(e) => {
                               const newOptions = [...newItem.options];
@@ -2057,6 +2208,10 @@ export default function AdminTemplates() {
                         選択肢を追加
                       </Button>
                     </VStack>
+
+
+
+
                   </FormControl>
                 )}
                 {newItem.type === 'multi' && (
@@ -2538,10 +2693,35 @@ export default function AdminTemplates() {
                     {fi.type === 'multi' && (
                       <Box mt={2}>
                         <FormLabel m={0} mb={2}>選択肢</FormLabel>
-                        <VStack align="stretch">
+                        <VStack
+                          align="stretch"
+                          onDragOver={handleOptionDragOver({ kind: 'followup', followupIndex: fIdx, optionIndex: fi.options?.length ?? 0 })}
+                          onDrop={handleOptionDrop({ kind: 'followup', followupIndex: fIdx, optionIndex: fi.options?.length ?? 0 })}
+                        >
                           {fi.options?.map((opt, oIdx) => (
-                            <HStack key={oIdx}>
+                            <HStack
+                              key={oIdx}
+                              spacing={2}
+                              align="center"
+                              onDragOver={handleOptionDragOver({ kind: 'followup', followupIndex: fIdx, optionIndex: oIdx })}
+                              onDrop={handleOptionDrop({ kind: 'followup', followupIndex: fIdx, optionIndex: oIdx })}
+                            >
+                              <Box
+                                aria-label="ドラッグして順序を変更"
+                                cursor="grab"
+                                color="gray.500"
+                                draggable
+                                onDragStart={handleOptionDragStart({ kind: 'followup', followupIndex: fIdx, optionIndex: oIdx })}
+                                onDragEnd={handleOptionDragEnd}
+                                role="button"
+                                tabIndex={-1}
+                                lineHeight={0}
+                                pr={1}
+                              >
+                                <DragHandleIcon />
+                              </Box>
                               <Input
+                                flex="1"
                                 value={opt}
                                 onChange={(e) => {
                                   const newOptions = [...(fi.options || [])];
@@ -2621,6 +2801,7 @@ export default function AdminTemplates() {
                             選択肢を追加
                           </Button>
                         </VStack>
+
                       </Box>
                     )}
                     {fi.type === 'yesno' && (
