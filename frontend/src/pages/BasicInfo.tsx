@@ -105,6 +105,12 @@ export default function BasicInfo() {
     navigate('/', { replace: true });
   };
 
+  type SessionCreateResponse = {
+    id: string;
+    questionnaire_id?: string;
+    answers?: Record<string, any>;
+  };
+
   const handleNext = async () => {
     setAttempted(true);
     const errs: string[] = [];
@@ -138,6 +144,8 @@ export default function BasicInfo() {
       sessionStorage.removeItem('personal_info');
     }
 
+    sessionStorage.removeItem('questionnaire_id');
+
     try {
       sessionStorage.setItem('visit_type', visitType);
       const payload = {
@@ -153,9 +161,11 @@ export default function BasicInfo() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('failed');
-      const data = await res.json();
+      const data: SessionCreateResponse = await res.json();
       sessionStorage.setItem('session_id', data.id);
       sessionStorage.setItem('answers', JSON.stringify(data.answers ?? {}));
+      const questionnaireId = data.questionnaire_id || 'default';
+      sessionStorage.setItem('questionnaire_id', questionnaireId);
       navigate('/questionnaire');
     } catch (error) {
       notify({

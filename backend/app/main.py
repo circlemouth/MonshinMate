@@ -2532,6 +2532,7 @@ class SessionCreateResponse(BaseModel):
     dob: str
     gender: str
     visit_type: str
+    questionnaire_id: str
     answers: dict[str, Any]
     remaining_items: list[str]
     completion_status: str
@@ -2659,6 +2660,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
         dob=session.dob,
         gender=session.gender,
         visit_type=session.visit_type,
+        questionnaire_id=session.questionnaire_id,
         answers=session.answers,
         remaining_items=session.remaining_items,
         completion_status=session.completion_status,

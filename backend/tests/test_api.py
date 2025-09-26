@@ -220,6 +220,7 @@ def test_create_session() -> None:
     assert res.status_code == 200
     data = res.json()
     assert data["answers"]["chief_complaint"] == "頭痛"
+    assert data["questionnaire_id"]
     expected_personal_info = {
         "name": "山田太郎",
         "kana": "やまだたろう",
@@ -234,6 +235,7 @@ def test_create_session() -> None:
     stored = db_get_session(session_id)
     assert stored is not None
     assert stored["answers"].get("personal_info") == expected_personal_info
+    assert stored["questionnaire_id"] == data["questionnaire_id"]
 
     # 追加質問の取得と回答
     q_res = client.post(f"/sessions/{session_id}/llm-questions")

@@ -94,6 +94,7 @@ export default function QuestionnaireForm() {
   const gender = sessionStorage.getItem('gender') || '';
   const dob = sessionStorage.getItem('dob') || '';
   const age = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / 31557600000) : undefined;
+  const questionnaireIdFromSession = sessionStorage.getItem('questionnaire_id') || 'default';
   const navigate = useNavigate();
   const { notify } = useNotify();
   // removed: toast hook (no address lookup)
@@ -105,7 +106,9 @@ export default function QuestionnaireForm() {
       return;
     }
       const ageParam = age !== undefined ? `&age=${age}` : '';
-      fetch(`/questionnaires/default/template?visit_type=${visitType}&gender=${gender}${ageParam}`)
+      const genderParam = gender ? `&gender=${encodeURIComponent(gender)}` : '';
+      const encodedId = encodeURIComponent(questionnaireIdFromSession);
+      fetch(`/questionnaires/${encodedId}/template?visit_type=${visitType}${genderParam}${ageParam}`)
         .then((res) => res.json())
         .then((data) => {
           setItems(data.items);
@@ -147,7 +150,7 @@ export default function QuestionnaireForm() {
             data.llm_followup_enabled ? '1' : '0'
           );
         });
-    }, [visitType, sessionId, navigate, gender, age, patientName, personalInfoFromEntry]);
+    }, [visitType, sessionId, navigate, gender, age, patientName, personalInfoFromEntry, questionnaireIdFromSession]);
 
   useEffect(() => {
     const all = collectAllItems(items);
