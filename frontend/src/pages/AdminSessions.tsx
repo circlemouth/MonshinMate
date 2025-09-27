@@ -41,7 +41,17 @@ import {
   AlertDialogFooter,
   SimpleGrid,
 } from '@chakra-ui/react';
-import { FiDownload, FiFile, FiFileText, FiTable, FiTrash } from 'react-icons/fi';
+import {
+  FiDownload,
+  FiFile,
+  FiFileText,
+  FiTable,
+  FiTrash,
+  FiChevronLeft,
+  FiChevronRight,
+  FiChevronsLeft,
+  FiChevronsRight,
+} from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
@@ -161,6 +171,7 @@ export default function AdminSessions() {
     setSelectedSessionIds((prev) => (checked ? Array.from(new Set([...prev, id])) : prev.filter((x) => x !== id)));
   };
   const totalPages = Math.max(Math.ceil(sessions.length / PAGE_SIZE), 1);
+  const lastPageIndex = totalPages - 1;
   const paginatedSessions = sessions.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
   const displayedSessionIds = paginatedSessions.map((s) => s.id);
   const allDisplayedSelected =
@@ -567,7 +578,7 @@ export default function AdminSessions() {
             </HStack>
             <Flex align="center" justify="flex-end" wrap="wrap" gap={3}>
               {(patientName || dob || startDate || endDate) && (
-                <Text fontSize="sm" color="fg.muted">
+                <Text fontSize="sm" color="fg.muted" textAlign="center">
                   フィルタ:
                   {patientName && ` 氏名:${patientName}`}
                   {dob && ` 生年月日:${dob}`}
@@ -705,18 +716,25 @@ export default function AdminSessions() {
           </Table>
         </Box>
 
-        <HStack justifyContent="space-between" align="center" px={6} py={4} borderTopWidth="1px" borderColor="border.subtle">
-          <Text fontSize="sm" color="fg.muted">
-            全体 {sessions.length} 件中 選択 {selectedSessionIds.length} 件
-          </Text>
-          <HStack spacing={3}>
+        <VStack px={6} py={4} borderTopWidth="1px" borderColor="border.subtle" spacing={2}>
+          <HStack justifyContent="center" align="center" flexWrap="wrap" spacing={3}>
             <Button
               size="sm"
               variant="ghost"
+              leftIcon={<FiChevronsLeft />}
+              onClick={() => setPage(0)}
+              isDisabled={page === 0}
+            >
+              最初へ
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<FiChevronLeft />}
               onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
               isDisabled={page === 0}
             >
-              前のデータ
+              前へ
             </Button>
             <Text fontSize="sm" color="fg.muted">
               ページ {page + 1} / {totalPages}
@@ -724,13 +742,26 @@ export default function AdminSessions() {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setPage((prev) => Math.min(prev + 1, totalPages - 1))}
-              isDisabled={page >= totalPages - 1}
+              rightIcon={<FiChevronRight />}
+              onClick={() => setPage((prev) => Math.min(prev + 1, lastPageIndex))}
+              isDisabled={page >= lastPageIndex}
             >
-              次のデータ
+              次へ
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              rightIcon={<FiChevronsRight />}
+              onClick={() => setPage(lastPageIndex)}
+              isDisabled={page >= lastPageIndex}
+            >
+              最後へ
             </Button>
           </HStack>
-        </HStack>
+          <Text fontSize="sm" color="fg.muted" textAlign="center">
+            全問診件数： {sessions.length} 件
+          </Text>
+        </VStack>
       </Box>
 
       <Box h={6} />

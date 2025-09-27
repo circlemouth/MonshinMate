@@ -32,7 +32,19 @@ import {
   Spacer,
   useDisclosure,
 } from '@chakra-ui/react';
-import { FiCpu, FiDatabase, FiDownload, FiFile, FiFileText, FiLayers, FiTable } from 'react-icons/fi';
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiChevronsLeft,
+  FiChevronsRight,
+  FiCpu,
+  FiDatabase,
+  FiDownload,
+  FiFile,
+  FiFileText,
+  FiLayers,
+  FiTable,
+} from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
 import SystemStatusCard from '../components/SystemStatusCard';
@@ -105,8 +117,10 @@ const providerLabel = (provider?: string) => {
 };
 
 export default function AdminMain() {
+  const PAGE_SIZE = 10;
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState<boolean>(true);
+  const [page, setPage] = useState(0);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
@@ -202,7 +216,8 @@ export default function AdminMain() {
         if (av === bv) return 0;
         return av < bv ? 1 : -1;
       });
-      setSessions(sorted.slice(0, 10));
+      setSessions(sorted);
+      setPage(0);
     } catch (err) {
       console.error(err);
       setSessions([]);
@@ -317,6 +332,13 @@ export default function AdminMain() {
       setLastUpdatedAt(new Date());
     }
   }, [templatesLoading, dbLoading, llmLoading]);
+
+  useEffect(() => {
+    setPage((prev) => {
+      const maxIndex = Math.max(Math.ceil(sessions.length / PAGE_SIZE) - 1, 0);
+      return Math.min(prev, maxIndex);
+    });
+  }, [sessions.length]);
 
   const templateSummaryValue = defaultTemplateId ?? '未設定';
   const templateTone = templateError
@@ -488,6 +510,10 @@ export default function AdminMain() {
     return parts.join(' / ');
   })();
 
+  const totalPages = Math.max(Math.ceil(sessions.length / PAGE_SIZE), 1);
+  const lastPageIndex = totalPages - 1;
+  const paginatedSessions = sessions.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
   return (
     <VStack align="stretch" spacing={10} py={6} px={{ base: 0, md: 2 }}>
       <Box
@@ -500,7 +526,7 @@ export default function AdminMain() {
         p={4}
       >
         <Heading size="lg" mb={4}>
-          問診結果（最新10件）
+          問診結果
         </Heading>
         {sessionsLoading ? (
           <HStack spacing={3} align="center">
@@ -518,8 +544,9 @@ export default function AdminMain() {
             問診データがまだありません。
           </Text>
         ) : (
-          <Box overflowX="auto">
-            <Table variant="simple">
+          <>
+            <Box overflowX="auto">
+              <Table variant="simple">
               <Thead>
                 <Tr>
                   <Th>患者名</Th>
@@ -530,7 +557,7 @@ export default function AdminMain() {
                 </Tr>
               </Thead>
               <Tbody>
-                {sessions.map((s) => (
+                {paginatedSessions.map((s) => (
                   <Tr
                     key={s.id}
                     onClick={() => openPreview(s.id)}
@@ -590,13 +617,52 @@ export default function AdminMain() {
                   </Tr>
                 ))}
               </Tbody>
-            </Table>
-          </Box>
-        )}
-        {!sessionsLoading && sessions.length > 0 && (
-          <Text mt={3} fontSize="xs" color="fg.muted">
-            ※ 表示件数は問診データの最新10件です。詳細は「問診結果一覧」で確認できます。
-          </Text>
+              </Table>
+            </Box>
+            <Flex justify="center" align="center" mt={4}>
+              <HStack spacing={3}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<FiChevronsLeft />}
+                  onClick={() => setPage(0)}
+                  isDisabled={page === 0}
+                >
+                  最初へ
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<FiChevronLeft />}
+                  onClick={() => setPage((prev) => Math.max(prev - 1, 0))}
+                  isDisabled={page === 0}
+                >
+                  前へ
+                </Button>
+                <Text fontSize="sm" color="fg.muted">
+                  ページ {page + 1} / {totalPages}
+                </Text>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  rightIcon={<FiChevronRight />}
+                  onClick={() => setPage((prev) => Math.min(prev + 1, lastPageIndex))}
+                  isDisabled={page >= lastPageIndex}
+                >
+                  次へ
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  rightIcon={<FiChevronsRight />}
+                  onClick={() => setPage(lastPageIndex)}
+                  isDisabled={page >= lastPageIndex}
+                >
+                  最後へ
+                </Button>
+              </HStack>
+            </Flex>
+          </>
         )}
       </Box>
 
