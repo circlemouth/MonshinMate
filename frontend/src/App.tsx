@@ -1,4 +1,4 @@
-import { Container, Heading, Box, Flex, Spacer, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
+import { Container, Heading, Box, Flex, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import { flushQueue } from './retryQueue';
@@ -173,51 +173,57 @@ export default function App() {
           as="header"
           mb={4}
           pb={3}
-          align="center"
+          align={{ base: 'stretch', md: 'center' }}
+          direction={{ base: 'column', md: 'row' }}
+          gap={{ base: 2, md: 0 }}
           boxShadow="inset 0 -1px 0 var(--chakra-colors-border-accent)"
         >
-          {/* Logo/Icon */}
-          {logo.url && (
-            <Box w="28px" h="28px" borderRadius="full" overflow="hidden" bg="gray.100" mr={2}>
-              <img
-                src={logo.url}
-                alt="logo"
-                style={(() => {
-                  const c = logo.crop || { x: 0, y: 0, w: 1, h: 1 };
-                  const transform = `translate(${-c.x * 100}%, ${-c.y * 100}%) scale(${1 / (c.w || 1)})`;
-                  return { width: '100%', height: 'auto', transform, transformOrigin: 'top left', display: 'block' };
-                })()}
-              />
-            </Box>
-          )}
-          <Heading
-            ref={systemNameRef}
-            size="lg"
-            whiteSpace="nowrap"
-            maxW="100%"
-            minW={0}
-            flexShrink={1}
-            title={isAdminPage ? '管理画面' : displayName}
-          >
-            {isAdminPage ? '管理画面' : displayName}
-          </Heading>
-          <Spacer />
-          {isAdminPage ? (
-            <Button
-              as={RouterLink}
-              to="/"
-              onClick={logout}
-              colorScheme="primary"
-              variant="outline"
-              size="sm"
+          <Flex align="center" gap={2} minW={0} flex="1">
+            {/* Logo/Icon */}
+            {logo.url && (
+              <Box w="28px" h="28px" borderRadius="full" overflow="hidden" bg="gray.100" flexShrink={0}>
+                <img
+                  src={logo.url}
+                  alt="logo"
+                  style={(() => {
+                    const c = logo.crop || { x: 0, y: 0, w: 1, h: 1 };
+                    const transform = `translate(${-c.x * 100}%, ${-c.y * 100}%) scale(${1 / (c.w || 1)})`;
+                    return { width: '100%', height: 'auto', transform, transformOrigin: 'top left', display: 'block' };
+                  })()}
+                />
+              </Box>
+            )}
+            <Heading
+              ref={systemNameRef}
+              size={{ base: 'md', md: 'lg' }}
+              whiteSpace={{ base: 'normal', md: 'nowrap' }}
+              maxW="100%"
+              minW={0}
+              flexShrink={1}
+              wordBreak="break-word"
+              title={isAdminPage ? '管理画面' : displayName}
             >
-              問診画面に戻る
-            </Button>
-          ) : (
-            <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
-              管理画面
-            </Button>
-          )}
+              {isAdminPage ? '管理画面' : displayName}
+            </Heading>
+          </Flex>
+          <Box alignSelf={{ base: 'flex-start', md: 'center' }} mt={{ base: 2, md: 0 }}>
+            {isAdminPage ? (
+              <Button
+                as={RouterLink}
+                to="/"
+                onClick={logout}
+                colorScheme="primary"
+                variant="outline"
+                size="sm"
+              >
+                問診画面に戻る
+              </Button>
+            ) : (
+              <Button onClick={handleAdminClick} colorScheme="primary" size="sm">
+                管理画面
+              </Button>
+            )}
+          </Box>
         </Flex>
       )}
 
