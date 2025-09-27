@@ -206,7 +206,7 @@ export default function App() {
               {isAdminPage ? '管理画面' : displayName}
             </Heading>
           </Flex>
-          <Box alignSelf={{ base: 'flex-start', md: 'center' }} mt={{ base: 2, md: 0 }} ml={{ base: 0, md: 'auto' }}>
+          <Box alignSelf={{ base: 'flex-end', md: 'center' }} mt={{ base: 2, md: 0 }} ml={{ base: 0, md: 'auto' }}>
             {isAdminPage ? (
               <Button
                 as={RouterLink}
