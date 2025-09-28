@@ -1680,7 +1680,7 @@ export default function AdminTemplates() {
                               <Td colSpan={6} p={0}>
                                 <Box
                                   p={4}
-                                  bg="gray.50"
+                                  bg="white"
                                   borderWidth="1px"
                                   borderColor="neutral.200"
                                   position="relative"
@@ -2045,7 +2045,7 @@ export default function AdminTemplates() {
               position="relative"
               zIndex={1100}
               boxShadow="lg"
-              bg="accentAlpha.8"
+              bg="white"
               borderColor="border.accent"
             >
               <Heading size="md" mb={4}>
