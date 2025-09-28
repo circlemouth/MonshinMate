@@ -53,6 +53,7 @@ import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon 
 import { MdImage } from 'react-icons/md';
 import DateSelect from '../components/DateSelect';
 import AccentOutlineBox from '../components/AccentOutlineBox';
+import QuestionTreeView from '../components/QuestionTreeView';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
 import { useNotify } from '../contexts/NotificationContext';
 import { useDialog } from '../contexts/DialogContext';
@@ -254,6 +255,7 @@ export default function AdminTemplates() {
   const [templates, setTemplates] = useState<{ id: string }[]>([]);
   const [newTemplateId, setNewTemplateId] = useState('');
   const [isAddingNewItem, setIsAddingNewItem] = useState(false);
+  const [insertIndex, setInsertIndex] = useState<number | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [previewAnswers, setPreviewAnswers] = useState<Record<string, any>>({});
   // removed: postal-code lookup state in preview
@@ -743,6 +745,7 @@ export default function AdminTemplates() {
       setIsLoading(false);
     }
     setIsAddingNewItem(false);
+    setInsertIndex(null);
   }, [templateId, templates]);
 
   // --- 自動保存ロジック（初期ロードやテンプレート切替直後は抑止） ---
@@ -847,28 +850,31 @@ export default function AdminTemplates() {
     if (!newItem.label) return;
     const options = ['multi'].includes(newItem.type) ? newItem.options.filter((v) => v) : undefined;
     const newId = crypto.randomUUID();
-    setItems([
-      ...items,
-      {
-        id: newId,
-        label: newItem.label,
-        type: newItem.type,
-        required: newItem.required,
-        options,
-        use_initial: newItem.use_initial,
-        use_followup: newItem.use_followup,
-        allow_freetext: newItem.allow_freetext,
-        description: newItem.description,
-        gender_enabled: newItem.gender_enabled,
-        gender: newItem.gender_enabled ? newItem.gender : undefined,
-        age_enabled: newItem.age_enabled,
-        min_age: newItem.age_enabled ? Number(newItem.min_age || 0) : undefined,
-        max_age: newItem.age_enabled ? Number(newItem.max_age || 110) : undefined,
-        image: newItem.image || undefined,
-        min: newItem.type === 'slider' ? Number(newItem.min) : undefined,
-        max: newItem.type === 'slider' ? Number(newItem.max) : undefined,
-      },
-    ]);
+    const entry: Item = {
+      id: newId,
+      label: newItem.label,
+      type: newItem.type,
+      required: newItem.required,
+      options,
+      use_initial: newItem.use_initial,
+      use_followup: newItem.use_followup,
+      allow_freetext: newItem.allow_freetext,
+      description: newItem.description,
+      gender_enabled: newItem.gender_enabled,
+      gender: newItem.gender_enabled ? newItem.gender : undefined,
+      age_enabled: newItem.age_enabled,
+      min_age: newItem.age_enabled ? Number(newItem.min_age || 0) : undefined,
+      max_age: newItem.age_enabled ? Number(newItem.max_age || 110) : undefined,
+      image: newItem.image || undefined,
+      min: newItem.type === 'slider' ? Number(newItem.min) : undefined,
+      max: newItem.type === 'slider' ? Number(newItem.max) : undefined,
+    };
+    setItems((prev) => {
+      const next = [...prev];
+      const targetIndex = insertIndex !== null ? Math.min(Math.max(insertIndex, 0), next.length) : next.length;
+      next.splice(targetIndex, 0, entry);
+      return next;
+    });
     markDirty();
     setSelectedItemId(newId);
     setNewItem({
@@ -890,6 +896,7 @@ export default function AdminTemplates() {
       max: '10',
     });
     setIsAddingNewItem(false);
+    setInsertIndex(null);
   };
 
   const updateItem = (index: number, field: keyof Item, value: any) => {
@@ -1297,6 +1304,7 @@ export default function AdminTemplates() {
                 max: '10',
               });
               setIsAddingNewItem(false);
+              setInsertIndex(null);
             }
           }}
         />
@@ -1536,7 +1544,7 @@ export default function AdminTemplates() {
             )}
           </Box>
 
-          {/* 問診内容（ラベルのみ）の簡易一覧 */}
+          {/* 問診内容の一覧と分岐ツリー */}
           <AccentOutlineBox
             p={4}
             mb={4}
@@ -1545,493 +1553,523 @@ export default function AdminTemplates() {
             borderColor="neutral.200"
             boxShadow="sm"
           >
-            <Heading size="sm" mb={3} color="gray.700">問診内容一覧（クリックして編集）</Heading>
-            {items.length === 0 ? (
-              <Text color="fg.muted" fontSize="sm">項目がありません。</Text>
-            ) : (
-              <TableContainer overflowX="auto">
-                <Table
-                  size="sm"
-                  minWidth="100%"
-                  variant="simple"
-                  sx={{
-                    'tbody tr:last-of-type': { borderBottom: 'none' },
+            <SimpleGrid columns={{ base: 1, xl: 2 }} spacing={6} alignItems="flex-start">
+              <Box>
+                <Heading size="sm" mb={3} color="gray.700">
+                  分岐構造（クリックして選択）
+                </Heading>
+                <Text fontSize="sm" color="gray.600" mb={3}>
+                  分岐の流れと差し込み位置を可視化しています。追加したい位置の「この位置に追加」から新しい問診項目を挿入できます。
+                </Text>
+                <QuestionTreeView
+                  items={items}
+                  selectedItemId={selectedItemId}
+                  onSelect={(id) => setSelectedItemId((prev) => (prev === id ? null : id))}
+                  onInsertAt={(index) => {
+                    setInsertIndex(index);
+                    setIsAddingNewItem(true);
                   }}
-                >
-                  <Thead bg="gray.50">
-                    <Tr>
-                      <Th width="2.5rem">並び替え</Th>
-                      <Th>問診内容</Th>
-                      <Th textAlign="center" width="4.5rem">削除</Th>
-                      <Th textAlign="center" width="4.5rem">必須</Th>
-                      <Th textAlign="center" width="4.5rem">初診</Th>
-                      <Th textAlign="center" width="4.5rem">再診</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {items.map((item, idx) => {
-                      const selected = item.id === selectedItemId;
-                      return (
-                        <>
-                          <Tr
-                            key={`label-only-${item.id}`}
-                            draggable
-                            onDragStart={(e) => {
-                              setDraggingItemId(item.id);
-                              // 軽量のドラッグ画像に
-                              try { e.dataTransfer?.setData('text/plain', item.id); } catch {}
-                            }}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              const el = e.currentTarget as HTMLElement;
-                              const rect = el.getBoundingClientRect();
-                              const halfway = rect.top + rect.height / 2;
-                              const isTop = e.clientY < halfway;
-                              el.style.borderTop = isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
-                              el.style.borderBottom = !isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
-                            }}
-                            onDragLeave={(e) => {
-                              const el = e.currentTarget as HTMLElement;
-                              el.style.borderTop = '';
-                              el.style.borderBottom = '';
-                            }}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const el = e.currentTarget as HTMLElement;
-                              const rect = el.getBoundingClientRect();
-                              const halfway = rect.top + rect.height / 2;
-                              const isTop = e.clientY < halfway;
-                              el.style.borderTop = '';
-                              el.style.borderBottom = '';
-                              const fromId = draggingItemId || e.dataTransfer?.getData('text/plain');
-                              if (!fromId || fromId === item.id) return;
-                              const fromIndex = items.findIndex((it) => it.id === fromId);
-                              let toIndex = idx + (isTop ? 0 : 1);
-                              // 調整: 元の位置を取り除く前提で、後方へ挿入時のインデックスずれを補正
-                              if (fromIndex < toIndex) toIndex -= 1;
-                              if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
-                              const newArr = [...items];
-                              const [moved] = newArr.splice(fromIndex, 1);
-                              newArr.splice(toIndex, 0, moved);
-                              setItems(newArr);
-                              markDirty();
-                            }}
-                            onDragEnd={() => setDraggingItemId(null)}
-                            bg={selected ? 'gray.100' : 'white'}
-                            _hover={{ bg: selected ? 'gray.200' : 'gray.50' }}
-                            borderBottomWidth="1px"
-                            borderBottomColor="neutral.100"
-                            sx={{ cursor: 'pointer' }}
-                            onClick={() => setSelectedItemId(selected ? null : item.id)}
-                          >
-                            <Td width="1%" pr={1}>
-                              <HStack spacing={1} color="gray.500">
-                                <DragHandleIcon aria-label="ドラッグして並び替え" cursor="grab" />
-                              </HStack>
-                            </Td>
-                            <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">
-                              {item.label}
-                              {item.followups && Object.keys(item.followups).length > 0 && (
-                                <Text as="span" color="gray.600" ml={2}>枝</Text>
-                              )}
-                              {item.image && (
-                                <Icon as={MdImage} ml={2} color="gray.500" />
-                              )}
-                            </Td>
-                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                              <IconButton
-                                aria-label="問診項目を削除"
-                                icon={<DeleteIcon />}
-                                size="sm"
-                                colorScheme="red"
-                                variant="ghost"
-                                onClick={() => {
-                                  void confirmRemoveItem(idx);
+                />
+              </Box>
+              <VStack align="stretch" spacing={4}>
+                <Heading size="sm" color="gray.700">
+                  問診内容一覧（クリックして編集）
+                </Heading>
+                {items.length === 0 ? (
+                  <Text color="fg.muted" fontSize="sm">項目がありません。</Text>
+                ) : (
+                  <TableContainer overflowX="auto">
+                    <Table
+                      size="sm"
+                      minWidth="100%"
+                      variant="simple"
+                      sx={{
+                        'tbody tr:last-of-type': { borderBottom: 'none' },
+                      }}
+                    >
+                      <Thead bg="gray.50">
+                        <Tr>
+                          <Th width="2.5rem">並び替え</Th>
+                          <Th>問診内容</Th>
+                          <Th textAlign="center" width="4.5rem">削除</Th>
+                          <Th textAlign="center" width="4.5rem">必須</Th>
+                          <Th textAlign="center" width="4.5rem">初診</Th>
+                          <Th textAlign="center" width="4.5rem">再診</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {items.map((item, idx) => {
+                          const selected = item.id === selectedItemId;
+                          return (
+                            <>
+                              <Tr
+                                key={`label-only-${item.id}`}
+                                draggable
+                                onDragStart={(e) => {
+                                  setDraggingItemId(item.id);
+                                  // 軽量のドラッグ画像に
+                                  try { e.dataTransfer?.setData('text/plain', item.id); } catch {}
                                 }}
-                              />
-                            </Td>
-                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                isChecked={item.required}
-                                size="sm"
-                                colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'required', e.target.checked)}
-                              />
-                            </Td>
-                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                isChecked={item.use_initial}
-                                size="sm"
-                                colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
-                              />
-                            </Td>
-                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                isChecked={item.use_followup}
-                                size="sm"
-                                colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
-                              />
-                            </Td>
-                          </Tr>
-                          {selected && (
-                            <Tr key={`editor-${item.id}`}>
-                              <Td colSpan={6} p={0}>
-                                <Box
-                                  p={4}
-                                  bg="white"
-                                  borderWidth="1px"
-                                  borderColor="neutral.200"
-                                  position="relative"
-                                  zIndex={1100}
-                                  boxShadow="sm"
-                                  borderRadius="md"
-                                >
-                                  <VStack align="stretch" spacing={3}>
-                                    <FormControl>
-                                      <FormLabel m={0}>問診内容</FormLabel>
-                                      <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
-                                    </FormControl>
-                                    <FormControl>
-                                      <FormLabel m={0}>補足説明</FormLabel>
-                                      <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
-                                    </FormControl>
-                                    <FormControl>
-                                      <FormLabel m={0}>質問時に表示する画像</FormLabel>
-                                      {item.image && (
-                                        <>
-                                          <Image
-                                            src={item.image}
-                                            alt=""
-                                            maxH="100px"
-                                            mb={2}
-                                            cursor="pointer"
-                                            onClick={() => openImagePreview(item.image!)}
-                                          />
-                                          <Button
-                                            size="xs"
-                                            colorScheme="red"
-                                            mb={2}
-                                            onClick={async () => {
-                                              const removed = await confirmAndDeleteImage(item.image);
-                                              if (!removed) return;
-                                              updateItem(idx, 'image', undefined);
-                                            }}
-                                          >
-                                            画像を削除
-                                          </Button>
-                                        </>
-                                      )}
-                                      <Input
-                                        key={item.image || 'empty'}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) {
-                                            const removed = await confirmAndDeleteImage(item.image);
-                                            if (!removed) return;
-                                            updateItem(idx, 'image', undefined);
-                                            return;
-                                          }
-                                          await deleteItemImage(item.image);
-                                          const url = await uploadItemImage(file);
-                                          if (url) updateItem(idx, 'image', url);
-                                        }}
-                                      />
-                                      {item.type === 'image_annotation' && !item.image && (
-                                        <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
-                                      )}
-                                    </FormControl>
-                                    {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
-                                    <FormControl maxW="360px">
-                                      <FormLabel m={0}>入力方法</FormLabel>
-                                      <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                                        <option value="string">テキスト</option>
-                                        <option value="multi">複数選択</option>
-                                        <option value="yesno">はい/いいえ</option>
-                                        <option value="date">日付</option>
-                                        <option value="slider">スライドバー</option>
-                                        <option value="image_annotation">画像注釈（タップ・線）</option>
-                                      </Select>
-                                    </FormControl>
-                                    {item.type === 'multi' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
-                                        <VStack
-                                          align="stretch"
-                                          onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
-                                          onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
-                                        >
-                                          {item.options?.map((opt, optIdx) => (
-                                            <HStack
-                                              key={optIdx}
-                                              spacing={2}
-                                              align="center"
-                                              onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                              onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                            >
-                                              <Box
-                                                aria-label="ドラッグして順序を変更"
-                                                cursor="grab"
-                                                color="gray.500"
-                                                draggable
-                                                onDragStart={handleOptionDragStart({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                                onDragEnd={handleOptionDragEnd}
-                                                role="button"
-                                                tabIndex={-1}
-                                                lineHeight={0}
-                                                pr={1}
+                                onDragOver={(e) => {
+                                  e.preventDefault();
+                                  const el = e.currentTarget as HTMLElement;
+                                  const rect = el.getBoundingClientRect();
+                                  const halfway = rect.top + rect.height / 2;
+                                  const isTop = e.clientY < halfway;
+                                  el.style.borderTop = isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
+                                  el.style.borderBottom = !isTop ? '2px solid var(--chakra-colors-neutral-500)' : '';
+                                }}
+                                onDragLeave={(e) => {
+                                  const el = e.currentTarget as HTMLElement;
+                                  el.style.borderTop = '';
+                                  el.style.borderBottom = '';
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  const el = e.currentTarget as HTMLElement;
+                                  const rect = el.getBoundingClientRect();
+                                  const halfway = rect.top + rect.height / 2;
+                                  const isTop = e.clientY < halfway;
+                                  el.style.borderTop = '';
+                                  el.style.borderBottom = '';
+                                  const fromId = draggingItemId || e.dataTransfer?.getData('text/plain');
+                                  if (!fromId || fromId === item.id) return;
+                                  const fromIndex = items.findIndex((it) => it.id === fromId);
+                                  let toIndex = idx + (isTop ? 0 : 1);
+                                  // 調整: 元の位置を取り除く前提で、後方へ挿入時のインデックスずれを補正
+                                  if (fromIndex < toIndex) toIndex -= 1;
+                                  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+                                  const newArr = [...items];
+                                  const [moved] = newArr.splice(fromIndex, 1);
+                                  newArr.splice(toIndex, 0, moved);
+                                  setItems(newArr);
+                                  markDirty();
+                                }}
+                                onDragEnd={() => setDraggingItemId(null)}
+                                bg={selected ? 'gray.100' : 'white'}
+                                _hover={{ bg: selected ? 'gray.200' : 'gray.50' }}
+                                borderBottomWidth="1px"
+                                borderBottomColor="neutral.100"
+                                sx={{ cursor: 'pointer' }}
+                                onClick={() => setSelectedItemId(selected ? null : item.id)}
+                              >
+                                <Td width="1%" pr={1}>
+                                  <HStack spacing={1} color="gray.500">
+                                    <DragHandleIcon aria-label="ドラッグして並び替え" cursor="grab" />
+                                  </HStack>
+                                </Td>
+                                <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">
+                                  {item.label}
+                                  {item.followups && Object.keys(item.followups).length > 0 && (
+                                    <Text as="span" color="gray.600" ml={2}>枝</Text>
+                                  )}
+                                  {item.image && (
+                                    <Icon as={MdImage} ml={2} color="gray.500" />
+                                  )}
+                                </Td>
+                                <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                                  <IconButton
+                                    aria-label="問診項目を削除"
+                                    icon={<DeleteIcon />}
+                                    size="sm"
+                                    colorScheme="red"
+                                    variant="ghost"
+                                    onClick={() => {
+                                      void confirmRemoveItem(idx);
+                                    }}
+                                  />
+                                </Td>
+                                <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    isChecked={item.required}
+                                    size="sm"
+                                    colorScheme="gray"
+                                    onChange={(e) => updateItem(idx, 'required', e.target.checked)}
+                                  />
+                                </Td>
+                                <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    isChecked={item.use_initial}
+                                    size="sm"
+                                    colorScheme="gray"
+                                    onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                                  />
+                                </Td>
+                                <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                                  <Checkbox
+                                    isChecked={item.use_followup}
+                                    size="sm"
+                                    colorScheme="gray"
+                                    onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                                  />
+                                </Td>
+                              </Tr>
+                              {selected && (
+                                <Tr key={`editor-${item.id}`}>
+                                  <Td colSpan={6} p={0}>
+                                    <Box
+                                      p={4}
+                                      bg="white"
+                                      borderWidth="1px"
+                                      borderColor="neutral.200"
+                                      position="relative"
+                                      zIndex={1100}
+                                      boxShadow="sm"
+                                      borderRadius="md"
+                                    >
+                                      <VStack align="stretch" spacing={3}>
+                                        <FormControl>
+                                          <FormLabel m={0}>問診内容</FormLabel>
+                                          <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                          <FormLabel m={0}>補足説明</FormLabel>
+                                          <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
+                                        </FormControl>
+                                        <FormControl>
+                                          <FormLabel m={0}>質問時に表示する画像</FormLabel>
+                                          {item.image && (
+                                            <>
+                                              <Image
+                                                src={item.image}
+                                                alt=""
+                                                maxH="100px"
+                                                mb={2}
+                                                cursor="pointer"
+                                                onClick={() => openImagePreview(item.image!)}
+                                              />
+                                              <Button
+                                                size="xs"
+                                                colorScheme="red"
+                                                mb={2}
+                                                onClick={async () => {
+                                                  const removed = await confirmAndDeleteImage(item.image);
+                                                  if (!removed) return;
+                                                  updateItem(idx, 'image', undefined);
+                                                }}
                                               >
-                                                <DragHandleIcon />
-                                              </Box>
-                                              <Input
-                                                flex="1"
-                                                value={opt}
-                                                onChange={(e) => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const oldVal = newOptions[optIdx];
-                                                  newOptions[optIdx] = e.target.value;
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[oldVal]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    newFollowups[e.target.value] = newFollowups[oldVal];
-                                                    delete newFollowups[oldVal];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                              <Tooltip label="追加質問を追加">
-                                                <IconButton
-                                                  aria-label="追質問を追加/編集"
-                                                  icon={<QuestionIcon />}
-                                                  size="sm"
-                                                  isDisabled={!opt.trim()}
-                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                  onClick={() => {
-                                                    openFollowups(
-                                                      (item.followups && item.followups[opt]) || [],
-                                                      (newItems, _stack) => {
-                                                        const f = { ...(item.followups || {}), [opt]: newItems };
-                                                        updateItem(idx, 'followups', f);
-                                                      },
-                                                      1
-                                                    );
-                                                  }}
-                                                />
-                                              </Tooltip>
-                                              <IconButton
-                                                aria-label="選択肢を削除"
-                                                icon={<DeleteIcon />}
-                                                size="sm"
-                                                onClick={() => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const removed = newOptions.splice(optIdx, 1)[0];
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[removed]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    delete newFollowups[removed];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                            </HStack>
-                                          ))}
-                                          <Checkbox
-                                            isChecked={item.allow_freetext}
-                                            onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
-                                            alignSelf="flex-start"
-                                          >
-                                            フリーテキスト入力を許可
-                                          </Checkbox>
-                                          <Button
-                                            size="sm"
-                                            py={2}
-                                            onClick={() => {
-                                              const newOptions = [...(item.options || []), ''];
-                                              updateItem(idx, 'options', newOptions);
-                                            }}
-                                            isDisabled={item.options?.some((option) => !option.trim())}
-                                            alignSelf="flex-end"
-                                          >
-                                            選択肢を追加
-                                          </Button>
-                                        </VStack>
-
-
-                                      </Box>
-                                    )}
-                                    {item.type === 'yesno' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
-                                        <VStack align="stretch">
-                                          {['yes', 'no'].map((opt) => (
-                                            <HStack key={opt}>
-                                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                                              <Tooltip label="追加質問を追加">
-                                                <IconButton
-                                                  aria-label="追質問を追加/編集"
-                                                  icon={<QuestionIcon />}
-                                                  size="sm"
-                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                  onClick={() => {
-                                                    openFollowups(
-                                                      (item.followups && item.followups[opt]) || [],
-                                                      (newItems, _stack) => {
-                                                        const f = { ...(item.followups || {}), [opt]: newItems };
-                                                        updateItem(idx, 'followups', f);
-                                                      },
-                                                      1
-                                                    );
-                                                  }}
-                                                />
-                                              </Tooltip>
-                                            </HStack>
-                                          ))}
-                                        </VStack>
-                                      </Box>
-                                    )}
-                                    {item.type === 'slider' && (
-                                      <HStack>
-                                        <FormControl>
-                                          <FormLabel m={0}>最小値</FormLabel>
-                                          <NumberInput
-                                            value={item.min ?? 0}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'min', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                        <FormControl>
-                                          <FormLabel m={0}>最大値</FormLabel>
-                                          <NumberInput
-                                            value={item.max ?? 10}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'max', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                      </HStack>
-                                    )}
-                                    {/* 表示制限（性別・年齢） */}
-                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
-                                      <FormControl alignSelf="flex-start">
-                                        <Checkbox
-                                          isChecked={item.gender_enabled}
-                                          onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
-                                        >
-                                          性別で表示を制限
-                                        </Checkbox>
-                                        {item.gender_enabled && (
-                                          <HStack mt={2}>
-                                            <Button
-                                              variant={item.gender === 'male' ? 'solid' : 'outline'}
-                                              colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
-                                              onClick={() => {
-                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                                updateItem(idx, 'gender', 'male' as any);
-                                              }}
-                                            >
-                                              男性のみに質問
-                                            </Button>
-                                            <Button
-                                              variant={item.gender === 'female' ? 'solid' : 'outline'}
-                                              colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
-                                              onClick={() => {
-                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                                updateItem(idx, 'gender', 'female' as any);
-                                              }}
-                                            >
-                                              女性のみに質問
-                                            </Button>
-                                          </HStack>
-                                        )}
-                                      </FormControl>
-                                      <FormControl alignSelf="flex-start">
-                                        <HStack justifyContent="space-between" w="full">
-                                          <Checkbox
-                                            isChecked={item.age_enabled}
-                                            onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
-                                          >
-                                            年齢で表示を制限
-                                          </Checkbox>
-                                          {item.age_enabled && (
-                                            <Text fontSize="sm" color="gray.600">
-                                              {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
-                                            </Text>
+                                                画像を削除
+                                              </Button>
+                                            </>
                                           )}
-                                        </HStack>
-                                        {item.age_enabled && (
-                                          <Box px={2} mt={2} display="flex" justifyContent="center">
-                                            <HStack w="66%" spacing={2} alignItems="center">
-                                              <Text fontSize="sm" color="gray.600">0歳</Text>
-                                              <RangeSlider
-                                                flex="1"
-                                                min={0}
-                                                max={110}
-                                                colorScheme="primary"
-                                                value={[item.min_age ?? 0, item.max_age ?? 110]}
-                                                onChange={(vals) => {
-                                                  const [minV, maxV] = vals as [number, number];
-                                                  setItemAgeRange(idx, minV, maxV);
-                                                }}
+                                          <Input
+                                            key={item.image || 'empty'}
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={async (e) => {
+                                              const file = e.target.files?.[0];
+                                              if (!file) {
+                                                const removed = await confirmAndDeleteImage(item.image);
+                                                if (!removed) return;
+                                                updateItem(idx, 'image', undefined);
+                                                return;
+                                              }
+                                              await deleteItemImage(item.image);
+                                              const url = await uploadItemImage(file);
+                                              if (url) updateItem(idx, 'image', url);
+                                            }}
+                                          />
+                                          {item.type === 'image_annotation' && !item.image && (
+                                            <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+                                          )}
+                                        </FormControl>
+                                        {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
+                                        <FormControl maxW="360px">
+                                          <FormLabel m={0}>入力方法</FormLabel>
+                                          <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
+                                            <option value="string">テキスト</option>
+                                            <option value="multi">複数選択</option>
+                                            <option value="yesno">はい/いいえ</option>
+                                            <option value="date">日付</option>
+                                            <option value="slider">スライドバー</option>
+                                            <option value="image_annotation">画像注釈（タップ・線）</option>
+                                          </Select>
+                                        </FormControl>
+                                        {item.type === 'multi' && (
+                                          <Box>
+                                            <FormLabel m={0} mb={2}>選択肢</FormLabel>
+                                            <VStack
+                                              align="stretch"
+                                              onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
+                                              onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
+                                            >
+                                              {item.options?.map((opt, optIdx) => (
+                                                <HStack
+                                                  key={optIdx}
+                                                  spacing={2}
+                                                  align="center"
+                                                  onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                                  onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                                >
+                                                  <Box
+                                                    aria-label="ドラッグして順序を変更"
+                                                    cursor="grab"
+                                                    color="gray.500"
+                                                    draggable
+                                                    onDragStart={handleOptionDragStart({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
+                                                    onDragEnd={handleOptionDragEnd}
+                                                    role="button"
+                                                    tabIndex={-1}
+                                                    lineHeight={0}
+                                                    pr={1}
+                                                  >
+                                                    <DragHandleIcon />
+                                                  </Box>
+                                                  <Input
+                                                    flex="1"
+                                                    value={opt}
+                                                    onChange={(e) => {
+                                                      const newOptions = [...(item.options || [])];
+                                                      const oldVal = newOptions[optIdx];
+                                                      newOptions[optIdx] = e.target.value;
+                                                      updateItem(idx, 'options', newOptions);
+                                                      if (item.followups && item.followups[oldVal]) {
+                                                        const newFollowups = { ...(item.followups || {}) };
+                                                        newFollowups[e.target.value] = newFollowups[oldVal];
+                                                        delete newFollowups[oldVal];
+                                                        updateItem(idx, 'followups', newFollowups);
+                                                      }
+                                                    }}
+                                                  />
+                                                  <Tooltip label="追加質問を追加">
+                                                    <IconButton
+                                                      aria-label="追質問を追加/編集"
+                                                      icon={<QuestionIcon />}
+                                                      size="sm"
+                                                      isDisabled={!opt.trim()}
+                                                      colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                      onClick={() => {
+                                                        openFollowups(
+                                                          (item.followups && item.followups[opt]) || [],
+                                                          (newItems, _stack) => {
+                                                            const f = { ...(item.followups || {}), [opt]: newItems };
+                                                            updateItem(idx, 'followups', f);
+                                                          },
+                                                          1
+                                                        );
+                                                      }}
+                                                    />
+                                                  </Tooltip>
+                                                  <IconButton
+                                                    aria-label="選択肢を削除"
+                                                    icon={<DeleteIcon />}
+                                                    size="sm"
+                                                    onClick={() => {
+                                                      const newOptions = [...(item.options || [])];
+                                                      const removed = newOptions.splice(optIdx, 1)[0];
+                                                      updateItem(idx, 'options', newOptions);
+                                                      if (item.followups && item.followups[removed]) {
+                                                        const newFollowups = { ...(item.followups || {}) };
+                                                        delete newFollowups[removed];
+                                                        updateItem(idx, 'followups', newFollowups);
+                                                      }
+                                                    }}
+                                                  />
+                                                </HStack>
+                                              ))}
+                                              <Checkbox
+                                                isChecked={item.allow_freetext}
+                                                onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
+                                                alignSelf="flex-start"
                                               >
-                                                <RangeSliderTrack>
-                                                  <RangeSliderFilledTrack />
-                                                </RangeSliderTrack>
-                                                <RangeSliderThumb index={0} />
-                                                <RangeSliderThumb index={1} />
-                                              </RangeSlider>
-                                              <Text fontSize="sm" color="gray.600">110歳</Text>
-                                            </HStack>
+                                                フリーテキスト入力を許可
+                                              </Checkbox>
+                                              <Button
+                                                size="sm"
+                                                py={2}
+                                                onClick={() => {
+                                                  const newOptions = [...(item.options || []), ''];
+                                                  updateItem(idx, 'options', newOptions);
+                                                }}
+                                                isDisabled={item.options?.some((option) => !option.trim())}
+                                                alignSelf="flex-end"
+                                              >
+                                                選択肢を追加
+                                              </Button>
+                                            </VStack>
+
+
                                           </Box>
                                         )}
-                                      </FormControl>
-                                    </SimpleGrid>
-                                    <HStack justifyContent="flex-end" spacing={3} mt={2}>
-                                      <IconButton
-                                        aria-label="項目を削除"
-                                        icon={<DeleteIcon />}
-                                        size="sm"
-                                        colorScheme="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          void confirmRemoveItem(idx);
-                                        }}
-                                      />
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        colorScheme="gray"
-                                        onClick={() => setSelectedItemId(null)}
-                                      >
-                                        編集終了
-                                      </Button>
-                                    </HStack>
-                                  
-                                  </VStack>
-                                </Box>
-                              </Td>
-                            </Tr>
-                          )}
-                          {renderFollowupRows(item.followups, 1, idx)}
-                        </>
-                      );
-                    })}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            )}
-            {!isAddingNewItem && (
-              <Button onClick={() => setIsAddingNewItem(true)} mt={4} colorScheme="primary">
-                問診項目を追加
-              </Button>
-            )}
+                                        {item.type === 'yesno' && (
+                                          <Box>
+                                            <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
+                                            <VStack align="stretch">
+                                              {['yes', 'no'].map((opt) => (
+                                                <HStack key={opt}>
+                                                  <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
+                                                  <Tooltip label="追加質問を追加">
+                                                    <IconButton
+                                                      aria-label="追質問を追加/編集"
+                                                      icon={<QuestionIcon />}
+                                                      size="sm"
+                                                      colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                                                      onClick={() => {
+                                                        openFollowups(
+                                                          (item.followups && item.followups[opt]) || [],
+                                                          (newItems, _stack) => {
+                                                            const f = { ...(item.followups || {}), [opt]: newItems };
+                                                            updateItem(idx, 'followups', f);
+                                                          },
+                                                          1
+                                                        );
+                                                      }}
+                                                    />
+                                                  </Tooltip>
+                                                </HStack>
+                                              ))}
+                                            </VStack>
+                                          </Box>
+                                        )}
+                                        {item.type === 'slider' && (
+                                          <HStack>
+                                            <FormControl>
+                                              <FormLabel m={0}>最小値</FormLabel>
+                                              <NumberInput
+                                                value={item.min ?? 0}
+                                                onChange={(v) =>
+                                                  updateItem(idx, 'min', v ? Number(v) : undefined)
+                                                }
+                                              >
+                                                <NumberInputField />
+                                              </NumberInput>
+                                            </FormControl>
+                                            <FormControl>
+                                              <FormLabel m={0}>最大値</FormLabel>
+                                              <NumberInput
+                                                value={item.max ?? 10}
+                                                onChange={(v) =>
+                                                  updateItem(idx, 'max', v ? Number(v) : undefined)
+                                                }
+                                              >
+                                                <NumberInputField />
+                                              </NumberInput>
+                                            </FormControl>
+                                          </HStack>
+                                        )}
+                                        {/* 表示制限（性別・年齢） */}
+                                        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
+                                          <FormControl alignSelf="flex-start">
+                                            <Checkbox
+                                              isChecked={item.gender_enabled}
+                                              onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
+                                            >
+                                              性別で表示を制限
+                                            </Checkbox>
+                                            {item.gender_enabled && (
+                                              <HStack mt={2}>
+                                                <Button
+                                                  variant={item.gender === 'male' ? 'solid' : 'outline'}
+                                                  colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
+                                                  onClick={() => {
+                                                    if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
+                                                    updateItem(idx, 'gender', 'male' as any);
+                                                  }}
+                                                >
+                                                  男性のみに質問
+                                                </Button>
+                                                <Button
+                                                  variant={item.gender === 'female' ? 'solid' : 'outline'}
+                                                  colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
+                                                  onClick={() => {
+                                                    if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
+                                                    updateItem(idx, 'gender', 'female' as any);
+                                                  }}
+                                                >
+                                                  女性のみに質問
+                                                </Button>
+                                              </HStack>
+                                            )}
+                                          </FormControl>
+                                          <FormControl alignSelf="flex-start">
+                                            <HStack justifyContent="space-between" w="full">
+                                              <Checkbox
+                                                isChecked={item.age_enabled}
+                                                onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
+                                              >
+                                                年齢で表示を制限
+                                              </Checkbox>
+                                              {item.age_enabled && (
+                                                <Text fontSize="sm" color="gray.600">
+                                                  {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
+                                                </Text>
+                                              )}
+                                            </HStack>
+                                            {item.age_enabled && (
+                                              <Box px={2} mt={2} display="flex" justifyContent="center">
+                                                <HStack w="66%" spacing={2} alignItems="center">
+                                                  <Text fontSize="sm" color="gray.600">0歳</Text>
+                                                  <RangeSlider
+                                                    flex="1"
+                                                    min={0}
+                                                    max={110}
+                                                    colorScheme="primary"
+                                                    value={[item.min_age ?? 0, item.max_age ?? 110]}
+                                                    onChange={(vals) => {
+                                                      const [minV, maxV] = vals as [number, number];
+                                                      setItemAgeRange(idx, minV, maxV);
+                                                    }}
+                                                  >
+                                                    <RangeSliderTrack>
+                                                      <RangeSliderFilledTrack />
+                                                    </RangeSliderTrack>
+                                                    <RangeSliderThumb index={0} />
+                                                    <RangeSliderThumb index={1} />
+                                                  </RangeSlider>
+                                                  <Text fontSize="sm" color="gray.600">110歳</Text>
+                                                </HStack>
+                                              </Box>
+                                            )}
+                                          </FormControl>
+                                        </SimpleGrid>
+                                        <HStack justifyContent="flex-end" spacing={3} mt={2}>
+                                          <IconButton
+                                            aria-label="項目を削除"
+                                            icon={<DeleteIcon />}
+                                            size="sm"
+                                            colorScheme="red"
+                                            variant="outline"
+                                            onClick={() => {
+                                              void confirmRemoveItem(idx);
+                                            }}
+                                          />
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            colorScheme="gray"
+                                            onClick={() => setSelectedItemId(null)}
+                                          >
+                                            編集終了
+                                          </Button>
+                                        </HStack>
+                                      
+                                      </VStack>
+                                    </Box>
+                                  </Td>
+                                </Tr>
+                              )}
+                              {renderFollowupRows(item.followups, 1, idx)}
+                            </>
+                          );
+                        })}
+                      </Tbody>
+                    </Table>
+                  </TableContainer>
+                )}
+                {!isAddingNewItem && (
+                  <Button
+                    onClick={() => {
+                      setInsertIndex(items.length);
+                      setIsAddingNewItem(true);
+                    }}
+                    colorScheme="primary"
+                    alignSelf="flex-start"
+                  >
+                    問診項目を追加
+                  </Button>
+                )}
+              </VStack>
+            </SimpleGrid>
           </AccentOutlineBox>
 
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
@@ -2051,6 +2089,14 @@ export default function AdminTemplates() {
               <Heading size="md" mb={4}>
                 問診項目を追加
               </Heading>
+              {insertIndex !== null && (
+                <Text fontSize="sm" color="gray.600" mb={2}>
+                  挿入位置:
+                  {insertIndex >= items.length
+                    ? ' 末尾（既存項目の最後）'
+                    : ` 「${items[insertIndex]?.label || '無題の質問'}」の前`}
+                </Text>
+              )}
               <VStack spacing={4} align="stretch">
                 <FormControl>
                   <FormLabel>新規問診内容</FormLabel>
@@ -2363,6 +2409,7 @@ export default function AdminTemplates() {
                         max: '10',
                       });
                       setIsAddingNewItem(false);
+                      setInsertIndex(null);
                     }}
                     variant="ghost"
                   >
