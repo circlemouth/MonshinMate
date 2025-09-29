@@ -1024,3 +1024,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` の問診項目編集フォームと新規追加フォームの背景色を白へ統一し、グレーアウトして見えにくかった状態を解消。
 - [x] 影響範囲: 既存テンプレート設定や入力内容は変更されず、表示コントラストのみ改善。移行作業は不要。
 - [x] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 129. データ永続化ディレクトリの統一（2025-12-XX）
+- [x] Docker Compose で SQLite/CouchDB を `./data/sqlite`・`./data/couchdb` にマウントし、`MONSHINMATE_DB` の既定値を `/app/data/sqlite/app.sqlite3` に設定。
+- [x] `.env.example` を新設して環境変数サンプルを一本化。`backend/app/main.py` はリポジトリルートの `.env` を優先読込。
+- [x] ドキュメント更新: `README.md`, `internal_docs/docker_setup.md`, `internal_docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`, `frontend/dist/docs/admin_system_setup.md`。

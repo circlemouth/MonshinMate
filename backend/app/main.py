@@ -89,8 +89,10 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# .env の読み込み（backend/.env を優先的に参照）
+# .env の読み込み（リポジトリルート -> backend/.env の順に適用）
 _BASE_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _BASE_DIR.parent
+load_dotenv(_PROJECT_ROOT / ".env")
 load_dotenv(_BASE_DIR / ".env")
 
 # JWT settings for password reset

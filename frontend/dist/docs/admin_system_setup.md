@@ -71,7 +71,7 @@
 障害対応やログイン不能時に、バックエンド同梱のメンテナンススクリプトで管理者アカウントを復旧できます。操作は自己責任で行い、実施前に必ずDBのバックアップを取得してください。
 
 - スクリプトの場所: `backend/tools/reset_admin_password.py`
-- 事前バックアップ: `backend/app/app.sqlite3` をコピー保全
+- 事前バックアップ: `./data/sqlite/app.sqlite3`（Docker Compose 既定。旧構成は `backend/app/app.sqlite3`）をコピー保全
 - 対応内容:
   - 管理者（`username='admin'`）のパスワードを新しい値で上書き
   - `is_initial_password=1`（初期パスワード扱い）に設定
@@ -101,7 +101,7 @@ export MONSHINMATE_DB=/path/to/app.sqlite3
 python backend/tools/reset_admin_password.py --password "NewStrongPass123"
 ```
 
-環境変数 `MONSHINMATE_DB` があればそれを使用し、指定がない場合は `backend/app/app.sqlite3` を参照します。`--db` オプションでも明示指定可能です。
+環境変数 `MONSHINMATE_DB` があればそれを使用し、指定がない場合は従来どおり `backend/app/app.sqlite3` を参照します。`--db` オプションでも明示指定可能です。
 
 ### 実行後の挙動
 

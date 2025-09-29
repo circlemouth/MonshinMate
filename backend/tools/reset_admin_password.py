@@ -10,7 +10,7 @@
 - 既存DBに不足するカラム（`is_initial_password`, `totp_mode`, `password_updated_at`, `totp_changed_at`）を自動追加（存在時は無視）
 
 注意:
-- 実行前に必ず DB バックアップを取得してください（backend/app/app.sqlite3 をコピー）。
+- 実行前に必ず DB バックアップを取得してください（Docker Compose 既定: ./data/sqlite/app.sqlite3 をコピー）。
 - スクリプトはローカル実行のみを想定しています。
 
 使い方:
@@ -19,7 +19,7 @@
 
 DB パスの決定:
 - 環境変数 MONSHINMATE_DB があればそれを使用
-- なければ backend/app/app.sqlite3 を既定とする
+- なければ従来の backend/app/app.sqlite3 を既定とする（旧構成との互換用）
 """
 
 from __future__ import annotations

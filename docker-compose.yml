@@ -9,7 +9,7 @@ services:
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=admin
     volumes:
-      - couchdb_data:/opt/couchdb/data
+      - ./data/couchdb:/opt/couchdb/data
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:5984/_up || exit 1"]
       interval: 5s
@@ -23,6 +23,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./backend/app:/app/app
+      - ./data/sqlite:/app/data/sqlite
     ports:
       - "8001:8001"
     environment:
@@ -30,6 +31,7 @@ services:
       - COUCHDB_DB=monshin_sessions
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=admin
+      - MONSHINMATE_DB=/app/data/sqlite/app.sqlite3
     depends_on:
       couchdb:
         condition: service_healthy
@@ -42,5 +44,3 @@ services:
       - backend
     ports:
       - "${FRONTEND_HTTP_PORT:-5173}:80"
-volumes:
-  couchdb_data:

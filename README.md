@@ -20,7 +20,7 @@ MonshinMate は、診療所やクリニックのための「問診テンプレ�
 - バックエンド: FastAPI（`backend/app/main.py`）。Uvicorn で `:8001` を公開。
 - フロントエンド: React + Vite + Chakra UI（`frontend/`）。開発は Vite、コンテナ配信は Nginx。
 - データベース:
-  - SQLite: `backend/app/app.sqlite3`（テンプレート・設定・監査ログ・管理ユーザーなど）
+  - SQLite: `MONSHINMATE_DB` で指定（Docker Compose 既定: ホスト `./data/sqlite/app.sqlite3`。テンプレート・設定・監査ログ・管理ユーザーなどを保存）
   - CouchDB: セッション/回答を保存（`COUCHDB_URL` を設定すると使用）。
 - LLM ゲートウェイ: OpenAI 互換 API または ollama/LM Studio へ接続可能なスタブ実装（`backend/app/llm_gateway.py`）。モデル一覧取得や接続テスト API を提供。
 - Docker: `docker-compose.yml` で `couchdb`/`backend`/`frontend` を定義。
@@ -78,19 +78,19 @@ npm run dev
 - macOS/Linux: `./dev.sh` または `make dev`
 - Windows: `powershell -File dev.ps1`
 
-`dev.sh` はバックエンドとフロントエンドのみを起動します。CouchDB を利用する場合は別途 `docker compose up couchdb` などで起動し、`backend/.env` などで `COUCHDB_URL` や認証情報を設定してください。
+`dev.sh` はバックエンドとフロントエンドのみを起動します。CouchDB を利用する場合は別途 `docker compose up couchdb` などで起動し、リポジトリ直下の `.env`（または `backend/.env` を作成）で `COUCHDB_URL` や認証情報を設定してください。
 
 ## 環境変数（主要）
 - `ADMIN_PASSWORD`: 初期管理者パスワード（既定: `admin`）。初回起動判定にも使用。
 - `ADMIN_EMERGENCY_RESET_PASSWORD`: 非常用リセットパスワード。TOTP 無効時のみ UI のパスワードリセットで利用可。
 - `SECRET_KEY`: パスワードリセット用トークンの署名鍵（JWT）。本番では十分に強いランダム値を設定してください。
-- `MONSHINMATE_DB`: SQLite ファイルパス（既定: `backend/app/app.sqlite3`）。
+- `MONSHINMATE_DB`: SQLite ファイルパス（Docker Compose 既定: `/app/data/sqlite/app.sqlite3` → ホスト `./data/sqlite/app.sqlite3`。未設定時は従来の `backend/app/app.sqlite3` を参照）。
 - `TOTP_ENC_KEY`: TOTP シークレット暗号化用キー（Fernet/32byte を URL-safe Base64 化）。本番必須。
 - `COUCHDB_URL`: CouchDB のベース URL（設定するとセッション保存が CouchDB に切替）。
 - `COUCHDB_DB`: 使用 DB 名（既定: `monshin_sessions`）。
 - `COUCHDB_USER`, `COUCHDB_PASSWORD`: CouchDB の認証情報。
 
-Docker Compose での既定値は `docker-compose.yml` と `backend/.env`（例）を参照してください。
+Docker Compose での既定値は `docker-compose.yml` と リポジトリ直下の `.env.example` を参照してください。
 
 ## 認証と二段階認証（Authenticator/TOTP）
 - 管理ログインはパスワード必須。初回は `admin`/`ADMIN_PASSWORD` でログインし、パスワードを変更してください。
@@ -103,9 +103,9 @@ Docker Compose での既定値は `docker-compose.yml` と `backend/.env`（例�
   - 重要操作は監査ログとして `backend/app/logs/security.log` と SQLite の `audit_logs` に記録（平文 PW/ハッシュは記録しません）。
 
 ## データ管理（SQLite + CouchDB）
-- 既定: すべて SQLite（`backend/app/app.sqlite3`）。
+- 既定: すべて SQLite。Docker Compose のサンプルでは `./data/sqlite/app.sqlite3`（コンテナ内 `/app/data/sqlite/app.sqlite3`）に保存します。
 - CouchDB 有効時（`COUCHDB_URL` を設定）: セッション/回答のみ CouchDB に保存。テンプレートや設定は引き続き SQLite。
-- CouchDB は `docker-compose.yml` で自動起動・ボリューム永続化（`couchdb_data`）。管理画面は `/_utils` から利用可能。
+- CouchDB は `docker-compose.yml` で自動起動し、ホスト `./data/couchdb` を `/opt/couchdb/data` にマウントします。管理画面は `/_utils` から利用可能。
 
 ## エクスポート（PDF / CSV / Markdown）
 - 管理画面のセッション一覧で、各行のアイコンから単体の PDF/Markdown/CSV をダウンロード可能。
