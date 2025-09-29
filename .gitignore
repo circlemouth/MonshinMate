@@ -6,6 +6,7 @@ backend/.venv/
 .pytest_cache/
 .DS_Store
 .env
+backend/.env
 backend/app/*.sqlite3
 
 # Log files
