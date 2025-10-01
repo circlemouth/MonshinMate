@@ -20,6 +20,9 @@ from cryptography.fernet import Fernet, InvalidToken
 import logging
 
 
+logger = logging.getLogger(__name__)
+
+
 DEFAULT_DB_PATH = os.environ.get(
     "MONSHINMATE_DB", str(Path(__file__).resolve().parent / "app.sqlite3")
 )
@@ -40,25 +43,44 @@ COUCHDB_DB_NAME = os.getenv("COUCHDB_DB", "monshin_sessions")
 COUCHDB_USER = os.getenv("COUCHDB_USER")
 COUCHDB_PASSWORD = os.getenv("COUCHDB_PASSWORD")
 couch_db = None
-if COUCHDB_URL:
+
+
+def _connect_couch_db() -> Any:
+    if not COUCHDB_URL:
+        return None
     try:
-        _server = couchdb.Server(COUCHDB_URL)
+        server = couchdb.Server(COUCHDB_URL)
         if COUCHDB_USER and COUCHDB_PASSWORD:
-            _server.resource.credentials = (COUCHDB_USER, COUCHDB_PASSWORD)
+            server.resource.credentials = (COUCHDB_USER, COUCHDB_PASSWORD)
         # `_users` データベースが存在しないと認証キャッシュでエラーが出るため、
         # 初回起動時に自動作成しておく。
         try:  # pragma: no cover - 既存環境では作成済みの場合があるため
-            _server["_users"]
+            server["_users"]
         except couchdb.http.ResourceNotFound:  # pragma: no cover - 実行時のみ
-            _server.create("_users")
+            server.create("_users")
         except Exception:
             pass
         try:
-            couch_db = _server[COUCHDB_DB_NAME]
+            database = server[COUCHDB_DB_NAME]
         except couchdb.http.ResourceNotFound:
-            couch_db = _server.create(COUCHDB_DB_NAME)
-    except Exception:
+            database = server.create(COUCHDB_DB_NAME)
+        return database
+    except Exception as exc:
+        logger.warning("CouchDB 接続に失敗しました: %s", exc)
+        return None
+
+
+def get_couch_db(force_refresh: bool = False) -> Any:
+    global couch_db
+    if force_refresh:
         couch_db = None
+    if couch_db is None:
+        couch_db = _connect_couch_db()
+    return couch_db
+
+
+if COUCHDB_URL:
+    couch_db = get_couch_db()
 
 
 SPACE_CHARS = {" ", "\u3000"}
@@ -781,7 +803,8 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
     except Exception:
         pass
 
-    if couch_db:
+    db = get_couch_db()
+    if db:
         doc = {
             "_id": session.id,
             "patient_name": session.patient_name,
@@ -803,16 +826,16 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             "llm_question_texts": llm_qtexts,
             "question_texts": question_texts,
         }
-        if session.id in couch_db:
-            existing = couch_db.get(session.id)
+        if session.id in db:
+            existing = db.get(session.id)
             if existing:
                 doc["_rev"] = existing.rev
         for _ in range(3):
             try:
-                couch_db.save(doc)
+                db.save(doc)
                 break
             except couchdb.http.ResourceConflict:  # pragma: no cover - 時間的競合時のみ
-                existing = couch_db.get(session.id)
+                existing = db.get(session.id)
                 if not existing:
                     raise
                 doc["_rev"] = existing.rev
@@ -912,8 +935,9 @@ def list_sessions(
     normalized_patient_name_query = (
         _normalize_patient_name_for_search(patient_name_query) if patient_name_query else ""
     )
-    if couch_db:
-        docs = [r.doc for r in couch_db.view("_all_docs", include_docs=True)]
+    db = get_couch_db()
+    if db:
+        docs = [r.doc for r in db.view("_all_docs", include_docs=True)]
         result: list[dict[str, Any]] = []
         use_direct = bool(patient_name_query)
         use_normalized = bool(normalized_patient_name_query)
@@ -993,8 +1017,9 @@ def list_sessions(
 
 def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     """DB からセッションを取得する。"""
-    if couch_db:
-        doc = couch_db.get(session_id)
+    db = get_couch_db()
+    if db:
+        doc = db.get(session_id)
         if not doc:
             return None
         doc["id"] = doc.pop("_id")
@@ -1130,12 +1155,13 @@ def delete_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> bool:
     付随する回答は外部キー制約 ON DELETE CASCADE により削除される。
     CouchDB が有効な場合は CouchDB から削除する。
     """
-    if couch_db:
+    db = get_couch_db()
+    if db:
         try:
-            doc = couch_db.get(session_id)
+            doc = db.get(session_id)
             if not doc:
                 return False
-            couch_db.delete(doc)
+            db.delete(doc)
             return True
         except Exception:
             return False
@@ -1153,14 +1179,15 @@ def delete_sessions(ids: Iterable[str], db_path: str = DEFAULT_DB_PATH) -> int:
     id_list = [i for i in ids if i]
     if not id_list:
         return 0
-    if couch_db:
+    db = get_couch_db()
+    if db:
         deleted = 0
         for sid in id_list:
             try:
-                doc = couch_db.get(sid)
+                doc = db.get(sid)
                 if not doc:
                     continue
-                couch_db.delete(doc)
+                db.delete(doc)
                 deleted += 1
             except Exception:
                 pass
@@ -1304,8 +1331,9 @@ def export_sessions_data(
 
     ids_set = set(session_ids or [])
 
-    if couch_db:
-        docs = [row.doc for row in couch_db.view("_all_docs", include_docs=True)]
+    db = get_couch_db()
+    if db:
+        docs = [row.doc for row in db.view("_all_docs", include_docs=True)]
         result: list[dict[str, Any]] = []
         for doc in docs:
             sid = doc.get("_id")
@@ -1425,12 +1453,13 @@ def import_sessions_data(
     if mode not in {"merge", "replace"}:
         raise ValueError("invalid mode")
 
-    if couch_db:
+    db = get_couch_db()
+    if db:
         if mode == "replace":
-            for row in couch_db.view("_all_docs"):
-                doc = couch_db.get(row.id)
+            for row in db.view("_all_docs"):
+                doc = db.get(row.id)
                 if doc:
-                    couch_db.delete(doc)
+                    db.delete(doc)
         for sess in sessions:
             sid = sess.get("id")
             if not sid:
@@ -1454,10 +1483,10 @@ def import_sessions_data(
                 "finalized_at": sess.get("finalized_at"),
                 "llm_question_texts": sess.get("llm_question_texts") or {},
             }
-            existing = couch_db.get(sid)
+            existing = db.get(sid)
             if existing:
                 doc["_rev"] = existing.rev
-            couch_db.save(doc)
+            db.save(doc)
         return {"sessions": len(sessions)}
 
     conn = get_conn(db_path)

@@ -840,3 +840,44 @@
 2025-09-27 16:04:00,985 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-09-27 16:04:05,304 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-09-27 16:04:05,573 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 03:36:28,528 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/app/data/sqlite/app.sqlite3
+2025-09-30 23:12:18,975 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/app/data/sqlite/app.sqlite3
+2025-09-30 23:30:01,338 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:39:39,978 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:43:43,759 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:47:10,516 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:47:28,069 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:50:35,883 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-09-30 23:51:40,315 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 00:29:17,610 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 03:29:19,312 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 03:43:18,251 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 06:12:39,930 INFO admin_login_failed
+2025-10-01 06:12:43,050 INFO admin_login_failed
+2025-10-01 06:12:45,964 INFO admin_login_failed
+2025-10-01 06:12:50,111 INFO admin_login_success
+2025-10-01 06:12:50,401 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 06:12:53,590 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 06:12:54,582 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 06:12:56,326 WARNING totp_secret_updated username=admin db=/app/data/sqlite/app.sqlite3
+2025-10-01 06:13:07,915 WARNING password_update username=admin existed_before=True db=/app/data/sqlite/app.sqlite3
+2025-10-01 06:13:08,202 INFO auth_status is_initial=False is_totp_enabled=False totp_mode=off
+2025-10-01 06:13:25,082 WARNING totp_status_changed username=admin enabled=True db=/app/data/sqlite/app.sqlite3
+2025-10-01 06:13:25,083 WARNING totp_mode_changed username=admin mode=login_and_reset enabled=True db=/app/data/sqlite/app.sqlite3
+2025-10-01 06:13:25,084 WARNING totp_enabled username=admin use_for_login=True
+2025-10-01 06:13:24,639 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 06:22:07,655 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 06:34:31,854 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 06:39:44,218 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 06:53:08,237 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 06:56:32,273 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 09:10:33,836 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 11:26:55,603 INFO auth_status is_initial=False is_totp_enabled=True totp_mode=login_and_reset
+2025-10-01 11:37:38,952 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/app/data/sqlite/app.sqlite3
+2025-10-01 11:54:52,677 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 11:54:57,834 INFO admin_login_failed
+2025-10-01 11:55:01,794 INFO admin_login_failed
+2025-10-01 11:55:04,586 INFO admin_login_success
+2025-10-01 11:55:04,754 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-01 11:55:58,518 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/app/data/sqlite/app.sqlite3
+2025-10-01 11:56:39,792 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/app/data/sqlite/app.sqlite3

@@ -1029,3 +1029,8 @@
 - [x] Docker Compose で SQLite/CouchDB を `./data/sqlite`・`./data/couchdb` にマウントし、`MONSHINMATE_DB` の既定値を `/app/data/sqlite/app.sqlite3` に設定。
 - [x] `.env.example` を新設して環境変数サンプルを一本化。`backend/app/main.py` はリポジトリルートの `.env` を優先読込。
 - [x] ドキュメント更新: `README.md`, `internal_docs/docker_setup.md`, `internal_docs/admin_system_setup.md`, `frontend/public/docs/admin_system_setup.md`, `frontend/dist/docs/admin_system_setup.md`。
+
+## 130. CouchDB 接続遅延時の再初期化処理追加（2025-10-01）
+- [x] 変更（バックエンド）: `backend/app/db.py` に `get_couch_db` を導入し、初回接続失敗後でも要求時に再接続できるよう遅延初期化を実装。
+- [x] 動作確認: `curl -X POST http://localhost:8001/sessions -H 'Content-Type: application/json' -d '{"patient_name":"テスト太郎","dob":"1990-01-01","gender":"male","visit_type":"general","answers":{"chief_complaint":"テスト"}}'` でセッション作成が成功することを確認。
+- [ ] バックエンド自動テスト: `docker compose exec backend python -m pytest -q`（pytest 未インストールのため未実行）。
