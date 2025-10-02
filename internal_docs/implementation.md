@@ -437,7 +437,7 @@
 ## 33. システム表示名の設定機能（2025-08-23）
 - [x] 管理画面から「システム表示名」を編集可能にし、患者画面のヘッダーに反映（管理画面のヘッダーは固定文言「管理画面」とし設定の影響を受けない）。
   - 変更（バックエンド）: `backend/app/db.py` に `app_settings` テーブルと `save_app_settings` / `load_app_settings` を追加。
-  - 変更（バックエンド）: `backend/app/main.py` に `GET/PUT /system/display-name` を追加（既定値は「Monshinクリニック」）。
+  - 変更（バックエンド）: `backend/app/main.py` に `GET/PUT /system/display-name` を追加（既定値は「問診メイト」）。
   - 変更（フロント）: `frontend/src/pages/AdminSystemName.tsx` を追加（入力+保存UI）。
   - 変更（フロント）: `frontend/src/components/AdminLayout.tsx` のメニューに「システム表示名」を追加。
   - 変更（フロント）: `frontend/src/App.tsx` で表示名を取得・購読し、患者画面のヘッダーに表示。設定保存時はカスタムイベントで即時反映。

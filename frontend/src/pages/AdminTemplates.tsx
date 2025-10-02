@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo, Fragment } from 'react';
 import type { DragEvent } from 'react';
 import {
   VStack,
@@ -20,6 +20,9 @@ import {
   RadioGroup,
   Radio,
   CheckboxGroup,
+  Alert,
+  AlertIcon,
+  Flex,
   HStack,
   IconButton,
   Heading,
@@ -37,6 +40,7 @@ import {
   RangeSliderFilledTrack,
   RangeSliderThumb,
   Tooltip,
+  Badge,
   useDisclosure,
   Modal,
   ModalOverlay,
@@ -44,13 +48,15 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
+  ModalFooter,
   FormHelperText,
   Image,
   Icon,
   // removed: postal lookup UI wrappers
 } from '@chakra-ui/react';
 import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
-import { MdImage } from 'react-icons/md';
+import { MdImage, MdWc, MdCalendarToday } from 'react-icons/md';
+import { BiGitBranch } from 'react-icons/bi';
 import DateSelect from '../components/DateSelect';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
@@ -87,6 +93,44 @@ type OptionDragContext = (
   | { kind: 'followup'; followupIndex: number; optionIndex: number }
 );
 
+type NewItemState = {
+  label: string;
+  type: string;
+  required: boolean;
+  options: string[];
+  use_initial: boolean;
+  use_followup: boolean;
+  allow_freetext: boolean;
+  description: string;
+  gender_enabled: boolean;
+  gender: string;
+  age_enabled: boolean;
+  min_age: string;
+  max_age: string;
+  image: string;
+  min: string;
+  max: string;
+};
+
+const createEmptyNewItem = (): NewItemState => ({
+  label: '',
+  type: 'string',
+  required: false,
+  options: [],
+  use_initial: true,
+  use_followup: true,
+  allow_freetext: false,
+  description: '',
+  gender_enabled: false,
+  gender: 'male',
+  age_enabled: false,
+  min_age: '',
+  max_age: '',
+  image: '',
+  min: '0',
+  max: '10',
+});
+
 const reorderList = <T,>(list: T[], from: number, to: number): T[] => {
   const next = [...list];
   if (from < 0 || from >= list.length) {
@@ -119,41 +163,8 @@ export default function AdminTemplates() {
   const [initialFollowupPrompt, setInitialFollowupPrompt] = useState<string>("");
   const [followupFollowupPrompt, setFollowupFollowupPrompt] = useState<string>("");
   const [followupAdvanced, setFollowupAdvanced] = useState<boolean>(false);
-  const [newItem, setNewItem] = useState<{
-    label: string;
-    type: string;
-    required: boolean;
-    options: string[];
-    use_initial: boolean;
-    use_followup: boolean;
-    allow_freetext: boolean;
-    description: string;
-    gender_enabled: boolean;
-    gender: string;
-    age_enabled: boolean;
-    min_age: string;
-    max_age: string;
-    image: string;
-    min: string;
-    max: string;
-  }>({
-    label: '',
-    type: 'string',
-    required: false,
-    options: [],
-    use_initial: true,
-    use_followup: true,
-    allow_freetext: false,
-    description: '',
-    gender_enabled: false,
-    gender: 'male',
-    age_enabled: false,
-    min_age: '',
-    max_age: '',
-    image: '',
-    min: '0',
-    max: '10',
-  });
+  const [itemViewFilter, setItemViewFilter] = useState<'all' | 'required' | 'initial' | 'followup'>('all');
+  const [newItem, setNewItem] = useState<NewItemState>(() => createEmptyNewItem());
 
   const hiddenPersonalInfoRef = useRef<HiddenPersonalInfoEntry[]>([]);
 
@@ -344,10 +355,79 @@ export default function AdminTemplates() {
     setImagePreviewUrl(null);
     imagePreviewModal.onClose();
   };
+
+  const resetNewItemDraft = async () => {
+    await deleteItemImage(newItem.image);
+    setNewItem(createEmptyNewItem());
+  };
+
+  const closeNewItemModal = () => {
+    void (async () => {
+      await resetNewItemDraft();
+      setIsAddingNewItem(false);
+    })();
+  };
+
   const markDirty = () => {
     isDirtyRef.current = true;
   };
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
+  const addEmptyOptionToItem = (index: number) => {
+    let added = false;
+    setItems((prev) => {
+      const target = prev[index];
+      if (!target) return prev;
+      const baseOptions = target.options ? [...target.options] : [];
+      if (baseOptions.some((opt) => !opt.trim())) {
+        return prev;
+      }
+      added = true;
+      const next = [...prev];
+      next[index] = { ...target, options: [...baseOptions, ''] } as Item;
+      return next;
+    });
+    if (added) {
+      markDirty();
+    }
+  };
+  const addEmptyOptionToNewItem = () => {
+    setNewItem((prev) => {
+      if (prev.options.some((opt) => !opt.trim())) {
+        return prev;
+      }
+      return { ...prev, options: [...prev.options, ''] };
+    });
+  };
+  const filteredItems = useMemo(() => {
+    const entries = items.map((item, index) => ({ item, index }));
+    switch (itemViewFilter) {
+      case 'required':
+        return entries.filter(({ item }) => item.required);
+      case 'initial':
+        return entries.filter(({ item }) => item.use_initial);
+      case 'followup':
+        return entries.filter(({ item }) => item.use_followup);
+      default:
+        return entries;
+    }
+  }, [items, itemViewFilter]);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      return;
+    }
+    if (filteredItems.some(({ item }) => item.id === selectedItemId)) {
+      return;
+    }
+    setSelectedItemId(filteredItems[0]?.item.id ?? null);
+  }, [filteredItems, selectedItemId]);
+
+  const selectedItemIndex = selectedItemId ? items.findIndex((it) => it.id === selectedItemId) : -1;
+  const selectedItem = selectedItemIndex >= 0 ? items[selectedItemIndex] : null;
+
+  const closeItemEditor = () => {
+    setSelectedItemId(null);
+  };
 
   const renderFollowupRows = (
     followups?: Record<string, Item[]>,
@@ -359,6 +439,12 @@ export default function AdminTemplates() {
     Object.entries(followups).forEach(([opt, fItems]) => {
       const optLabel = opt === 'yes' ? 'はい' : opt === 'no' ? 'いいえ' : opt;
       fItems.forEach((fi) => {
+        const rowBg = depth === 1 ? 'teal.50' : depth === 2 ? 'teal.100' : 'teal.200';
+        const rowBorder = depth === 1 ? 'teal.400' : depth === 2 ? 'teal.500' : 'teal.600';
+        const hoverBg = depth === 1 ? 'teal.100' : rowBg;
+        const baseIndent = 6; // 基本インデント（ドラッグハンドル列分 + α）
+        const depthIndent = Math.min(depth, 4) * 6;
+        const indent = baseIndent + depthIndent;
         rows.push(
           <Tr
             key={`followup-row-${fi.id}`}
@@ -377,21 +463,35 @@ export default function AdminTemplates() {
                         };
                         updateItem(parentIdx, 'followups', f);
                       },
-                      1
+                      1,
+                      { question: items[parentIdx].label, answer: optLabel }
                     );
                   }
                 : undefined
             }
+            bg={rowBg}
+            _hover={depth === 1 ? { bg: hoverBg } : undefined}
           >
-            <Td />
-            <Td pl={depth * 4} color="gray.600">
-              ↳[{optLabel}] {fi.label}
-              {fi.image && <Icon as={MdImage} ml={2} color="gray.500" />}
+            <Td
+              width="1%"
+              pr={1}
+              bg="inherit"
+              py={3}
+              borderBottomWidth="1px"
+              borderBottomColor="neutral.100"
+            />
+            <Td colSpan={5} py={3} bg="inherit" borderBottomWidth="1px" borderBottomColor="neutral.100">
+              <Flex align="center" gap={3} wrap="wrap" pl={indent}>
+                <Icon as={BiGitBranch} color={rowBorder} boxSize={4} aria-label="分岐質問" />
+                <Text fontSize="sm" fontWeight="semibold" color={rowBorder}>
+                  [{optLabel}]
+                </Text>
+                <Text color="gray.700" flex="1" minW="0">
+                  {fi.label}
+                </Text>
+                {fi.image && <Icon as={MdImage} color="gray.500" />}
+              </Flex>
             </Td>
-            <Td />
-            <Td />
-            <Td />
-            <Td />
           </Tr>
         );
         if (fi.followups) {
@@ -403,29 +503,35 @@ export default function AdminTemplates() {
   };
 
   // 追質問は各回答（各オプション）につき最大1件
-  // 追加はモーダル内で制限する（addFollowupItem内のガード）。
-
-  type FollowupState = {
-    items: Item[];
-    depth: number;
-    onSave: (items: Item[], stack: FollowupState[]) => void;
-  };
+type FollowupState = {
+  items: Item[];
+  depth: number;
+  onSave: (items: Item[], stack: FollowupState[]) => void;
+  contextPath: Array<{ question: string; answer: string }>;
+};
   const [followupStack, setFollowupStack] = useState<FollowupState[]>([]);
   const followupModal = useDisclosure();
 
   const openFollowups = (
     items: Item[],
     onSave: (items: Item[], stack: FollowupState[]) => void,
-    depth: number
+    depth: number,
+    context?: { question: string; answer: string }
   ) => {
     const initialItems =
       items.length > 0
         ? JSON.parse(JSON.stringify(items))
         : [createEmptyFollowupItem()];
-    setFollowupStack((prev) => [
-      ...prev,
-      { items: initialItems, depth, onSave },
-    ]);
+    setFollowupStack((prev) => {
+      const prevPath = prev.length > 0 ? prev[prev.length - 1].contextPath : [];
+      const nextPath = context
+        ? [...prevPath, { question: context.question, answer: context.answer }]
+        : [...prevPath];
+      return [
+        ...prev,
+        { items: initialItems, depth, onSave, contextPath: nextPath },
+      ];
+    });
     followupModal.onOpen();
   };
 
@@ -449,6 +555,11 @@ export default function AdminTemplates() {
   };
 
   const currentFollowup = followupStack[followupStack.length - 1];
+  const followupContextDescription = currentFollowup?.contextPath?.length
+    ? `${currentFollowup.contextPath
+        .map(({ question, answer }) => `「${question}」に対して「${answer || '未入力'}」と回答されたとき`)
+        .join(' → ')}の追加質問`
+    : null;
 
   const optionDragContextRef = useRef<OptionDragContext | null>(null);
 
@@ -566,6 +677,33 @@ export default function AdminTemplates() {
     markDirty();
   };
 
+  const addEmptyOptionToFollowupItem = (index: number) => {
+    let added = false;
+    setFollowupStack((prev) => {
+      const stack = [...prev];
+      if (stack.length === 0) {
+        return prev;
+      }
+      const cur = stack[stack.length - 1];
+      const items = [...cur.items];
+      const target = items[index];
+      if (!target) {
+        return prev;
+      }
+      const baseOptions = target.options ? [...target.options] : [];
+      if (baseOptions.some((opt) => !opt.trim())) {
+        return prev;
+      }
+      added = true;
+      items[index] = { ...target, options: [...baseOptions, ''] } as Item;
+      stack[stack.length - 1] = { ...cur, items };
+      return stack;
+    });
+    if (added) {
+      markDirty();
+    }
+  };
+
   const changeFollowupType = (index: number, newType: string) => {
     if (!currentFollowup) return;
     const target = currentFollowup.items[index];
@@ -616,20 +754,6 @@ export default function AdminTemplates() {
     max: undefined,
     followups: undefined,
   });
-
-  const addFollowupItem = () => {
-    if (!currentFollowup) return;
-    if ((currentFollowup.items?.length || 0) >= 1) return;
-    setFollowupStack((prev) => {
-      const stack = [...prev];
-      stack[stack.length - 1] = {
-        ...currentFollowup,
-        items: [...currentFollowup.items, createEmptyFollowupItem()],
-      };
-      return stack;
-    });
-    markDirty();
-  };
 
   const removeFollowupItem = (index: number) => {
     if (!currentFollowup) return;
@@ -871,43 +995,36 @@ export default function AdminTemplates() {
     ]);
     markDirty();
     setSelectedItemId(newId);
-    setNewItem({
-      label: '',
-      type: 'string',
-      required: false,
-      options: [],
-      use_initial: true,
-      use_followup: true,
-      allow_freetext: false,
-      description: '',
-      gender_enabled: false,
-      gender: 'male',
-      age_enabled: false,
-      min_age: '',
-      max_age: '',
-      image: '',
-      min: '0',
-      max: '10',
-    });
+    setNewItem(createEmptyNewItem());
     setIsAddingNewItem(false);
   };
 
   const updateItem = (index: number, field: keyof Item, value: any) => {
-    const updated = [...items];
-    updated[index] = { ...updated[index], [field]: value } as Item;
-    if (field === 'age_enabled') {
-      if (!value) {
-        updated[index].min_age = undefined;
-        updated[index].max_age = undefined;
-      } else {
-        if (updated[index].min_age === undefined) updated[index].min_age = 0;
-        if (updated[index].max_age === undefined) updated[index].max_age = 110;
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) {
+        return prev;
       }
-    }
-    if (field === 'gender_enabled' && !value) {
-      updated[index].gender = undefined;
-    }
-    setItems(updated);
+      const next = [...prev];
+      const current = next[index];
+      if (!current) {
+        return prev;
+      }
+      const updatedItem: Item = { ...current, [field]: value } as Item;
+      if (field === 'age_enabled') {
+        if (!value) {
+          updatedItem.min_age = undefined;
+          updatedItem.max_age = undefined;
+        } else {
+          if (updatedItem.min_age === undefined) updatedItem.min_age = 0;
+          if (updatedItem.max_age === undefined) updatedItem.max_age = 110;
+        }
+      }
+      if (field === 'gender_enabled' && !value) {
+        updatedItem.gender = undefined;
+      }
+      next[index] = updatedItem;
+      return next;
+    });
     markDirty();
   };
 
@@ -927,29 +1044,37 @@ export default function AdminTemplates() {
 
   // 入力方法の変更時に、型に応じて付随プロパティを初期化する
   const changeItemType = (index: number, newType: string) => {
-    const target = items[index];
-    const next: Item = { ...target, type: newType } as Item;
-    if (newType === 'multi') {
-      // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
-      next.allow_freetext = true;
-      next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
-      delete (next as any).min;
-      delete (next as any).max;
-    } else if (newType === 'slider') {
-      delete (next as any).options;
-      next.allow_freetext = false;
-      next.min = target.min ?? 0;
-      next.max = target.max ?? 10;
-    } else {
-      // それ以外に切り替えたら、選択肢系・範囲系はリセット
-      delete (next as any).options;
-      next.allow_freetext = false;
-      delete (next as any).min;
-      delete (next as any).max;
-    }
-    const updated = [...items];
-    updated[index] = next;
-    setItems(updated);
+    setItems((prev) => {
+      if (index < 0 || index >= prev.length) {
+        return prev;
+      }
+      const updated = [...prev];
+      const target = updated[index];
+      if (!target) {
+        return prev;
+      }
+      const next: Item = { ...target, type: newType } as Item;
+      if (newType === 'multi') {
+        // 複数選択に切り替えた場合、自由記述をデフォルトON、選択肢を最低限用意
+        next.allow_freetext = true;
+        next.options = (target.options && target.options.length > 0) ? target.options : ['', 'その他'];
+        delete (next as any).min;
+        delete (next as any).max;
+      } else if (newType === 'slider') {
+        delete (next as any).options;
+        next.allow_freetext = false;
+        next.min = target.min ?? 0;
+        next.max = target.max ?? 10;
+      } else {
+        // それ以外に切り替えたら、選択肢系・範囲系はリセット
+        delete (next as any).options;
+        next.allow_freetext = false;
+        delete (next as any).min;
+        delete (next as any).max;
+      }
+      updated[index] = next;
+      return updated;
+    });
     markDirty();
   };
 
@@ -1261,46 +1386,643 @@ export default function AdminTemplates() {
     }
     return true;
   });
+  const ItemEditorModalContent = ({ item, itemIndex }: { item: Item; itemIndex: number }): JSX.Element => (
+    <VStack align="stretch" spacing={3}>
+      <FormControl>
+        <FormLabel m={0}>問診内容</FormLabel>
+        <Input value={item.label} onChange={(e) => updateItem(itemIndex, 'label', e.target.value)} />
+      </FormControl>
+      <FormControl>
+        <FormLabel m={0}>補足説明</FormLabel>
+        <Textarea value={item.description || ''} onChange={(e) => updateItem(itemIndex, 'description', e.target.value)} />
+      </FormControl>
+      <FormControl>
+        <FormLabel m={0}>質問時に表示する画像</FormLabel>
+        {item.image && (
+          <>
+            <Image
+              src={item.image}
+              alt=""
+              maxH="100px"
+              mb={2}
+              cursor="pointer"
+              onClick={() => openImagePreview(item.image!)}
+            />
+            <Button
+              size="xs"
+              colorScheme="red"
+              mb={2}
+              onClick={async () => {
+                const removed = await confirmAndDeleteImage(item.image);
+                if (!removed) return;
+                updateItem(itemIndex, 'image', undefined);
+              }}
+            >
+              画像を削除
+            </Button>
+          </>
+        )}
+        <Input
+          key={item.image || 'empty'}
+          type="file"
+          accept="image/*"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) {
+              const removed = await confirmAndDeleteImage(item.image);
+              if (!removed) return;
+              updateItem(itemIndex, 'image', undefined);
+              return;
+            }
+            await deleteItemImage(item.image);
+            const url = await uploadItemImage(file);
+            if (url) updateItem(itemIndex, 'image', url);
+          }}
+        />
+        {item.type === 'image_annotation' && !item.image && (
+          <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+        )}
+      </FormControl>
+      <FormControl maxW="360px">
+        <FormLabel m={0}>入力方法</FormLabel>
+        <Select value={item.type} onChange={(e) => changeItemType(itemIndex, e.target.value)}>
+          <option value="string">テキスト</option>
+          <option value="multi">複数選択</option>
+          <option value="yesno">はい/いいえ</option>
+          <option value="date">日付</option>
+          <option value="slider">スライドバー</option>
+          <option value="image_annotation">画像注釈（タップ・線）</option>
+        </Select>
+      </FormControl>
+      {item.type === 'multi' && (
+        <Box>
+          <FormLabel m={0} mb={2}>選択肢</FormLabel>
+          <VStack
+            align="stretch"
+            onDragOver={handleOptionDragOver({ kind: 'item', itemIndex, optionIndex: item.options?.length ?? 0 })}
+            onDrop={handleOptionDrop({ kind: 'item', itemIndex, optionIndex: item.options?.length ?? 0 })}
+          >
+            {item.options?.map((opt, optIdx) => (
+              <HStack
+                key={optIdx}
+                spacing={2}
+                align="center"
+                onDragOver={handleOptionDragOver({ kind: 'item', itemIndex, optionIndex: optIdx })}
+                onDrop={handleOptionDrop({ kind: 'item', itemIndex, optionIndex: optIdx })}
+              >
+                <Box
+                  aria-label="ドラッグして順序を変更"
+                  cursor="grab"
+                  color="gray.500"
+                  draggable
+                  onDragStart={handleOptionDragStart({ kind: 'item', itemIndex, optionIndex: optIdx })}
+                  onDragEnd={handleOptionDragEnd}
+                  role="button"
+                  tabIndex={-1}
+                  lineHeight={0}
+                  pr={1}
+                >
+                  <DragHandleIcon />
+                </Box>
+                <Input
+                  flex="1"
+                  value={opt}
+                  onChange={(e) => {
+                    const newOptions = [...(item.options || [])];
+                    const oldVal = newOptions[optIdx];
+                    newOptions[optIdx] = e.target.value;
+                    updateItem(itemIndex, 'options', newOptions);
+                    if (item.followups && item.followups[oldVal]) {
+                      const newFollowups = { ...(item.followups || {}) };
+                      newFollowups[e.target.value] = newFollowups[oldVal];
+                      delete newFollowups[oldVal];
+                      updateItem(itemIndex, 'followups', newFollowups);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing) {
+                      return;
+                    }
+                    const options = item.options || [];
+                    if (optIdx !== options.length - 1) {
+                      return;
+                    }
+                    if (options.some((option) => !option.trim())) {
+                      return;
+                    }
+                    e.preventDefault();
+                    addEmptyOptionToItem(itemIndex);
+                  }}
+                />
+                <Tooltip label="追加質問を追加">
+                  <IconButton
+                    aria-label="追質問を追加/編集"
+                    icon={<QuestionIcon />}
+                    size="sm"
+                    isDisabled={!opt.trim()}
+                    colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                    onClick={() => {
+                      openFollowups(
+                        (item.followups && item.followups[opt]) || [],
+                        (newItems, _stack) => {
+                          const f = { ...(item.followups || {}), [opt]: newItems };
+                          updateItem(itemIndex, 'followups', f);
+                        },
+                        1,
+                        {
+                          question: item.label,
+                          answer: opt.trim() ? opt : '未設定',
+                        }
+                      );
+                    }}
+                  />
+                </Tooltip>
+                <IconButton
+                  aria-label="選択肢を削除"
+                  icon={<DeleteIcon />}
+                  size="sm"
+                  onClick={() => {
+                    const newOptions = [...(item.options || [])];
+                    const removed = newOptions.splice(optIdx, 1)[0];
+                    updateItem(itemIndex, 'options', newOptions);
+                    if (item.followups && item.followups[removed]) {
+                      const newFollowups = { ...(item.followups || {}) };
+                      delete newFollowups[removed];
+                      updateItem(itemIndex, 'followups', newFollowups);
+                    }
+                  }}
+                />
+              </HStack>
+            ))}
+            <Checkbox
+              isChecked={item.allow_freetext}
+              onChange={(e) => updateItem(itemIndex, 'allow_freetext', e.target.checked)}
+              alignSelf="flex-start"
+            >
+              フリーテキスト入力を許可
+            </Checkbox>
+            <Button
+              size="sm"
+              py={2}
+              onClick={() => addEmptyOptionToItem(itemIndex)}
+              isDisabled={item.options?.some((option) => !option.trim())}
+              alignSelf="flex-end"
+            >
+              選択肢を追加
+            </Button>
+          </VStack>
+        </Box>
+      )}
+      {item.type === 'yesno' && (
+        <Box>
+          <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
+          <VStack align="stretch">
+            {['yes', 'no'].map((opt) => (
+              <HStack key={opt}>
+                <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
+              <Tooltip label="追加質問を追加">
+                <IconButton
+                  aria-label="追質問を追加/編集"
+                  icon={<QuestionIcon />}
+                  size="sm"
+                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
+                  onClick={() => {
+                    const answerLabel = opt === 'yes' ? 'はい' : 'いいえ';
+                    openFollowups(
+                      (item.followups && item.followups[opt]) || [],
+                      (newItems, _stack) => {
+                        const f = { ...(item.followups || {}), [opt]: newItems };
+                        updateItem(itemIndex, 'followups', f);
+                      },
+                      1,
+                      {
+                        question: item.label,
+                        answer: answerLabel,
+                      }
+                    );
+                  }}
+                />
+              </Tooltip>
+              </HStack>
+            ))}
+          </VStack>
+        </Box>
+      )}
+      {item.type === 'slider' && (
+        <HStack>
+          <FormControl>
+            <FormLabel m={0}>最小値</FormLabel>
+            <NumberInput
+              value={item.min ?? 0}
+              onChange={(v) => updateItem(itemIndex, 'min', v ? Number(v) : undefined)}
+            >
+              <NumberInputField />
+            </NumberInput>
+          </FormControl>
+          <FormControl>
+            <FormLabel m={0}>最大値</FormLabel>
+            <NumberInput
+              value={item.max ?? 10}
+              onChange={(v) => updateItem(itemIndex, 'max', v ? Number(v) : undefined)}
+            >
+              <NumberInputField />
+            </NumberInput>
+          </FormControl>
+        </HStack>
+      )}
+      <HStack spacing={4}>
+        <Checkbox
+          isChecked={item.required}
+          onChange={(e) => updateItem(itemIndex, 'required', e.target.checked)}
+        >
+          必須
+        </Checkbox>
+        <Checkbox
+          isChecked={item.use_initial}
+          onChange={(e) => updateItem(itemIndex, 'use_initial', e.target.checked)}
+        >
+          初診
+        </Checkbox>
+        <Checkbox
+          isChecked={item.use_followup}
+          onChange={(e) => updateItem(itemIndex, 'use_followup', e.target.checked)}
+        >
+          再診
+        </Checkbox>
+      </HStack>
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
+        <FormControl alignSelf="flex-start">
+          <Checkbox
+            isChecked={item.gender_enabled}
+            onChange={(e) => updateItem(itemIndex, 'gender_enabled', e.target.checked)}
+          >
+            性別で表示を制限
+          </Checkbox>
+          {item.gender_enabled && (
+            <HStack mt={2}>
+              <Button
+                variant={item.gender === 'male' ? 'solid' : 'outline'}
+                colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
+                onClick={() => {
+                  if (!item.gender_enabled) updateItem(itemIndex, 'gender_enabled', true);
+                  updateItem(itemIndex, 'gender', 'male' as any);
+                }}
+              >
+                男性のみに質問
+              </Button>
+              <Button
+                variant={item.gender === 'female' ? 'solid' : 'outline'}
+                colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
+                onClick={() => {
+                  if (!item.gender_enabled) updateItem(itemIndex, 'gender_enabled', true);
+                  updateItem(itemIndex, 'gender', 'female' as any);
+                }}
+              >
+                女性のみに質問
+              </Button>
+            </HStack>
+          )}
+        </FormControl>
+        <FormControl alignSelf="flex-start">
+          <HStack justifyContent="space-between" w="full">
+            <Checkbox
+              isChecked={item.age_enabled}
+              onChange={(e) => updateItem(itemIndex, 'age_enabled', e.target.checked)}
+            >
+              年齢で表示を制限
+            </Checkbox>
+            {item.age_enabled && (
+              <Text fontSize="sm" color="gray.600">
+                {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
+              </Text>
+            )}
+          </HStack>
+          {item.age_enabled && (
+            <Box px={2} mt={2} display="flex" justifyContent="center">
+              <HStack w="66%" spacing={2} alignItems="center">
+                <Text fontSize="sm" color="gray.600">0歳</Text>
+                <RangeSlider
+                  flex="1"
+                  min={0}
+                  max={110}
+                  colorScheme="primary"
+                  value={[item.min_age ?? 0, item.max_age ?? 110]}
+                  onChange={(vals) => {
+                    const [minV, maxV] = vals as [number, number];
+                    setItemAgeRange(itemIndex, minV, maxV);
+                  }}
+                >
+                  <RangeSliderTrack>
+                    <RangeSliderFilledTrack />
+                  </RangeSliderTrack>
+                  <RangeSliderThumb index={0} />
+                  <RangeSliderThumb index={1} />
+                </RangeSlider>
+                <Text fontSize="sm" color="gray.600">110歳</Text>
+              </HStack>
+            </Box>
+          )}
+        </FormControl>
+      </SimpleGrid>
+    </VStack>
+  );
+
+  const NewItemModalContent = (): JSX.Element => (
+    <VStack spacing={4} align="stretch">
+      <FormControl>
+        <FormLabel>新規問診内容</FormLabel>
+        <Input
+          placeholder="例: 主訴は何ですか？"
+          value={newItem.label}
+          onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
+        />
+      </FormControl>
+      <FormControl>
+        <FormLabel>補足説明</FormLabel>
+        <Textarea
+          placeholder="例: わかる範囲で構いません"
+          value={newItem.description}
+          onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
+        />
+      </FormControl>
+      <FormControl>
+        <FormLabel>質問時に表示する画像</FormLabel>
+        {newItem.image && (
+          <>
+            <Image
+              src={newItem.image}
+              alt=""
+              maxH="100px"
+              mb={2}
+              cursor="pointer"
+              onClick={() => openImagePreview(newItem.image)}
+            />
+            <Button
+              size="xs"
+              colorScheme="red"
+              mb={2}
+              onClick={async () => {
+                const removed = await confirmAndDeleteImage(newItem.image);
+                if (!removed) return;
+                setNewItem({ ...newItem, image: '' });
+              }}
+            >
+              画像を削除
+            </Button>
+          </>
+        )}
+        <Input
+          key={newItem.image || 'empty'}
+          type="file"
+          accept="image/*"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) {
+              const removed = await confirmAndDeleteImage(newItem.image);
+              if (!removed) return;
+              setNewItem({ ...newItem, image: '' });
+              return;
+            }
+            await deleteItemImage(newItem.image);
+            const url = await uploadItemImage(file);
+            if (url) setNewItem({ ...newItem, image: url });
+          }}
+        />
+        {newItem.type === 'image_annotation' && !newItem.image && (
+          <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
+        )}
+      </FormControl>
+      <FormControl>
+        <FormLabel>入力方法</FormLabel>
+        <Select
+          value={newItem.type}
+          onChange={(e) => {
+            const t = e.target.value;
+            if (t === 'multi') {
+              setNewItem({
+                ...newItem,
+                type: t,
+                allow_freetext: true,
+                options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
+                min: '',
+                max: '',
+              });
+            } else if (t === 'slider') {
+              setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
+            } else {
+              setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
+            }
+          }}
+        >
+          <option value="string">テキスト</option>
+          <option value="multi">複数選択</option>
+          <option value="yesno">はい/いいえ</option>
+          <option value="date">日付</option>
+          <option value="slider">スライドバー</option>
+          <option value="image_annotation">画像注釈（タップ・線）</option>
+        </Select>
+      </FormControl>
+      {newItem.type === 'multi' && (
+        <FormControl>
+          <FormLabel>選択肢</FormLabel>
+          <VStack
+            align="stretch"
+            onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: newItem.options.length })}
+            onDrop={handleOptionDrop({ kind: 'new', optionIndex: newItem.options.length })}
+          >
+            {newItem.options.map((opt, optIdx) => (
+              <HStack
+                key={optIdx}
+                spacing={2}
+                align="center"
+                onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: optIdx })}
+                onDrop={handleOptionDrop({ kind: 'new', optionIndex: optIdx })}
+              >
+                <Box
+                  aria-label="ドラッグして順序を変更"
+                  cursor="grab"
+                  color="gray.500"
+                  draggable
+                  onDragStart={handleOptionDragStart({ kind: 'new', optionIndex: optIdx })}
+                  onDragEnd={handleOptionDragEnd}
+                  role="button"
+                  tabIndex={-1}
+                  lineHeight={0}
+                  pr={1}
+                >
+                  <DragHandleIcon />
+                </Box>
+                <Input
+                  flex="1"
+                  value={opt}
+                  onChange={(e) => {
+                    const newOptions = [...newItem.options];
+                    newOptions[optIdx] = e.target.value;
+                    setNewItem({ ...newItem, options: newOptions });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' || e.nativeEvent.isComposing) {
+                      return;
+                    }
+                    if (optIdx !== newItem.options.length - 1) {
+                      return;
+                    }
+                    e.preventDefault();
+                    addEmptyOptionToNewItem();
+                  }}
+                />
+                <IconButton
+                  aria-label="選択肢を削除"
+                  icon={<DeleteIcon />}
+                  size="sm"
+                  onClick={() => {
+                    const newOptions = [...newItem.options];
+                    newOptions.splice(optIdx, 1);
+                    setNewItem({ ...newItem, options: newOptions });
+                  }}
+                />
+              </HStack>
+            ))}
+            <Checkbox
+              isChecked={newItem.allow_freetext}
+              onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
+              alignSelf="flex-start"
+            >
+              フリーテキスト入力を許可
+            </Checkbox>
+            <Button
+              size="sm"
+              py={2}
+              onClick={addEmptyOptionToNewItem}
+            >
+              選択肢を追加
+            </Button>
+          </VStack>
+        </FormControl>
+      )}
+      {newItem.type === 'slider' && (
+        <HStack>
+          <FormControl>
+            <FormLabel>最小値</FormLabel>
+            <NumberInput
+              value={newItem.min}
+              onChange={(v) => setNewItem({ ...newItem, min: v })}
+            >
+              <NumberInputField />
+            </NumberInput>
+          </FormControl>
+          <FormControl>
+            <FormLabel>最大値</FormLabel>
+            <NumberInput
+              value={newItem.max}
+              onChange={(v) => setNewItem({ ...newItem, max: v })}
+            >
+              <NumberInputField />
+            </NumberInput>
+          </FormControl>
+        </HStack>
+      )}
+      <HStack>
+        <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
+          必須
+        </Checkbox>
+        <Checkbox
+          isChecked={newItem.use_initial}
+          onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
+        >
+          初診に含める
+        </Checkbox>
+        <Checkbox
+          isChecked={newItem.use_followup}
+          onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
+        >
+          再診に含める
+        </Checkbox>
+      </HStack>
+      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
+        <FormControl alignSelf="flex-start">
+          <Checkbox
+            isChecked={newItem.gender_enabled}
+            onChange={(e) => setNewItem({ ...newItem, gender_enabled: e.target.checked })}
+          >
+            性別で表示を制限
+          </Checkbox>
+          {newItem.gender_enabled && (
+            <HStack mt={2}>
+              <Button
+                variant={newItem.gender === 'male' ? 'solid' : 'outline'}
+                colorScheme={newItem.gender === 'male' ? 'teal' : 'gray'}
+                onClick={() => setNewItem({ ...newItem, gender: 'male' })}
+              >
+                男性のみに質問
+              </Button>
+              <Button
+                variant={newItem.gender === 'female' ? 'solid' : 'outline'}
+                colorScheme={newItem.gender === 'female' ? 'teal' : 'gray'}
+                onClick={() => setNewItem({ ...newItem, gender: 'female' })}
+              >
+                女性のみに質問
+              </Button>
+            </HStack>
+          )}
+        </FormControl>
+        <FormControl alignSelf="flex-start">
+          <HStack justifyContent="space-between" w="full">
+            <Checkbox
+              isChecked={newItem.age_enabled}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setNewItem({ ...newItem, age_enabled: true, min_age: String(newItem.min_age || 0), max_age: String(newItem.max_age || 110) });
+                } else {
+                  setNewItem({ ...newItem, age_enabled: false });
+                }
+              }}
+            >
+              年齢で表示を制限
+            </Checkbox>
+            {newItem.age_enabled && (
+              <Text fontSize="sm" color="gray.600">
+                {(newItem.min_age === '' ? 0 : parseInt(newItem.min_age, 10))} 歳 〜 {(newItem.max_age === '' ? 110 : parseInt(newItem.max_age, 10))} 歳
+              </Text>
+            )}
+          </HStack>
+          {newItem.age_enabled && (
+            <Box px={2} mt={2} display="flex" justifyContent="center">
+              <HStack w="66%" spacing={2} alignItems="center">
+                <Text fontSize="sm" color="gray.600">0歳</Text>
+                <RangeSlider
+                  flex="1"
+                  min={0}
+                  max={110}
+                  colorScheme="primary"
+                  value={[
+                    newItem.min_age === '' ? 0 : parseInt(newItem.min_age, 10),
+                    newItem.max_age === '' ? 110 : parseInt(newItem.max_age, 10),
+                  ]}
+                  onChange={(vals) => {
+                    const [minV, maxV] = vals as [number, number];
+                    setNewItem({ ...newItem, min_age: String(minV), max_age: String(maxV) });
+                  }}
+                >
+                  <RangeSliderTrack>
+                    <RangeSliderFilledTrack />
+                  </RangeSliderTrack>
+                  <RangeSliderThumb index={0} />
+                  <RangeSliderThumb index={1} />
+                </RangeSlider>
+                <Text fontSize="sm" color="gray.600">110歳</Text>
+              </HStack>
+            </Box>
+          )}
+        </FormControl>
+      </SimpleGrid>
+    </VStack>
+  );
+
+
 
   return (
     <VStack spacing={8} align="stretch">
-      {/* Item editor backdrop: dim background while editing */}
-      {(selectedItemId || isAddingNewItem) && (
-        <Box
-          position="fixed"
-          top={0}
-          right={0}
-          bottom={0}
-          left={0}
-          bg="blackAlpha.300"
-          zIndex={1000}
-          onClick={async () => {
-            if (selectedItemId) setSelectedItemId(null);
-            if (isAddingNewItem) {
-              await deleteItemImage(newItem.image);
-              setNewItem({
-                label: '',
-                type: 'string',
-                required: false,
-                options: [],
-                use_initial: true,
-                use_followup: true,
-                allow_freetext: false,
-                description: '',
-                gender_enabled: false,
-                gender: 'male',
-                age_enabled: false,
-                min_age: '',
-                max_age: '',
-                image: '',
-                min: '0',
-                max: '10',
-              });
-              setIsAddingNewItem(false);
-            }
-          }}
-        />
-      )}
       <Box borderWidth="1px" borderRadius="md" p={4}>
         <Heading size="lg" mb={4}>
           テンプレート管理
@@ -1545,9 +2267,25 @@ export default function AdminTemplates() {
             borderColor="neutral.200"
             boxShadow="sm"
           >
-            <Heading size="sm" mb={3} color="gray.700">問診内容一覧（クリックして編集）</Heading>
+            <Flex align="center" justify="space-between" mb={3} gap={2} flexWrap="wrap">
+              <Heading size="sm" color="gray.700">問診内容一覧（クリックして編集）</Heading>
+              <Select
+                size="sm"
+                maxW="220px"
+                value={itemViewFilter}
+                onChange={(e) => setItemViewFilter(e.target.value as 'all' | 'required' | 'initial' | 'followup')}
+                aria-label="問診内容の表示切替"
+              >
+                <option value="all">すべて表示</option>
+                <option value="required">必須項目のみ表示</option>
+                <option value="initial">初診項目のみ表示</option>
+                <option value="followup">再診項目のみ表示</option>
+              </Select>
+            </Flex>
             {items.length === 0 ? (
               <Text color="fg.muted" fontSize="sm">項目がありません。</Text>
+            ) : filteredItems.length === 0 ? (
+              <Text color="fg.muted" fontSize="sm">条件に一致する項目がありません。</Text>
             ) : (
               <TableContainer overflowX="auto">
                 <Table
@@ -1562,17 +2300,27 @@ export default function AdminTemplates() {
                     <Tr>
                       <Th width="2.5rem">並び替え</Th>
                       <Th>問診内容</Th>
-                      <Th textAlign="center" width="4.5rem">削除</Th>
                       <Th textAlign="center" width="4.5rem">必須</Th>
                       <Th textAlign="center" width="4.5rem">初診</Th>
                       <Th textAlign="center" width="4.5rem">再診</Th>
+                      <Th textAlign="right" width="5rem">削除</Th>
                     </Tr>
                   </Thead>
                   <Tbody>
-                    {items.map((item, idx) => {
+                    {filteredItems.map(({ item, index: itemIndex }) => {
                       const selected = item.id === selectedItemId;
+                      const genderRestrictionLabel = item.gender_enabled
+                        ? item.gender === 'female'
+                          ? '女性のみ'
+                          : item.gender === 'male'
+                          ? '男性のみ'
+                          : '性別制限'
+                        : null;
+                      const ageRestrictionLabel = item.age_enabled
+                        ? `${item.min_age ?? 0}〜${item.max_age ?? 110}歳`
+                        : null;
                       return (
-                        <>
+                        <Fragment key={`item-${item.id}`}>
                           <Tr
                             key={`label-only-${item.id}`}
                             draggable
@@ -1606,7 +2354,9 @@ export default function AdminTemplates() {
                               const fromId = draggingItemId || e.dataTransfer?.getData('text/plain');
                               if (!fromId || fromId === item.id) return;
                               const fromIndex = items.findIndex((it) => it.id === fromId);
-                              let toIndex = idx + (isTop ? 0 : 1);
+                              const targetIndex = itemIndex;
+                              if (targetIndex < 0) return;
+                              let toIndex = targetIndex + (isTop ? 0 : 1);
                               // 調整: 元の位置を取り除く前提で、後方へ挿入時のインデックスずれを補正
                               if (fromIndex < toIndex) toIndex -= 1;
                               if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
@@ -1622,405 +2372,98 @@ export default function AdminTemplates() {
                             borderBottomWidth="1px"
                             borderBottomColor="neutral.100"
                             sx={{ cursor: 'pointer' }}
-                            onClick={() => setSelectedItemId(selected ? null : item.id)}
+                            onClick={() => setSelectedItemId(item.id)}
                           >
                             <Td width="1%" pr={1}>
                               <HStack spacing={1} color="gray.500">
                                 <DragHandleIcon aria-label="ドラッグして並び替え" cursor="grab" />
                               </HStack>
                             </Td>
-                            <Td fontWeight={selected ? 'bold' : 'normal'} whiteSpace="normal" wordBreak="break-word">
-                              {item.label}
-                              {item.followups && Object.keys(item.followups).length > 0 && (
-                                <Text as="span" color="gray.600" ml={2}>枝</Text>
-                              )}
-                              {item.image && (
-                                <Icon as={MdImage} ml={2} color="gray.500" />
-                              )}
-                            </Td>
-                            <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                              <IconButton
-                                aria-label="問診項目を削除"
-                                icon={<DeleteIcon />}
-                                size="sm"
-                                colorScheme="red"
-                                variant="ghost"
-                                onClick={() => {
-                                  void confirmRemoveItem(idx);
-                                }}
-                              />
+                            <Td whiteSpace="normal" wordBreak="break-word">
+                              <Flex align="center" gap={2} flexWrap="wrap">
+                                <Text fontWeight={selected ? 'bold' : 'normal'}>{item.label}</Text>
+                                {item.followups && Object.keys(item.followups).length > 0 && (
+                                  <Tooltip label="分岐質問あり" placement="top" openDelay={250}>
+                                    <Badge
+                                      colorScheme="teal"
+                                      variant="subtle"
+                                      display="inline-flex"
+                                      alignItems="center"
+                                      gap={1}
+                                    >
+                                      <Icon as={BiGitBranch} boxSize={3} aria-label="分岐質問あり" />
+                                      <Box as="span" fontSize="xs">分岐</Box>
+                                    </Badge>
+                                  </Tooltip>
+                                )}
+                                {item.image && (
+                                  <Icon as={MdImage} color="gray.500" boxSize={4} />
+                                )}
+                                {genderRestrictionLabel && (
+                                  <Badge
+                                    colorScheme={item.gender === 'female' ? 'pink' : item.gender === 'male' ? 'blue' : 'purple'}
+                                    variant="subtle"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                    gap={1}
+                                  >
+                                    <Icon as={MdWc} boxSize={3} />
+                                    <Box as="span" fontSize="xs">{genderRestrictionLabel}</Box>
+                                  </Badge>
+                                )}
+                                {ageRestrictionLabel && (
+                                  <Badge
+                                    colorScheme="orange"
+                                    variant="subtle"
+                                    display="inline-flex"
+                                    alignItems="center"
+                                    gap={1}
+                                  >
+                                    <Icon as={MdCalendarToday} boxSize={3} />
+                                    <Box as="span" fontSize="xs">{ageRestrictionLabel}</Box>
+                                  </Badge>
+                                )}
+                              </Flex>
                             </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 isChecked={item.required}
-                                size="sm"
+                                size="md"
                                 colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'required', e.target.checked)}
+                                onChange={(e) => updateItem(itemIndex, 'required', e.target.checked)}
                               />
                             </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 isChecked={item.use_initial}
-                                size="sm"
+                                size="md"
                                 colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'use_initial', e.target.checked)}
+                                onChange={(e) => updateItem(itemIndex, 'use_initial', e.target.checked)}
                               />
                             </Td>
                             <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                               <Checkbox
                                 isChecked={item.use_followup}
-                                size="sm"
+                                size="md"
                                 colorScheme="gray"
-                                onChange={(e) => updateItem(idx, 'use_followup', e.target.checked)}
+                                onChange={(e) => updateItem(itemIndex, 'use_followup', e.target.checked)}
+                              />
+                            </Td>
+                            <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
+                              <IconButton
+                                aria-label="問診項目を削除"
+                                icon={<DeleteIcon />}
+                                size="sm"
+                                colorScheme="red"
+                                variant="solid"
+                                onClick={() => {
+                                  void confirmRemoveItem(itemIndex);
+                                }}
                               />
                             </Td>
                           </Tr>
-                          {selected && (
-                            <Tr key={`editor-${item.id}`}>
-                              <Td colSpan={6} p={0}>
-                                <Box
-                                  p={4}
-                                  bg="white"
-                                  borderWidth="1px"
-                                  borderColor="neutral.200"
-                                  position="relative"
-                                  zIndex={1100}
-                                  boxShadow="sm"
-                                  borderRadius="md"
-                                >
-                                  <VStack align="stretch" spacing={3}>
-                                    <FormControl>
-                                      <FormLabel m={0}>問診内容</FormLabel>
-                                      <Input value={item.label} onChange={(e) => updateItem(idx, 'label', e.target.value)} />
-                                    </FormControl>
-                                    <FormControl>
-                                      <FormLabel m={0}>補足説明</FormLabel>
-                                      <Textarea value={item.description || ''} onChange={(e) => updateItem(idx, 'description', e.target.value)} />
-                                    </FormControl>
-                                    <FormControl>
-                                      <FormLabel m={0}>質問時に表示する画像</FormLabel>
-                                      {item.image && (
-                                        <>
-                                          <Image
-                                            src={item.image}
-                                            alt=""
-                                            maxH="100px"
-                                            mb={2}
-                                            cursor="pointer"
-                                            onClick={() => openImagePreview(item.image!)}
-                                          />
-                                          <Button
-                                            size="xs"
-                                            colorScheme="red"
-                                            mb={2}
-                                            onClick={async () => {
-                                              const removed = await confirmAndDeleteImage(item.image);
-                                              if (!removed) return;
-                                              updateItem(idx, 'image', undefined);
-                                            }}
-                                          >
-                                            画像を削除
-                                          </Button>
-                                        </>
-                                      )}
-                                      <Input
-                                        key={item.image || 'empty'}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) {
-                                            const removed = await confirmAndDeleteImage(item.image);
-                                            if (!removed) return;
-                                            updateItem(idx, 'image', undefined);
-                                            return;
-                                          }
-                                          await deleteItemImage(item.image);
-                                          const url = await uploadItemImage(file);
-                                          if (url) updateItem(idx, 'image', url);
-                                        }}
-                                      />
-                                      {item.type === 'image_annotation' && !item.image && (
-                                        <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
-                                      )}
-                                    </FormControl>
-                                    {/* 入力方法や選択肢の設定（画像セクションの下に配置） */}
-                                    <FormControl maxW="360px">
-                                      <FormLabel m={0}>入力方法</FormLabel>
-                                      <Select value={item.type} onChange={(e) => changeItemType(idx, e.target.value)}>
-                                        <option value="string">テキスト</option>
-                                        <option value="multi">複数選択</option>
-                                        <option value="yesno">はい/いいえ</option>
-                                        <option value="date">日付</option>
-                                        <option value="slider">スライドバー</option>
-                                        <option value="image_annotation">画像注釈（タップ・線）</option>
-                                      </Select>
-                                    </FormControl>
-                                    {item.type === 'multi' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>選択肢</FormLabel>
-                                        <VStack
-                                          align="stretch"
-                                          onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
-                                          onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: item.options?.length ?? 0 })}
-                                        >
-                                          {item.options?.map((opt, optIdx) => (
-                                            <HStack
-                                              key={optIdx}
-                                              spacing={2}
-                                              align="center"
-                                              onDragOver={handleOptionDragOver({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                              onDrop={handleOptionDrop({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                            >
-                                              <Box
-                                                aria-label="ドラッグして順序を変更"
-                                                cursor="grab"
-                                                color="gray.500"
-                                                draggable
-                                                onDragStart={handleOptionDragStart({ kind: 'item', itemIndex: idx, optionIndex: optIdx })}
-                                                onDragEnd={handleOptionDragEnd}
-                                                role="button"
-                                                tabIndex={-1}
-                                                lineHeight={0}
-                                                pr={1}
-                                              >
-                                                <DragHandleIcon />
-                                              </Box>
-                                              <Input
-                                                flex="1"
-                                                value={opt}
-                                                onChange={(e) => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const oldVal = newOptions[optIdx];
-                                                  newOptions[optIdx] = e.target.value;
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[oldVal]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    newFollowups[e.target.value] = newFollowups[oldVal];
-                                                    delete newFollowups[oldVal];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                              <Tooltip label="追加質問を追加">
-                                                <IconButton
-                                                  aria-label="追質問を追加/編集"
-                                                  icon={<QuestionIcon />}
-                                                  size="sm"
-                                                  isDisabled={!opt.trim()}
-                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                  onClick={() => {
-                                                    openFollowups(
-                                                      (item.followups && item.followups[opt]) || [],
-                                                      (newItems, _stack) => {
-                                                        const f = { ...(item.followups || {}), [opt]: newItems };
-                                                        updateItem(idx, 'followups', f);
-                                                      },
-                                                      1
-                                                    );
-                                                  }}
-                                                />
-                                              </Tooltip>
-                                              <IconButton
-                                                aria-label="選択肢を削除"
-                                                icon={<DeleteIcon />}
-                                                size="sm"
-                                                onClick={() => {
-                                                  const newOptions = [...(item.options || [])];
-                                                  const removed = newOptions.splice(optIdx, 1)[0];
-                                                  updateItem(idx, 'options', newOptions);
-                                                  if (item.followups && item.followups[removed]) {
-                                                    const newFollowups = { ...(item.followups || {}) };
-                                                    delete newFollowups[removed];
-                                                    updateItem(idx, 'followups', newFollowups);
-                                                  }
-                                                }}
-                                              />
-                                            </HStack>
-                                          ))}
-                                          <Checkbox
-                                            isChecked={item.allow_freetext}
-                                            onChange={(e) => updateItem(idx, 'allow_freetext', e.target.checked)}
-                                            alignSelf="flex-start"
-                                          >
-                                            フリーテキスト入力を許可
-                                          </Checkbox>
-                                          <Button
-                                            size="sm"
-                                            py={2}
-                                            onClick={() => {
-                                              const newOptions = [...(item.options || []), ''];
-                                              updateItem(idx, 'options', newOptions);
-                                            }}
-                                            isDisabled={item.options?.some((option) => !option.trim())}
-                                            alignSelf="flex-end"
-                                          >
-                                            選択肢を追加
-                                          </Button>
-                                        </VStack>
-
-
-                                      </Box>
-                                    )}
-                                    {item.type === 'yesno' && (
-                                      <Box>
-                                        <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
-                                        <VStack align="stretch">
-                                          {['yes', 'no'].map((opt) => (
-                                            <HStack key={opt}>
-                                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                                              <Tooltip label="追加質問を追加">
-                                                <IconButton
-                                                  aria-label="追質問を追加/編集"
-                                                  icon={<QuestionIcon />}
-                                                  size="sm"
-                                                  colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
-                                                  onClick={() => {
-                                                    openFollowups(
-                                                      (item.followups && item.followups[opt]) || [],
-                                                      (newItems, _stack) => {
-                                                        const f = { ...(item.followups || {}), [opt]: newItems };
-                                                        updateItem(idx, 'followups', f);
-                                                      },
-                                                      1
-                                                    );
-                                                  }}
-                                                />
-                                              </Tooltip>
-                                            </HStack>
-                                          ))}
-                                        </VStack>
-                                      </Box>
-                                    )}
-                                    {item.type === 'slider' && (
-                                      <HStack>
-                                        <FormControl>
-                                          <FormLabel m={0}>最小値</FormLabel>
-                                          <NumberInput
-                                            value={item.min ?? 0}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'min', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                        <FormControl>
-                                          <FormLabel m={0}>最大値</FormLabel>
-                                          <NumberInput
-                                            value={item.max ?? 10}
-                                            onChange={(v) =>
-                                              updateItem(idx, 'max', v ? Number(v) : undefined)
-                                            }
-                                          >
-                                            <NumberInputField />
-                                          </NumberInput>
-                                        </FormControl>
-                                      </HStack>
-                                    )}
-                                    {/* 表示制限（性別・年齢） */}
-                                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
-                                      <FormControl alignSelf="flex-start">
-                                        <Checkbox
-                                          isChecked={item.gender_enabled}
-                                          onChange={(e) => updateItem(idx, 'gender_enabled', e.target.checked)}
-                                        >
-                                          性別で表示を制限
-                                        </Checkbox>
-                                        {item.gender_enabled && (
-                                          <HStack mt={2}>
-                                            <Button
-                                              variant={item.gender === 'male' ? 'solid' : 'outline'}
-                                              colorScheme={item.gender === 'male' ? 'teal' : 'gray'}
-                                              onClick={() => {
-                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                                updateItem(idx, 'gender', 'male' as any);
-                                              }}
-                                            >
-                                              男性のみに質問
-                                            </Button>
-                                            <Button
-                                              variant={item.gender === 'female' ? 'solid' : 'outline'}
-                                              colorScheme={item.gender === 'female' ? 'teal' : 'gray'}
-                                              onClick={() => {
-                                                if (!item.gender_enabled) updateItem(idx, 'gender_enabled', true);
-                                                updateItem(idx, 'gender', 'female' as any);
-                                              }}
-                                            >
-                                              女性のみに質問
-                                            </Button>
-                                          </HStack>
-                                        )}
-                                      </FormControl>
-                                      <FormControl alignSelf="flex-start">
-                                        <HStack justifyContent="space-between" w="full">
-                                          <Checkbox
-                                            isChecked={item.age_enabled}
-                                            onChange={(e) => updateItem(idx, 'age_enabled', e.target.checked)}
-                                          >
-                                            年齢で表示を制限
-                                          </Checkbox>
-                                          {item.age_enabled && (
-                                            <Text fontSize="sm" color="gray.600">
-                                              {(item.min_age ?? 0)} 歳 〜 {(item.max_age ?? 110)} 歳
-                                            </Text>
-                                          )}
-                                        </HStack>
-                                        {item.age_enabled && (
-                                          <Box px={2} mt={2} display="flex" justifyContent="center">
-                                            <HStack w="66%" spacing={2} alignItems="center">
-                                              <Text fontSize="sm" color="gray.600">0歳</Text>
-                                              <RangeSlider
-                                                flex="1"
-                                                min={0}
-                                                max={110}
-                                                colorScheme="primary"
-                                                value={[item.min_age ?? 0, item.max_age ?? 110]}
-                                                onChange={(vals) => {
-                                                  const [minV, maxV] = vals as [number, number];
-                                                  setItemAgeRange(idx, minV, maxV);
-                                                }}
-                                              >
-                                                <RangeSliderTrack>
-                                                  <RangeSliderFilledTrack />
-                                                </RangeSliderTrack>
-                                                <RangeSliderThumb index={0} />
-                                                <RangeSliderThumb index={1} />
-                                              </RangeSlider>
-                                              <Text fontSize="sm" color="gray.600">110歳</Text>
-                                            </HStack>
-                                          </Box>
-                                        )}
-                                      </FormControl>
-                                    </SimpleGrid>
-                                    <HStack justifyContent="flex-end" spacing={3} mt={2}>
-                                      <IconButton
-                                        aria-label="項目を削除"
-                                        icon={<DeleteIcon />}
-                                        size="sm"
-                                        colorScheme="red"
-                                        variant="outline"
-                                        onClick={() => {
-                                          void confirmRemoveItem(idx);
-                                        }}
-                                      />
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        colorScheme="gray"
-                                        onClick={() => setSelectedItemId(null)}
-                                      >
-                                        編集終了
-                                      </Button>
-                                    </HStack>
-                                  
-                                  </VStack>
-                                </Box>
-                              </Td>
-                            </Tr>
-                          )}
-                          {renderFollowupRows(item.followups, 1, idx)}
-                        </>
+                          {renderFollowupRows(item.followups, 1, itemIndex)}
+                        </Fragment>
                       );
                     })}
                   </Tbody>
@@ -2036,347 +2479,76 @@ export default function AdminTemplates() {
 
           {/* 行内展開のため、ここでの一括編集UIは省略 */}
 
-          {isAddingNewItem && (
-            <Box
-              borderWidth="1px"
-              borderRadius="md"
-              p={4}
-              mt={6}
-              position="relative"
-              zIndex={1100}
-              boxShadow="lg"
-              bg="white"
-              borderColor="border.accent"
-            >
-              <Heading size="md" mb={4}>
-                問診項目を追加
-              </Heading>
-              <VStack spacing={4} align="stretch">
-                <FormControl>
-                  <FormLabel>新規問診内容</FormLabel>
-                  <Input
-                    placeholder="例: 主訴は何ですか？"
-                    value={newItem.label}
-                    onChange={(e) => setNewItem({ ...newItem, label: e.target.value })}
-                  />
-                </FormControl>
-                <FormControl>
-                  <FormLabel>補足説明</FormLabel>
-                  <Textarea
-                    placeholder="例: わかる範囲で構いません"
-                    value={newItem.description}
-                    onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                  />
-                </FormControl>
-                <FormControl>
-                  <FormLabel>質問時に表示する画像</FormLabel>
-                  {newItem.image && (
-                    <>
-                      <Image
-                        src={newItem.image}
-                        alt=""
-                        maxH="100px"
-                        mb={2}
-                        cursor="pointer"
-                        onClick={() => openImagePreview(newItem.image)}
-                      />
-                      <Button
-                        size="xs"
-                        colorScheme="red"
-                        mb={2}
-                        onClick={async () => {
-                          const removed = await confirmAndDeleteImage(newItem.image);
-                          if (!removed) return;
-                          setNewItem({ ...newItem, image: '' });
-                        }}
-                      >
-                        画像を削除
-                      </Button>
-                    </>
-                  )}
-                  <Input
-                    key={newItem.image || 'empty'}
-                    type="file"
-                    accept="image/*"
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) {
-                        const removed = await confirmAndDeleteImage(newItem.image);
-                        if (!removed) return;
-                        setNewItem({ ...newItem, image: '' });
-                        return;
-                      }
-                      await deleteItemImage(newItem.image);
-                      const url = await uploadItemImage(file);
-                      if (url) setNewItem({ ...newItem, image: url });
-                    }}
-                  />
-                  {newItem.type === 'image_annotation' && !newItem.image && (
-                    <Text color="red.500" fontSize="sm" mt={1}>画像注釈タイプでは画像が必須です</Text>
-                  )}
-                </FormControl>
-                <FormControl>
-                  <FormLabel>入力方法</FormLabel>
-                  <Select
-                    value={newItem.type}
-                    onChange={(e) => {
-                      const t = e.target.value;
-                      if (t === 'multi') {
-                        setNewItem({
-                          ...newItem,
-                          type: t,
-                          allow_freetext: true,
-                          options: newItem.options.length > 0 ? newItem.options : ['', 'その他'],
-                          min: '',
-                          max: '',
-                        });
-                      } else if (t === 'slider') {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '0', max: '10' });
-                      } else {
-                        setNewItem({ ...newItem, type: t, allow_freetext: false, options: [], min: '', max: '' });
-                      }
-                    }}
-                  >
-                    <option value="string">テキスト</option>
-                    <option value="multi">複数選択</option>
-                    <option value="yesno">はい/いいえ</option>
-                    <option value="date">日付</option>
-                    <option value="slider">スライドバー</option>
-                    <option value="image_annotation">画像注釈（タップ・線）</option>
-                  </Select>
-                </FormControl>
-                {/* 種別別の詳細設定（選択肢やスライダー設定） */}
-                {['multi'].includes(newItem.type) && (
-                  <FormControl>
-                    <FormLabel>選択肢</FormLabel>
-                    <VStack
-                      align="stretch"
-                      onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: newItem.options.length })}
-                      onDrop={handleOptionDrop({ kind: 'new', optionIndex: newItem.options.length })}
-                    >
-                      {newItem.options.map((opt, optIdx) => (
-                        <HStack
-                          key={optIdx}
-                          spacing={2}
-                          align="center"
-                          onDragOver={handleOptionDragOver({ kind: 'new', optionIndex: optIdx })}
-                          onDrop={handleOptionDrop({ kind: 'new', optionIndex: optIdx })}
-                        >
-                          <Box
-                            aria-label="ドラッグして順序を変更"
-                            cursor="grab"
-                            color="gray.500"
-                            draggable
-                            onDragStart={handleOptionDragStart({ kind: 'new', optionIndex: optIdx })}
-                            onDragEnd={handleOptionDragEnd}
-                            role="button"
-                            tabIndex={-1}
-                            lineHeight={0}
-                            pr={1}
-                          >
-                            <DragHandleIcon />
-                          </Box>
-                          <Input
-                            flex="1"
-                            value={opt}
-                            onChange={(e) => {
-                              const newOptions = [...newItem.options];
-                              newOptions[optIdx] = e.target.value;
-                              setNewItem({ ...newItem, options: newOptions });
-                            }}
-                          />
-                          <IconButton
-                            aria-label="選択肢を削除"
-                            icon={<DeleteIcon />}
-                            size="sm"
-                            onClick={() => {
-                              const newOptions = [...newItem.options];
-                              newOptions.splice(optIdx, 1);
-                              setNewItem({ ...newItem, options: newOptions });
-                            }}
-                          />
-                        </HStack>
-                      ))}
-                      <Button
-                        size="sm"
-                        py={2}
-                        onClick={() => {
-                          const newOptions = [...newItem.options, ''];
-                          setNewItem({ ...newItem, options: newOptions });
-                        }}
-                      >
-                        選択肢を追加
-                      </Button>
-                    </VStack>
-
-
-
-
-                  </FormControl>
-                )}
-                {newItem.type === 'multi' && (
-                  <Checkbox
-                    isChecked={newItem.allow_freetext}
-                    onChange={(e) => setNewItem({ ...newItem, allow_freetext: e.target.checked })}
-                    alignSelf="flex-start"
-                  >
-                    フリーテキスト入力を許可
-                  </Checkbox>
-                )}
-                {newItem.type === 'slider' && (
-                  <HStack>
-                    <FormControl>
-                      <FormLabel>最小値</FormLabel>
-                      <NumberInput
-                        value={newItem.min}
-                        onChange={(v) => setNewItem({ ...newItem, min: v })}
-                      >
-                        <NumberInputField />
-                      </NumberInput>
-                    </FormControl>
-                    <FormControl>
-                      <FormLabel>最大値</FormLabel>
-                      <NumberInput
-                        value={newItem.max}
-                        onChange={(v) => setNewItem({ ...newItem, max: v })}
-                      >
-                        <NumberInputField />
-                      </NumberInput>
-                    </FormControl>
-                  </HStack>
-                )}
-                <HStack>
-                  <Checkbox isChecked={newItem.required} onChange={(e) => setNewItem({ ...newItem, required: e.target.checked })}>
-                    必須
-                  </Checkbox>
-                  <Checkbox
-                    isChecked={newItem.use_initial}
-                    onChange={(e) => setNewItem({ ...newItem, use_initial: e.target.checked })}
-                  >
-                    初診に含める
-                  </Checkbox>
-                  <Checkbox
-                    isChecked={newItem.use_followup}
-                    onChange={(e) => setNewItem({ ...newItem, use_followup: e.target.checked })}
-                  >
-                    再診に含める
-                  </Checkbox>
-                </HStack>
-                {/* 表示制限（性別・年齢） */}
-                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} alignItems="stretch">
-                  <FormControl alignSelf="flex-start">
-                    <Checkbox
-                      isChecked={newItem.gender_enabled}
-                      onChange={(e) => setNewItem({ ...newItem, gender_enabled: e.target.checked })}
-                    >
-                      性別で表示を制限
-                    </Checkbox>
-                    {newItem.gender_enabled && (
-                      <HStack mt={2}>
-                        <Button
-                          variant={newItem.gender === 'male' ? 'solid' : 'outline'}
-                          colorScheme={newItem.gender === 'male' ? 'teal' : 'gray'}
-                          onClick={() => setNewItem({ ...newItem, gender: 'male' })}
-                        >
-                          男性のみに質問
-                        </Button>
-                        <Button
-                          variant={newItem.gender === 'female' ? 'solid' : 'outline'}
-                          colorScheme={newItem.gender === 'female' ? 'teal' : 'gray'}
-                          onClick={() => setNewItem({ ...newItem, gender: 'female' })}
-                        >
-                          女性のみに質問
-                        </Button>
-                      </HStack>
-                    )}
-                  </FormControl>
-                  <FormControl alignSelf="flex-start">
-                    <HStack justifyContent="space-between" w="full">
-                      <Checkbox
-                        isChecked={newItem.age_enabled}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setNewItem({ ...newItem, age_enabled: true, min_age: String(newItem.min_age || 0), max_age: String(newItem.max_age || 110) });
-                          } else {
-                            setNewItem({ ...newItem, age_enabled: false });
-                          }
-                        }}
-                      >
-                        年齢で表示を制限
-                      </Checkbox>
-                      {newItem.age_enabled && (
-                        <Text fontSize="sm" color="gray.600">
-                          {(newItem.min_age === '' ? 0 : parseInt(newItem.min_age))} 歳 〜 {(newItem.max_age === '' ? 110 : parseInt(newItem.max_age))} 歳
-                        </Text>
-                      )}
-                    </HStack>
-                    {newItem.age_enabled && (
-                      <Box px={2} mt={2} display="flex" justifyContent="center">
-                        <HStack w="66%" spacing={2} alignItems="center">
-                          <Text fontSize="sm" color="gray.600">0歳</Text>
-                          <RangeSlider
-                            flex="1"
-                            min={0}
-                            max={110}
-                            colorScheme="primary"
-                            value={[
-                              newItem.min_age === '' ? 0 : parseInt(newItem.min_age),
-                              newItem.max_age === '' ? 110 : parseInt(newItem.max_age),
-                            ]}
-                            onChange={(vals) => {
-                              const [minV, maxV] = vals as [number, number];
-                              setNewItem({ ...newItem, min_age: String(minV), max_age: String(maxV) });
-                            }}
-                          >
-                            <RangeSliderTrack>
-                              <RangeSliderFilledTrack />
-                            </RangeSliderTrack>
-                            <RangeSliderThumb index={0} />
-                            <RangeSliderThumb index={1} />
-                          </RangeSlider>
-                          <Text fontSize="sm" color="gray.600">110歳</Text>
-                        </HStack>
-                      </Box>
-                    )}
-                  </FormControl>
-                </SimpleGrid>
-                <HStack justifyContent="flex-end">
-                  <Button
-                    onClick={async () => {
-                      await deleteItemImage(newItem.image);
-                      setNewItem({
-                        label: '',
-                        type: 'string',
-                        required: false,
-                        options: [],
-                        use_initial: true,
-                        use_followup: true,
-                        allow_freetext: false,
-                        description: '',
-                        gender_enabled: false,
-                        gender: 'male',
-                        age_enabled: false,
-                        min_age: '',
-                        max_age: '',
-                        image: '',
-                        min: '0',
-                        max: '10',
-                      });
-                      setIsAddingNewItem(false);
-                    }}
-                    variant="ghost"
-                  >
-                    キャンセル
-                  </Button>
-                  <Button onClick={addItem} colorScheme="primary">
-                    確定
-                  </Button>
-                </HStack>
-              </VStack>
-            </Box>
-          )}
         </Box>
       )}
+
+      <Modal
+        isOpen={!!selectedItem}
+        onClose={closeItemEditor}
+        size="4xl"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay />
+        <ModalContent maxW="900px">
+          <ModalHeader>問診項目を編集</ModalHeader>
+          <ModalCloseButton />
+          {selectedItem && (
+            <>
+              <ModalBody>
+                <ItemEditorModalContent item={selectedItem} itemIndex={selectedItemIndex} />
+              </ModalBody>
+              <ModalFooter>
+                <Flex w="full" justify="space-between" align="center" wrap="wrap" gap={3}>
+                  <Button
+                    onClick={() => {
+                      void confirmRemoveItem(selectedItemIndex);
+                    }}
+                    colorScheme="red"
+                    variant="outline"
+                    leftIcon={<DeleteIcon />}
+                  >
+                    項目を削除
+                  </Button>
+                  <HStack>
+                    <Button onClick={closeItemEditor} variant="ghost">
+                      キャンセル
+                    </Button>
+                    <Button onClick={closeItemEditor} colorScheme="primary">
+                      保存
+                    </Button>
+                  </HStack>
+                </Flex>
+              </ModalFooter>
+            </>
+          )}
+        </ModalContent>
+      </Modal>
+
+      <Modal
+        isOpen={isAddingNewItem}
+        onClose={closeNewItemModal}
+        size="4xl"
+        scrollBehavior="inside"
+      >
+        <ModalOverlay />
+        <ModalContent maxW="900px">
+          <ModalHeader>問診項目を追加</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <NewItemModalContent />
+          </ModalBody>
+          <ModalFooter>
+            <Flex w="full" justify="flex-end" align="center" wrap="wrap" gap={3}>
+              <Button onClick={closeNewItemModal} variant="ghost">
+                キャンセル
+              </Button>
+              <Button onClick={addItem} colorScheme="primary">
+                保存
+              </Button>
+            </Flex>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
 
       <Modal
         isOpen={imagePreviewModal.isOpen}
@@ -2570,26 +2742,26 @@ export default function AdminTemplates() {
             <ModalHeader>追加質問の設定</ModalHeader>
             <ModalCloseButton />
             <ModalBody>
+              {followupContextDescription && (
+                <Alert status="info" variant="left-accent" mb={4}>
+                  <AlertIcon />
+                  <Box>
+                    <Text fontSize="sm" color="gray.700">
+                      {followupContextDescription}
+                    </Text>
+                  </Box>
+                </Alert>
+              )}
               <VStack align="stretch" spacing={4} mb={4}>
                 {currentFollowup.items.map((fi, fIdx) => (
                   <Box key={fi.id} borderWidth="1px" borderRadius="md" p={3}>
-                    <HStack justifyContent="space-between" alignItems="flex-start">
-                      <FormControl mr={2}>
-                        <FormLabel m={0}>質問文</FormLabel>
-                        <Input
-                          value={fi.label}
-                          onChange={(e) => updateFollowupItem(fIdx, 'label', e.target.value)}
-                        />
-                      </FormControl>
-                      <IconButton
-                        aria-label="追質問を削除"
-                        icon={<DeleteIcon />}
-                        size="sm"
-                        colorScheme="red"
-                        variant="outline"
-                        onClick={() => removeFollowupItem(fIdx)}
+                    <FormControl>
+                      <FormLabel m={0}>質問文</FormLabel>
+                      <Input
+                        value={fi.label}
+                        onChange={(e) => updateFollowupItem(fIdx, 'label', e.target.value)}
                       />
-                    </HStack>
+                    </FormControl>
                     <FormControl mt={2}>
                       <FormLabel m={0}>補足説明</FormLabel>
                       <Textarea
@@ -2735,6 +2907,20 @@ export default function AdminTemplates() {
                                     updateFollowupItem(fIdx, 'followups', nf);
                                   }
                                 }}
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter' || e.nativeEvent.isComposing) {
+                                    return;
+                                  }
+                                  const options = fi.options || [];
+                                  if (oIdx !== options.length - 1) {
+                                    return;
+                                  }
+                                  if (options.some((option) => !option.trim())) {
+                                    return;
+                                  }
+                                  e.preventDefault();
+                                  addEmptyOptionToFollowupItem(fIdx);
+                                }}
                               />
                               <Tooltip label="追加質問を追加">
                                 <IconButton
@@ -2744,6 +2930,7 @@ export default function AdminTemplates() {
                                   isDisabled={!opt.trim() || currentFollowup.depth >= 2}
                                   colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
                                   onClick={() => {
+                                    const answerLabel = opt.trim() ? opt : '未設定';
                                     openFollowups(
                                       (fi.followups && fi.followups[opt]) || [],
                                       (newItems, stack) => {
@@ -2757,7 +2944,11 @@ export default function AdminTemplates() {
                                         stack[stack.length - 1] = { ...parent, items };
                                         markDirty();
                                       },
-                                      currentFollowup.depth + 1
+                                      currentFollowup.depth + 1,
+                                      {
+                                        question: fi.label,
+                                        answer: answerLabel,
+                                      }
                                     );
                                   }}
                                 />
@@ -2792,8 +2983,7 @@ export default function AdminTemplates() {
                             size="sm"
                             py={2}
                             onClick={() => {
-                              const newOptions = [...(fi.options || []), ''];
-                              updateFollowupItem(fIdx, 'options', newOptions);
+                              addEmptyOptionToFollowupItem(fIdx);
                             }}
                             isDisabled={fi.options?.some((o) => !o.trim())}
                             alignSelf="flex-end"
@@ -2818,6 +3008,7 @@ export default function AdminTemplates() {
                                   size="sm"
                                   colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
                                   onClick={() => {
+                                    const answerLabel = opt === 'yes' ? 'はい' : 'いいえ';
                                     openFollowups(
                                       (fi.followups && fi.followups[opt]) || [],
                                       (newItems, stack) => {
@@ -2831,7 +3022,11 @@ export default function AdminTemplates() {
                                         stack[stack.length - 1] = { ...parent, items };
                                         markDirty();
                                       },
-                                      currentFollowup.depth + 1
+                                      currentFollowup.depth + 1,
+                                      {
+                                        question: fi.label,
+                                        answer: answerLabel,
+                                      }
                                     );
                                   }}
                                 />
@@ -2940,17 +3135,25 @@ export default function AdminTemplates() {
                     </FormControl>
                   </Box>
                 ))}
-                <Button onClick={addFollowupItem} alignSelf="flex-start" colorScheme="primary" isDisabled={(currentFollowup?.items?.length || 0) >= 1}>
-                  質問を追加
-                </Button>
-                <HStack justifyContent="flex-end" w="full">
-                  <Button onClick={closeFollowups} variant="ghost">
-                    キャンセル
+                <Flex w="full" justify="space-between" align="center" wrap="wrap" gap={3}>
+                  <Button
+                    onClick={() => removeFollowupItem(0)}
+                    colorScheme="red"
+                    variant="outline"
+                    alignSelf="flex-start"
+                    isDisabled={(currentFollowup.items?.length || 0) === 0}
+                  >
+                    質問を削除
                   </Button>
-                  <Button onClick={saveFollowups} colorScheme="primary">
-                    保存
-                  </Button>
-                </HStack>
+                  <HStack justifyContent="flex-end">
+                    <Button onClick={closeFollowups} variant="ghost">
+                      キャンセル
+                    </Button>
+                    <Button onClick={saveFollowups} colorScheme="primary">
+                      保存
+                    </Button>
+                  </HStack>
+                </Flex>
               </VStack>
             </ModalBody>
           </ModalContent>

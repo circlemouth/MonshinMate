@@ -1021,7 +1021,7 @@ class ThemeColorSettings(BaseModel):
 @app.get("/system/display-name", response_model=DisplayNameSettings)
 def get_display_name() -> DisplayNameSettings:
     """システムの表示名（ヘッダーに出す名称）を返す。未設定時は既定値。"""
-    DEFAULT = "Monshinクリニック"
+    DEFAULT = "問診メイト"
     try:
         stored = load_app_settings() or {}
         name = stored.get("display_name") or DEFAULT
@@ -1036,7 +1036,7 @@ def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
     """システムの表示名を保存する。"""
     try:
         current = load_app_settings() or {}
-        current["display_name"] = payload.display_name or "Monshinクリニック"
+        current["display_name"] = payload.display_name or "問診メイト"
         save_app_settings(current)
         return DisplayNameSettings(display_name=current["display_name"])
     except Exception:

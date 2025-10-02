@@ -153,7 +153,7 @@ export default function AdminAppearance() {
 
   const saveDisplayName = useCallback(
     async (current: string, signal: AbortSignal) => {
-      const payload = { display_name: current || 'Monshinクリニック' };
+      const payload = { display_name: current || '問診メイト' };
       const res = await fetch('/system/display-name', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -369,7 +369,7 @@ export default function AdminAppearance() {
         if (canceled) return;
         if (res.ok) {
           const data = await res.json().catch(() => ({}));
-          const initial = data.display_name || 'Monshinクリニック';
+          const initial = data.display_name || '問診メイト';
           setName(initial);
           markNameSynced(initial);
         } else {
@@ -377,7 +377,7 @@ export default function AdminAppearance() {
         }
       } catch {
         if (!canceled) {
-          const fallback = 'Monshinクリニック';
+          const fallback = '問診メイト';
           setName(fallback);
           markNameSynced(fallback);
         }
@@ -612,12 +612,12 @@ export default function AdminAppearance() {
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="例: Monshinクリニック"
+                placeholder="例: 問診メイト"
               />
               <AutoSaveStatusText status={nameStatus} message={nameError} />
             </Stack>
             <Text fontSize="sm" color="fg.muted">
-              未入力の場合は「Monshinクリニック」が自動で表示されます。
+              未入力の場合は「問診メイト」が自動で表示されます。
             </Text>
           </FormControl>
         </Section>

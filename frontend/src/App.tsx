@@ -79,7 +79,7 @@ export default function App() {
     }
   }, [location.pathname]);
 
-  const [displayName, setDisplayName] = useState('Monshinクリニック');
+  const [displayName, setDisplayName] = useState('問診メイト');
   const [logo, setLogo] = useState<{ url: string | null; crop: { x: number; y: number; w: number; h: number } | null }>({ url: null, crop: null });
   const systemNameRef = useRef<HTMLHeadingElement>(null);
 
