@@ -4,7 +4,7 @@
 
 Set-StrictMode -Version Latest
 
-# Clear read-only attributes under frontend/node_modules when OneDrive locks files
+# Clear read-only attributes under frontend/node_modules when OneDrive locks files
 function Clear-ReadOnlyAttributes {
     param(
         [Parameter(Mandatory=$true)]
