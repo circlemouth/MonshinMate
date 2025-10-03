@@ -434,6 +434,11 @@
     - 変更: `frontend/nginx.conf`（`/admin/*` のAPIサブパスのみプロキシ＋それ以外は `try_files`）
     - 変更: `frontend/vite.config.ts` に開発時専用のミドルウェア（`spa-admin-fallback`）を追加し、`/admin/*` リロード時にも `index.html` を返すようにした。
 
+## 41. 問診テンプレート取込時の405エラー解消（2025-10-03）
+- [x] Nginx 本番設定に `/admin/questionnaires` のプロキシ定義を追加し、インポート/エクスポート API への `POST` リクエストがバックエンドへ到達するよう修正。
+  - 変更: `frontend/nginx.conf`
+- [x] `dermatology_intake.json` の構造（`type=questionnaire_settings`、テンプレート配列等）が既存インポート仕様と整合することを確認。
+
 ## 33. システム表示名の設定機能（2025-08-23）
 - [x] 管理画面から「システム表示名」を編集可能にし、患者画面のヘッダーに反映（管理画面のヘッダーは固定文言「管理画面」とし設定の影響を受けない）。
   - 変更（バックエンド）: `backend/app/db.py` に `app_settings` テーブルと `save_app_settings` / `load_app_settings` を追加。
