@@ -247,12 +247,14 @@ export default function AdminDataTransfer() {
       const res = await fetch('/admin/sessions/import', { method: 'POST', body: formData });
       if (!res.ok) {
         let message = '問診データのインポートに失敗しました';
-        try {
-          const data = await res.json();
-          if (data?.detail) message = data.detail;
-        } catch {
-          const text = await res.text();
-          if (text) message = text;
+        const rawText = await res.text();
+        if (rawText) {
+          try {
+            const data = JSON.parse(rawText);
+            message = data?.detail ?? rawText;
+          } catch {
+            message = rawText;
+          }
         }
         throw new Error(message);
       }
@@ -327,12 +329,14 @@ export default function AdminDataTransfer() {
       });
       if (!res.ok) {
         let message = '設定ファイルのインポートに失敗しました';
-        try {
-          const data = await res.json();
-          if (data?.detail) message = data.detail;
-        } catch {
-          const text = await res.text();
-          if (text) message = text;
+        const rawText = await res.text();
+        if (rawText) {
+          try {
+            const data = JSON.parse(rawText);
+            message = data?.detail ?? rawText;
+          } catch {
+            message = rawText;
+          }
         }
         throw new Error(message);
       }

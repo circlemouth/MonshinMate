@@ -970,3 +970,4 @@
 2025-10-03 20:04:07,156 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-10-03 20:04:07,374 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
 2025-10-03 20:04:10,755 INFO admin_login_success
+2025-10-03 20:04:10,971 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
