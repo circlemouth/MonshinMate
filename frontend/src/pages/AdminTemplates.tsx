@@ -1254,6 +1254,63 @@ type FollowupState = {
     }
   };
 
+  const renameTemplateApi = async (id: string) => {
+    const result = await prompt({
+      title: `テンプレート「${id}」の名称変更`,
+      description: '新しいテンプレートIDを入力してください。',
+      initialValue: id,
+      confirmText: '変更する',
+      cancelText: 'キャンセル',
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return 'IDを入力してください。';
+        if (trimmed === id) return '同じIDが入力されています。';
+        if (trimmed === 'default') return '標準テンプレートのIDは使用できません。';
+        if (templates.some((t) => t.id === trimmed)) {
+          return 'そのIDは既に使用されています。';
+        }
+        return null;
+      },
+    });
+    if (result === null) return;
+    const newId = result.trim();
+    try {
+      const res = await fetch(`/questionnaires/${id}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ new_id: newId }),
+      });
+      if (!res.ok) {
+        let detail = '';
+        try {
+          const data = await res.json();
+          if (typeof data?.detail === 'string') {
+            detail = data.detail;
+          }
+        } catch {
+          /* noop */
+        }
+        const suffix = detail ? `: ${detail}` : ` (HTTP ${res.status})`;
+        throw new Error(`テンプレート名の変更に失敗しました${suffix}`);
+      }
+      setTemplateId((prev) => (prev === id ? newId : prev));
+      setDefaultQuestionnaireId((prev) => (prev === id ? newId : prev));
+      await loadTemplateList({ retainSelection: true });
+      notify({
+        title: `テンプレートIDを「${newId}」に変更しました。`,
+        status: 'success',
+        channel: 'admin',
+      });
+    } catch (error) {
+      console.error('Failed to rename template:', error);
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : 'テンプレート名の変更に失敗しました。';
+      notify({ title: message, status: 'error', channel: 'admin' });
+    }
+  };
+
   const resetTemplateApi = async (id: string) => {
     const confirmed = await confirm({
       title: `テンプレート「${id}」を初期状態に戻します。`,
@@ -1441,23 +1498,34 @@ type FollowupState = {
                             >
                               複製
                             </Button>
-                            <Button
-                              size="xs"
-                              colorScheme="orange"
-                              variant="outline"
-                              onClick={() => resetTemplateApi(t.id)}
-                            >
-                              リセット
-                            </Button>
-                            {t.id !== 'default' && (
+                            {t.id === 'default' ? (
                               <Button
                                 size="xs"
-                                colorScheme="red"
+                                colorScheme="orange"
                                 variant="outline"
-                                onClick={() => deleteTemplateApi(t.id)}
+                                onClick={() => resetTemplateApi(t.id)}
                               >
-                                削除
+                                リセット
                               </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  size="xs"
+                                  colorScheme="blue"
+                                  variant="outline"
+                                  onClick={() => renameTemplateApi(t.id)}
+                                >
+                                  名称変更
+                                </Button>
+                                <Button
+                                  size="xs"
+                                  colorScheme="red"
+                                  variant="outline"
+                                  onClick={() => deleteTemplateApi(t.id)}
+                                >
+                                  削除
+                                </Button>
+                              </>
                             )}
                           </HStack>
                         </Td>

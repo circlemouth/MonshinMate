@@ -28,7 +28,14 @@ export default defineConfig(({ mode }) => {
     {
       name: 'spa-admin-fallback',
       configureServer(server) {
-        const apiPrefixes = ['/admin/auth', '/admin/login', '/admin/totp', '/admin/sessions', '/admin/password'];
+        const apiPrefixes = [
+          '/admin/auth',
+          '/admin/login',
+          '/admin/totp',
+          '/admin/sessions',
+          '/admin/password',
+          '/admin/questionnaires',
+        ];
         server.middlewares.use(async (req, res, next) => {
           const url = req.url || '';
           // リセット画面（/admin/password/reset）はフロントのSPAルートとして index.html を返す
@@ -80,6 +87,7 @@ export default defineConfig(({ mode }) => {
       '/admin/login': 'http://localhost:8001',
       '/admin/totp': 'http://localhost:8001',
       '/admin/sessions': 'http://localhost:8001',
+      '/admin/questionnaires': 'http://localhost:8001',
     },
   },
   };

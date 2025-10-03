@@ -437,6 +437,11 @@
 ## 41. 問診テンプレート取込時の405エラー解消（2025-10-03）
 - [x] Nginx 本番設定に `/admin/questionnaires` のプロキシ定義を追加し、インポート/エクスポート API への `POST` リクエストがバックエンドへ到達するよう修正。
   - 変更: `frontend/nginx.conf`
+  - 変更: `frontend/vite.config.ts`
+- [x] UTF-8 BOM 付きのエクスポートファイルを許容するようバックエンドの読込処理を調整。
+  - 変更: `backend/app/main.py`
+- [x] 既存 DB にテンプレート関連テーブルが無い場合でも自動再初期化してインポートを継続するよう防御コードを追加。
+  - 変更: `backend/app/main.py`
 - [x] `dermatology_intake.json` の構造（`type=questionnaire_settings`、テンプレート配列等）が既存インポート仕様と整合することを確認。
 
 ## 33. システム表示名の設定機能（2025-08-23）
@@ -1039,3 +1044,11 @@
 - [x] 変更（バックエンド）: `backend/app/db.py` に `get_couch_db` を導入し、初回接続失敗後でも要求時に再接続できるよう遅延初期化を実装。
 - [x] 動作確認: `curl -X POST http://localhost:8001/sessions -H 'Content-Type: application/json' -d '{"patient_name":"テスト太郎","dob":"1990-01-01","gender":"male","visit_type":"general","answers":{"chief_complaint":"テスト"}}'` でセッション作成が成功することを確認。
 - [ ] バックエンド自動テスト: `docker compose exec backend python -m pytest -q`（pytest 未インストールのため未実行）。
+
+## 131. テンプレートIDリネームAPIと管理UI更新（2025-10-03）
+- [x] 変更（バックエンド）: `backend/app/db.py` に `rename_template` を追加し、テンプレートID変更時に関連テーブルとデフォルト設定・CouchDBセッションを更新。`backend/app/main.py` に `/questionnaires/{id}/rename` API を追加。
+- [x] テスト追加: `backend/tests/test_api.py::test_rename_questionnaire_updates_related_data` / `test_rename_questionnaire_validation` を新設。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で標準テンプレート以外に「名称変更」ボタンを追加し、リセットボタン表示を標準テンプレート限定に変更。
+- [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md` にリネームAPIとUI仕様を反映。
+- [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_rename_questionnaire_updates_related_data -q`（`couchdb` モジュール未導入のため ImportError）
+- [ ] フロントエンドビルド確認: `cd frontend && npm run build`

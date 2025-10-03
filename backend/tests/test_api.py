@@ -858,11 +858,94 @@ def test_duplicate_questionnaire() -> None:
     ).json()
     assert init_prompt["prompt"] == "init" and init_prompt["enabled"] is True
     assert follow_prompt["prompt"] == "fup" and follow_prompt["enabled"] is False
-
     client.delete("/questionnaires/dup_src?visit_type=initial")
     client.delete("/questionnaires/dup_src?visit_type=followup")
     client.delete("/questionnaires/dup_copy?visit_type=initial")
     client.delete("/questionnaires/dup_copy?visit_type=followup")
+
+
+def test_rename_questionnaire_updates_related_data() -> None:
+    """テンプレートID変更時に関連情報も更新されることを確認する。"""
+
+    on_startup()
+    initial_payload = {
+        "id": "rename_src",
+        "visit_type": "initial",
+        "items": [{"id": "q1", "label": "Q1", "type": "string"}],
+    }
+    follow_payload = {
+        "id": "rename_src",
+        "visit_type": "followup",
+        "items": [{"id": "q2", "label": "Q2", "type": "string"}],
+    }
+    client.post("/questionnaires", json=initial_payload)
+    client.post("/questionnaires", json=follow_payload)
+    client.post(
+        "/questionnaires/rename_src/summary-prompt",
+        json={"visit_type": "initial", "prompt": "rename_summary", "enabled": True},
+    )
+    client.put(
+        "/system/default-questionnaire",
+        json={"questionnaire_id": "rename_src"},
+    )
+
+    res = client.post("/questionnaires/rename_src/rename", json={"new_id": "rename_dst"})
+    assert res.status_code == 200
+    assert res.json()["id"] == "rename_dst"
+
+    ids = {row["id"] for row in client.get("/questionnaires").json()}
+    assert "rename_dst" in ids
+    assert "rename_src" not in ids
+
+    renamed_template = client.get(
+        "/questionnaires/rename_dst/template?visit_type=initial"
+    ).json()
+    assert renamed_template["items"][0]["label"] == "Q1"
+
+    renamed_prompt = client.get(
+        "/questionnaires/rename_dst/summary-prompt?visit_type=initial"
+    ).json()
+    assert renamed_prompt["prompt"] == "rename_summary"
+    assert renamed_prompt["enabled"] is True
+
+    default_after = client.get("/system/default-questionnaire").json()
+    assert default_after["questionnaire_id"] == "rename_dst"
+    client.delete("/questionnaires/rename_dst?visit_type=initial")
+    client.delete("/questionnaires/rename_dst?visit_type=followup")
+
+
+def test_rename_questionnaire_validation() -> None:
+    """テンプレートID変更APIのバリデーションを確認する。"""
+
+    on_startup()
+    client.post(
+        "/questionnaires",
+        json={
+            "id": "rename_a",
+            "visit_type": "initial",
+            "items": [{"id": "a1", "label": "A1", "type": "string"}],
+        },
+    )
+    client.post(
+        "/questionnaires",
+        json={
+            "id": "rename_b",
+            "visit_type": "initial",
+            "items": [{"id": "b1", "label": "B1", "type": "string"}],
+        },
+    )
+
+    res_default = client.post(
+        "/questionnaires/default/rename", json={"new_id": "foo"}
+    )
+    assert res_default.status_code == 400
+
+    res_duplicate = client.post(
+        "/questionnaires/rename_a/rename", json={"new_id": "rename_b"}
+    )
+    assert res_duplicate.status_code == 400
+    client.delete("/questionnaires/rename_a?visit_type=initial")
+    client.delete("/questionnaires/rename_b?visit_type=initial")
 
 
 def test_session_persisted() -> None:

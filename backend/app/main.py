@@ -50,6 +50,7 @@ from .db import (
     get_template as db_get_template,
     list_templates,
     delete_template,
+    rename_template,
     save_session,
     list_sessions as db_list_sessions,
     get_session as db_get_session,
@@ -171,7 +172,13 @@ def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str,
     """エクスポートファイルを復号し、中身の種別とデータを返す。"""
 
     try:
-        envelope = json.loads(raw_bytes.decode("utf-8"))
+        try:
+            text = raw_bytes.decode("utf-8")
+        except UnicodeDecodeError:
+            text = raw_bytes.decode("utf-8-sig")
+        if text.startswith("\ufeff"):
+            text = text.lstrip("\ufeff")
+        envelope = json.loads(text)
     except Exception:
         raise HTTPException(status_code=400, detail="invalid_export_file")
     if not isinstance(envelope, dict):
@@ -965,6 +972,12 @@ class QuestionnaireDuplicate(BaseModel):
     new_id: str
 
 
+class QuestionnaireRename(BaseModel):
+    """テンプレートID変更用モデル。"""
+
+    new_id: str
+
+
 class ExportRequest(BaseModel):
     """暗号化付きエクスポート要求。"""
 
@@ -1109,6 +1122,40 @@ def duplicate_questionnaire(questionnaire_id: str, payload: QuestionnaireDuplica
     return {"status": "ok"}
 
 
+@app.post("/questionnaires/{questionnaire_id}/rename")
+def rename_questionnaire_api(questionnaire_id: str, payload: QuestionnaireRename) -> dict:
+    """テンプレートIDを変更する。"""
+
+    if questionnaire_id == "default":
+        raise HTTPException(status_code=400, detail="default template cannot be renamed")
+
+    new_id = payload.new_id.strip()
+    if not new_id:
+        raise HTTPException(status_code=400, detail="new_id is required")
+    if new_id == "default":
+        raise HTTPException(status_code=400, detail="default id is reserved")
+    if new_id == questionnaire_id:
+        raise HTTPException(status_code=400, detail="new_id must be different")
+
+    templates = list_templates()
+    if not any(t["id"] == questionnaire_id for t in templates):
+        raise HTTPException(status_code=404, detail="questionnaire not found")
+    if any(t["id"] == new_id for t in templates):
+        raise HTTPException(status_code=400, detail="id already exists")
+
+    try:
+        rename_template(questionnaire_id, new_id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="questionnaire not found") from None
+    except ValueError:
+        raise HTTPException(status_code=400, detail="id already exists") from None
+    except Exception as exc:  # pragma: no cover - 予期せぬエラー時
+        logger.exception("rename_template_failed", exc_info=exc)
+        raise HTTPException(status_code=500, detail="failed to rename template") from exc
+
+    return {"status": "ok", "id": new_id}
+
+
 @app.post("/questionnaires/{questionnaire_id}/reset")
 def reset_questionnaire(questionnaire_id: str) -> dict:
     """指定テンプレートIDを初期状態に戻す。
@@ -1248,6 +1295,14 @@ async def import_questionnaire_settings_api(
         stats = import_questionnaire_settings(payload_data, mode=mode_value)
     except ValueError:
         raise HTTPException(status_code=400, detail="invalid_mode")
+    except sqlite3.OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            logger.warning("import_questionnaire_settings missing tables; re-running init_db()")
+            init_db()
+            stats = import_questionnaire_settings(payload_data, mode=mode_value)
+        else:
+            logger.exception("import_questionnaire_settings failed")
+            raise
     return {
         "status": "ok",
         "imported": stats,

@@ -749,6 +749,92 @@ def delete_template(template_id: str, visit_type: str, db_path: str = DEFAULT_DB
         conn.close()
 
 
+def rename_template(
+    template_id: str, new_id: str, db_path: str = DEFAULT_DB_PATH
+) -> None:
+    """テンプレートIDを変更する。
+
+    - 既存IDが存在しない場合は LookupError を送出
+    - 新IDが既に使用されている場合は ValueError を送出
+    - 質問テンプレート、サマリープロンプト、追加質問プロンプト、セッション参照を一括更新
+    - 既定テンプレート設定や CouchDB セッションの ID も可能な限り更新
+    """
+
+    if template_id == new_id:
+        return
+
+    conn = get_conn(db_path)
+    try:
+        conn.execute("BEGIN")
+        current = conn.execute(
+            "SELECT 1 FROM questionnaire_templates WHERE id=? LIMIT 1",
+            (template_id,),
+        ).fetchone()
+        if not current:
+            raise LookupError(f"template {template_id} not found")
+
+        conflict = conn.execute(
+            "SELECT 1 FROM questionnaire_templates WHERE id=? LIMIT 1",
+            (new_id,),
+        ).fetchone()
+        if conflict:
+            raise ValueError(f"template id {new_id} already exists")
+
+        conn.execute(
+            "UPDATE questionnaire_templates SET id=? WHERE id=?",
+            (new_id, template_id),
+        )
+        conn.execute(
+            "UPDATE summary_prompts SET id=? WHERE id=?",
+            (new_id, template_id),
+        )
+        conn.execute(
+            "UPDATE followup_prompts SET id=? WHERE id=?",
+            (new_id, template_id),
+        )
+        conn.execute(
+            "UPDATE sessions SET questionnaire_id=? WHERE questionnaire_id=?",
+            (new_id, template_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+    try:
+        settings = load_app_settings(db_path) or {}
+    except Exception:
+        settings = {}
+    if settings.get("default_questionnaire_id") == template_id:
+        settings["default_questionnaire_id"] = new_id
+        try:
+            save_app_settings(settings, db_path=db_path)
+        except Exception as exc:  # pragma: no cover - 設定保存失敗時は警告のみ
+            logger.warning("rename_template_default_update_failed: %s", exc)
+
+    db = get_couch_db()
+    if db:
+        try:  # pragma: no cover - CouchDB 環境が無い場合は実行不可
+            if hasattr(db, "find"):
+                result = db.find({"selector": {"questionnaire_id": template_id}})
+                for doc in result:
+                    doc["questionnaire_id"] = new_id
+                    db.save(doc)
+            else:
+                for row in db.view("_all_docs", include_docs=True):
+                    doc = getattr(row, "doc", None)
+                    if not doc:
+                        continue
+                    if doc.get("questionnaire_id") != template_id:
+                        continue
+                    doc["questionnaire_id"] = new_id
+                    db.save(doc)
+        except Exception as exc:
+            logger.warning("rename_template_couchdb_failed: %s", exc)
+
+
 def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
     """セッション情報と回答を保存する。"""
     raw_llm_qtexts = getattr(session, "llm_question_texts", {}) or {}
