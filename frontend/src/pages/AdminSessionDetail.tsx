@@ -41,6 +41,14 @@ interface TemplateItem {
   type?: string;
 }
 
+const CONDITIONAL_NOTE_PATTERN = /（[^（）]*?で「[^」]+」[^（）]*?(?:選択|回答)時）$/u;
+
+const sanitizeQuestionLabel = (label?: string | null): string => {
+  if (!label) return '';
+  const sanitized = label.replace(CONDITIONAL_NOTE_PATTERN, '').trimEnd();
+  return sanitized.length > 0 ? sanitized : label;
+};
+
 /** 管理画面: セッション詳細。 */
 export default function AdminSessionDetail() {
   const { id } = useParams();
@@ -276,7 +284,7 @@ export default function AdminSessionDetail() {
         {questionEntries.map((entry) => (
           <Box key={entry.id} p={4} borderWidth="1px" borderRadius="md">
             <Text fontWeight="bold" mb={1}>
-              {entry.label}
+              {sanitizeQuestionLabel(entry.label)}
             </Text>
             {formatAnswer(entry.id, entry.answer, entry.label, entry.type)}
           </Box>
@@ -288,14 +296,17 @@ export default function AdminSessionDetail() {
           <Heading size="md">追加質問</Heading>
           {Object.entries(detail.llm_question_texts)
             .sort(([a], [b]) => a.localeCompare(b, undefined, { numeric: true }))
-            .map(([qid, qtext]) => (
-              <Box key={qid} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
-                <Text fontWeight="bold" mb={1}>
-                  {questionTexts[qid] ?? qtext}
-                </Text>
-                {formatAnswer(qid, detail.answers[qid], questionTexts[qid] ?? qtext)}
-              </Box>
-            ))}
+            .map(([qid, qtext]) => {
+              const originalLabel = questionTexts[qid] ?? qtext;
+              return (
+                <Box key={qid} p={4} borderWidth="1px" borderRadius="md" bg="gray.50">
+                  <Text fontWeight="bold" mb={1}>
+                    {sanitizeQuestionLabel(originalLabel)}
+                  </Text>
+                  {formatAnswer(qid, detail.answers[qid], originalLabel)}
+                </Box>
+              );
+            })}
         </VStack>
       )}
 

@@ -159,6 +159,28 @@ def _format_date(value: str | None) -> str:
         return str(value)
 
 
+def _resolve_completion_date(session: Mapping[str, Any]) -> str:
+    """Return a formatted completion date text for header display."""
+
+    candidate_keys = ("completed_at", "completedAt", "finalized_at", "finalizedAt")
+    for key in candidate_keys:
+        value = session.get(key)
+        if not value:
+            continue
+        text = _format_date(str(value))
+        if text:
+            return text
+    fallback_keys = ("started_at", "startedAt")
+    for key in fallback_keys:
+        value = session.get(key)
+        if not value:
+            continue
+        text = _format_date(str(value))
+        if text:
+            return text
+    return ""
+
+
 def _create_styles() -> dict[str, ParagraphStyle]:
     base = ParagraphStyle(
         name="Base",
@@ -591,9 +613,7 @@ def _render_structured_pdf(
     styles = _create_styles()
     story: list[Flowable] = []
 
-    completion_raw = session.get("completed_at")
-    completion_text = _format_date(str(completion_raw)) if completion_raw else ""
-    completion_display = completion_text or "未登録"
+    completion_display = _resolve_completion_date(session) or "未登録"
     header = Table(
         [
             [
@@ -649,7 +669,7 @@ def _render_structured_pdf(
     kana_line = kana_text if kana_text and kana_text != PERSONAL_INFO_EMPTY else "未回答"
     kana_color = "#888888" if kana_text == PERSONAL_INFO_EMPTY else "#555555"
     name_markup = (
-        f"<font size=8 color='{kana_color}'>よみがな: {escape(kana_line)}</font>"
+        f"<font size=8 color='{kana_color}'>{escape(kana_line)}</font>"
         f"<br/><font size=12>{escape(name_text)}</font>"
     )
 
@@ -746,9 +766,7 @@ def _render_legacy_pdf(
     styles = _create_styles()
     story: list[Flowable] = []
 
-    completion_raw = session.get("completed_at")
-    completion_text = _format_date(str(completion_raw)) if completion_raw else ""
-    completion_display = completion_text or "未登録"
+    completion_display = _resolve_completion_date(session) or "未登録"
     header = Table(
         [
             [

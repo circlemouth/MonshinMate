@@ -992,3 +992,20 @@
 2025-10-03 22:15:32,824 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-10-03 22:18:35,843 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
 2025-10-03 22:18:55,709 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=/Users/Hayato/Documents/GitHub/MonshinMate/backend/app/app.sqlite3
+2025-10-06 15:56:06,185 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\MonshinMate\backend\app\app.sqlite3
+2025-10-06 15:56:13,175 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 15:56:13,392 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 15:56:15,892 INFO admin_login_success
+2025-10-06 15:56:16,108 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 15:56:52,824 INFO admin_login_success
+2025-10-06 15:56:53,025 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 16:01:47,251 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\MonshinMate\backend\app\app.sqlite3
+2025-10-06 16:07:51,157 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 16:07:51,375 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 16:07:54,223 INFO admin_login_success
+2025-10-06 16:07:54,424 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 17:36:18,794 INFO startup_admin_status exists=True is_initial=True default_pw_match=True totp_enabled=False totp_mode=off db=C:\Users\marug\Documents\MonshinMate\backend\app\app.sqlite3
+2025-10-06 17:36:43,807 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 17:36:44,018 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off
+2025-10-06 17:36:46,457 INFO admin_login_success
+2025-10-06 17:36:46,674 INFO auth_status is_initial=True is_totp_enabled=False totp_mode=off

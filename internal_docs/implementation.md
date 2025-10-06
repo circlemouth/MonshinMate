@@ -1052,3 +1052,9 @@
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md` にリネームAPIとUI仕様を反映。
 - [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_rename_questionnaire_updates_related_data -q`（`couchdb` モジュール未導入のため ImportError）
 - [ ] フロントエンドビルド確認: `cd frontend && npm run build`
+
+## 132. PDF header personal_info fallback (2025-10-06)
+- [x] backend: backend/app/pdf_renderer.py now falls back to answers.personal_info when the template omits personal_info, keeping header fields filled.
+- [x] backend: PDF header completion date now falls back to finalized_at (or started_at) so the displayed 記入日 matches管理画面.
+- [x] backend: Removed the 'よみがな:' prefix from the patient header kana line in backend/app/pdf_renderer.py so the PDF shows only the kana text.
+- [ ] backend tests: cd backend && pytest -q (failed: FastAPI not installed in current environment)
