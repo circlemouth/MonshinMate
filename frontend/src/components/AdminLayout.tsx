@@ -2,6 +2,7 @@ import { ReactNode, useMemo, useEffect, useState } from 'react';
 import { Box, Flex, VStack, Button, Text, Spacer } from '@chakra-ui/react';
 import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import { LlmStatus } from '../utils/llmStatus';
+import { useSessionCompletionWatcher } from '../hooks/useSessionCompletionWatcher';
 
 /**
  * 管理画面用レイアウト。
@@ -13,6 +14,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const current = location.pathname;
   const [llmStatus, setLlmStatus] = useState<LlmStatus>('disabled');
+
+  useSessionCompletionWatcher();
 
   useEffect(() => {
     if (!sessionStorage.getItem('adminLoggedIn')) {

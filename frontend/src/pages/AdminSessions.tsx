@@ -140,6 +140,16 @@ export default function AdminSessions() {
   }, []);
 
   useEffect(() => {
+    const handler = () => {
+      loadSessions({ patientName, dob, startDate, endDate });
+    };
+    window.addEventListener('adminSessionsRefreshRequested', handler as EventListener);
+    return () => {
+      window.removeEventListener('adminSessionsRefreshRequested', handler as EventListener);
+    };
+  }, [patientName, dob, startDate, endDate]);
+
+  useEffect(() => {
     setPage((prev) => {
       const maxIndex = Math.max(Math.ceil(sessions.length / PAGE_SIZE) - 1, 0);
       return Math.min(prev, maxIndex);

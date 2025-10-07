@@ -1101,6 +1101,87 @@ def list_sessions(
         conn.close()
 
 
+def list_sessions_finalized_after(
+    since: datetime | None,
+    *,
+    limit: int = 50,
+    db_path: str = DEFAULT_DB_PATH,
+) -> tuple[list[dict[str, Any]], datetime | None]:
+    """指定時刻より後に確定したセッションを取得する。
+
+    戻り値は (該当セッション一覧, DB に存在する最新 finalized_at) のタプル。
+    """
+
+    limit = max(1, int(limit))
+
+    collect_events = since is not None
+
+    db = get_couch_db()
+    if db:
+        docs = [r.doc for r in db.view("_all_docs", include_docs=True)]
+        latest_dt: datetime | None = None
+        events: list[dict[str, Any]] = []
+        for doc in docs:
+            finalized_raw = doc.get("finalized_at")
+            if not finalized_raw:
+                continue
+            try:
+                finalized_dt = datetime.fromisoformat(finalized_raw)
+            except Exception:
+                continue
+            if latest_dt is None or finalized_dt > latest_dt:
+                latest_dt = finalized_dt
+            if collect_events and since and finalized_dt <= since:
+                continue
+            session_id = doc.get("_id")
+            if not session_id:
+                continue
+            if collect_events:
+                events.append(
+                    {
+                        "id": session_id,
+                        "patient_name": doc.get("patient_name"),
+                        "dob": doc.get("dob"),
+                        "visit_type": doc.get("visit_type"),
+                        "started_at": doc.get("started_at"),
+                        "finalized_at": finalized_dt.isoformat(),
+                    }
+                )
+        events.sort(key=lambda x: x.get("finalized_at") or "")
+        if len(events) > limit:
+            events = events[-limit:]
+        return events, latest_dt
+
+    conn = get_conn(db_path)
+    try:
+        latest_row = conn.execute(
+            "SELECT finalized_at FROM sessions WHERE finalized_at IS NOT NULL ORDER BY finalized_at DESC LIMIT 1"
+        ).fetchone()
+        latest_dt = None
+        if latest_row and latest_row.get("finalized_at"):
+            try:
+                latest_dt = datetime.fromisoformat(latest_row["finalized_at"])
+            except Exception:
+                latest_dt = None
+        if not collect_events:
+            return [], latest_dt
+        params: list[Any] = []
+        query = """
+            SELECT id, patient_name, dob, visit_type, started_at, finalized_at
+            FROM sessions
+            WHERE finalized_at IS NOT NULL AND finalized_at > ?
+            ORDER BY finalized_at ASC
+        """
+        params.append(since.isoformat())
+        rows = conn.execute(query, params).fetchall()
+        events = [dict(row) for row in rows]
+        if len(events) > limit:
+            events = events[-limit:]
+        return events, latest_dt
+    finally:
+        conn.close()
+
+
 def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
     """DB からセッションを取得する。"""
     db = get_couch_db()

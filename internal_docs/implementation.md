@@ -157,6 +157,7 @@
     - 再試行ボタン等のアクションは `actionLabel` と `onAction` で実装し、ブラウザ標準の `alert`/`prompt`/`confirm` は使用しない。
   - [x] 持続表示が必要なステータスは `StatusBanner` コンポーネントで表現し、自動保存やモデル一覧取得時の結果を集約。疎通テストの手動実行結果はトースト通知のみで扱う。
   - [x] `useDialog()` を追加し、確認ダイアログ（削除/リセット）と入力ダイアログ（テンプレート複製など）を Promise で扱う。
+  - [x] 管理画面滞在中に問診が「完了」した際は、`useSessionCompletionWatcher` で 20 秒間隔のポーリングを行い、OS 標準の通知 API とトーストの双方で完了を知らせる。初回は通知許諾の促しを出す。
 
 ---
 
@@ -169,7 +170,7 @@
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
 - 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `GET/PUT /system/timezone`, `POST /admin/login`
 - バックアップ系：`POST /admin/questionnaires/export`, `POST /admin/questionnaires/import`, `POST /admin/sessions/export`, `POST /admin/sessions/import`
-- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`
+- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/updates?since=ISO8601`
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 
