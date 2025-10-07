@@ -178,6 +178,26 @@
 ## 4. 画面/ルーティング仕様（要点）
 - **ヘッダー**：左ロゴ、右上「管理画面」ボタン（常時）。
 - **フッター**：`本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。`
+
+---
+
+## 付録：実施メモ（2025-10-06）
+
+- [x] dermatology_intake.json を更新（問診テンプレート）
+  - 初診（`visit_type=initial`）と再診（`visit_type=followup`）の順序を最適化。
+  - 「気になる部位」の左右指定を廃止し、部位のみの選択肢に統一。
+  - 各 `label` を患者に自然な問いかけ文へ統一し、`description` は補足説明に整理。
+  - 「局所麻酔のトラブル」＝`yesno` に対し、`followups.yes` で自由記述の追質問（詳細）を追加。
+  - スキーマは既存の読み込み仕様（`QuestionnaireItem.followups` / `visit_type` / `multi` / `yesno`）に準拠。
+- 追加調整（統合方針）：初診/再診で共通化できる文面・説明・並びを極力統一
+    - `consult_topics`/`target_areas`/`symptom_note`/`allergies`/`current_conditions`/`medications`/`hospitals`/`local_anesthesia_history` の `label` と `description` を共通表現へ寄せた。
+    - 再診テンプレートの並びを初診と同一順序に揃えた。
+
+  - エクスポート（questionnaire-settings-20251006-234610.json）からの補完
+    - 初診に `onset`、`symptom_course`、`symptom_trigger`、`prior_treatments`、`daily_impact`、`food_metal_allergies`、`supplements_otc` を追加。
+    - 再診に `contact_update`、`symptom_progress`、`treatment_effect`、`medication_adherence`、`medication_changes`、`side_effects`、`daily_impact`、`supplements_otc` を追加。
+    - 妊娠/授乳（`pregnancy`/`breastfeeding`）を初診・再診の両方に追加（女性のみ表示）。
+
 - **Entry**：初診/再診の選択のみを行い、「問診を始める」で基本情報画面へ遷移。
 - **BasicInfo**：氏名（必須）・生年月日（必須、過去日付のみ）・性別、初診時は住所等の基本情報を入力。
   - 初診の固定UIで全項目が必須となっており、保存時に `personal_info` 回答としてセッションへ登録されるため、問診フォーム側で同項目を再入力するケースは発生しないことを 2025-09-24 時点で自動テストにより確認済み。
