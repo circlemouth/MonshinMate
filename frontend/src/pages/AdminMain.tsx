@@ -465,7 +465,12 @@ export default function AdminMain() {
         </VStack>
       );
     }
-    if (answer === null || answer === undefined || answer === '') return <Text color="fg.muted">未回答</Text>;
+    if (
+      answer === null ||
+      answer === undefined ||
+      (typeof answer === 'string' && answer.trim() === '')
+    )
+      return <Text color="fg.muted">未回答</Text>;
     if (Array.isArray(answer)) return <Text>{answer.join(', ')}</Text>;
     if (typeof answer === 'object')
       return (
@@ -473,6 +478,16 @@ export default function AdminMain() {
           {JSON.stringify(answer, null, 2)}
         </Text>
       );
+    if (typeof answer === 'boolean') return <Text>{answer ? 'はい' : 'いいえ'}</Text>;
+    if (typeof answer === 'string') {
+      const trimmed = answer.trim();
+      const normalized = trimmed.toLowerCase();
+      if (entryType === 'yesno' || normalized === 'yes' || normalized === 'no') {
+        const display = normalized === 'yes' ? 'はい' : normalized === 'no' ? 'いいえ' : trimmed;
+        return <Text>{display}</Text>;
+      }
+      return <Text>{trimmed}</Text>;
+    }
     return <Text>{String(answer)}</Text>;
   };
 

@@ -253,6 +253,7 @@
   - 対象: `backend/app/main.py`, `frontend/src/pages/AdminAppearance.tsx`
 - [ui] ヘッダーのシステム表示名が長い場合でも一行表示を維持できるよう自動フォント縮小ロジックを追加。
   - 対象: `frontend/src/App.tsx`, `frontend/src/hooks/useAutoFontSize.ts`
+- [fix] LLM 追加質問のフォールバックで汎用質問を生成せず、通信失敗時はベース問診のみで完了するよう変更（`backend/app/llm_gateway.py`）。
 3) ステージングでUAT→本番ロールアウト
 
 ---

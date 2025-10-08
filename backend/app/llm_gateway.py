@@ -525,8 +525,11 @@ class LLMGateway:
                     "generate_followups attempt failed: %s", e
                 )
                 # 失敗時はスタブ実装へフォールバックする
-        # スタブ実装：固定的な質問を返す
-        return [f"追加質問{idx + 1}" for idx in range(max_questions)]
+        # フォールバックでは汎用質問を提示せず、追加質問フェーズを終了させる
+        logging.getLogger("llm").info(
+            "generate_followups fallback: returning no additional questions"
+        )
+        return []
 
     def chat(self, message: str) -> str:
         """チャット形式での応答を模擬的に返す。"""
