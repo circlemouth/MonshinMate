@@ -55,6 +55,11 @@ import {
   formatPersonalInfoLines,
   isPersonalInfoValue,
 } from '../utils/personalInfo';
+import {
+  flattenTemplateItems,
+  hasAnswer,
+  QuestionnaireTemplateItem,
+} from '../utils/questionEntries';
 
 interface SessionSummary {
   id: string;
@@ -124,7 +129,15 @@ export default function AdminMain() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
-  const [selectedItems, setSelectedItems] = useState<any[]>([]);
+  const [selectedItems, setSelectedItems] = useState<
+    {
+      id: string;
+      label: string;
+      answer: any;
+      type?: string;
+      isConditional?: boolean;
+    }[]
+  >([]);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
 
   const preview = useDisclosure();
@@ -409,17 +422,24 @@ export default function AdminMain() {
         `/questionnaires/${detail.questionnaire_id}/template?visit_type=${detail.visit_type}`
       ).then((r) => r.json());
       setSelectedDetail({ ...detail, id });
-      const templateItems = tpl.items || [];
+      const templateItems: QuestionnaireTemplateItem[] = tpl.items || [];
       const questionTexts = detail.question_texts ?? {};
-      const baseEntries = templateItems
-        .map((it: any) => ({
+      const answers = detail.answers ?? {};
+      const flattenedItems = flattenTemplateItems(templateItems);
+      const baseEntries = flattenedItems
+        .map((it) => ({
           id: it.id,
-          label: questionTexts[it.id] ?? it.label,
-          answer: detail.answers?.[it.id],
+          label: questionTexts[it.id] ?? it.label ?? it.id,
+          answer: answers[it.id],
           type: it.type,
+          isConditional: it.isConditional,
         }))
-        .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type));
-      const templateIds = new Set(templateItems.map((it: any) => it.id));
+        .filter(
+          (entry) =>
+            !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type) &&
+            (!entry.isConditional || hasAnswer(entry.answer))
+        );
+      const templateIds = new Set(flattenedItems.map((it) => it.id));
       const extraIds = Array.from(
         new Set([
           ...Object.keys(questionTexts),
@@ -432,7 +452,7 @@ export default function AdminMain() {
         .map((qid) => ({
           id: qid,
           label: questionTexts[qid] ?? qid,
-          answer: detail.answers?.[qid],
+          answer: answers[qid],
         }))
         .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer));
       setSelectedItems([...baseEntries, ...additionalEntries]);
@@ -784,7 +804,7 @@ export default function AdminMain() {
                   </VStack>
                 </Box>
                 <Heading size="sm">回答内容</Heading>
-                {selectedItems.map((entry: any) => (
+                {selectedItems.map((entry) => (
                   <AccentOutlineBox key={entry.id} p={3} borderRadius="md">
                     <Text fontWeight="bold" mb={1}>
                       {entry.label}

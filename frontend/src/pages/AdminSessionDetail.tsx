@@ -17,6 +17,11 @@ import {
   formatPersonalInfoLines,
   isPersonalInfoValue,
 } from '../utils/personalInfo';
+import {
+  flattenTemplateItems,
+  hasAnswer,
+  QuestionnaireTemplateItem,
+} from '../utils/questionEntries';
 import { useTimezone } from '../contexts/TimezoneContext';
 
 interface SessionDetail {
@@ -35,11 +40,7 @@ interface SessionDetail {
   gender?: string | null;
 }
 
-interface TemplateItem {
-  id: string;
-  label: string;
-  type?: string;
-}
+type TemplateItem = QuestionnaireTemplateItem;
 
 const CONDITIONAL_NOTE_PATTERN = /（[^（）]*?で「[^」]+」[^（）]*?(?:選択|回答)時）$/u;
 
@@ -147,15 +148,29 @@ export default function AdminSessionDetail() {
   };
 
   const questionTexts = detail.question_texts ?? {};
-  const baseEntries = items
+  const answers = detail.answers ?? {};
+  type QuestionEntry = {
+    id: string;
+    label: string;
+    answer: any;
+    type?: string;
+    isConditional?: boolean;
+  };
+  const flattenedItems = flattenTemplateItems(items);
+  const baseEntries: QuestionEntry[] = flattenedItems
     .map((it) => ({
       id: it.id,
-      label: questionTexts[it.id] ?? it.label,
-      answer: detail.answers[it.id],
+      label: questionTexts[it.id] ?? it.label ?? it.id,
+      answer: answers[it.id],
       type: it.type,
+      isConditional: it.isConditional,
     }))
-    .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type));
-  const templateIds = new Set(items.map((it) => it.id));
+    .filter(
+      (entry) =>
+        !isPersonalInfoEntry(entry.id, entry.label, entry.answer, entry.type) &&
+        (!entry.isConditional || hasAnswer(entry.answer))
+    );
+  const templateIds = new Set(flattenedItems.map((it) => it.id));
   const extraIds = Array.from(
     new Set([
       ...Object.keys(questionTexts),
@@ -164,15 +179,15 @@ export default function AdminSessionDetail() {
   )
     .filter((id) => !templateIds.has(id) && !id.startsWith('llm_'))
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  const additionalEntries = extraIds
+  const additionalEntries: QuestionEntry[] = extraIds
     .map((id) => ({
       id,
       label: questionTexts[id] ?? id,
-      answer: detail.answers[id],
+      answer: answers[id],
       type: undefined as string | undefined,
     }))
     .filter((entry) => !isPersonalInfoEntry(entry.id, entry.label, entry.answer));
-  const questionEntries = [...baseEntries, ...additionalEntries];
+  const questionEntries: QuestionEntry[] = [...baseEntries, ...additionalEntries];
 
   const personalInfoEntries = buildPersonalInfoEntries(detail.answers?.personal_info, {
     defaults: { name: detail.patient_name ?? '' },
