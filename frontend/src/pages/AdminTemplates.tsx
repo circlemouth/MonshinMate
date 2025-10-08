@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useMemo, Fragment, Dispatch, SetStateAction } from 'react';
+import { useEffect, useState, useRef, useMemo, Fragment, Dispatch, SetStateAction, useCallback } from 'react';
 import type { DragEvent } from 'react';
 import {
   VStack,
@@ -54,7 +54,7 @@ import {
   Icon,
   // removed: postal lookup UI wrappers
 } from '@chakra-ui/react';
-import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon, QuestionIcon } from '@chakra-ui/icons';
+import { DeleteIcon, CheckCircleIcon, WarningIcon, DragHandleIcon } from '@chakra-ui/icons';
 import { MdImage, MdWc, MdCalendarToday } from 'react-icons/md';
 import { BiGitBranch } from 'react-icons/bi';
 import DateSelect from '../components/DateSelect';
@@ -92,6 +92,9 @@ type OptionDragContext = (
   | { kind: 'new'; optionIndex: number }
   | { kind: 'followup'; followupIndex: number; optionIndex: number }
 );
+
+const makeOptionRefKey = (context: 'item' | 'followup' | 'new', id: string, optionIndex: number) =>
+  `${context}:${id}:${optionIndex}`;
 
 type NewItemState = {
   label: string;
@@ -167,6 +170,16 @@ export default function AdminTemplates() {
   const [newItem, setNewItem] = useState<NewItemState>(() => createEmptyNewItem());
 
   const hiddenPersonalInfoRef = useRef<HiddenPersonalInfoEntry[]>([]);
+  const optionInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const pendingOptionFocusRef = useRef<string | null>(null);
+
+  const registerOptionInputRef = useCallback((key: string, el: HTMLInputElement | null) => {
+    if (el) {
+      optionInputRefs.current[key] = el;
+    } else {
+      delete optionInputRefs.current[key];
+    }
+  }, []);
 
   const cloneItems = (source: Item[]): Item[] =>
     source.map((it) => {
@@ -373,7 +386,7 @@ export default function AdminTemplates() {
   };
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const addEmptyOptionToItem = (index: number) => {
-    let added = false;
+    let focusKey: string | null = null;
     setItems((prev) => {
       const target = prev[index];
       if (!target) return prev;
@@ -381,22 +394,28 @@ export default function AdminTemplates() {
       if (baseOptions.some((opt) => !opt.trim())) {
         return prev;
       }
-      added = true;
+      focusKey = makeOptionRefKey('item', target.id, baseOptions.length);
       const next = [...prev];
       next[index] = { ...target, options: [...baseOptions, ''] } as Item;
       return next;
     });
-    if (added) {
+    if (focusKey) {
+      pendingOptionFocusRef.current = focusKey;
       markDirty();
     }
   };
   const addEmptyOptionToNewItem = () => {
+    let focusKey: string | null = null;
     setNewItem((prev) => {
       if (prev.options.some((opt) => !opt.trim())) {
         return prev;
       }
+      focusKey = makeOptionRefKey('new', 'new', prev.options.length);
       return { ...prev, options: [...prev.options, ''] };
     });
+    if (focusKey) {
+      pendingOptionFocusRef.current = focusKey;
+    }
   };
   const filteredItems = useMemo(() => {
     const entries = items.map((item, index) => ({ item, index }));
@@ -511,6 +530,16 @@ type FollowupState = {
 };
   const [followupStack, setFollowupStack] = useState<FollowupState[]>([]);
   const followupModal = useDisclosure();
+
+  useEffect(() => {
+    const key = pendingOptionFocusRef.current;
+    if (!key) return;
+    const input = optionInputRefs.current[key];
+    if (input) {
+      input.focus();
+      pendingOptionFocusRef.current = null;
+    }
+  }, [items, newItem.options, followupStack]);
 
   const openFollowups = (
     items: Item[],
@@ -678,7 +707,7 @@ type FollowupState = {
   };
 
   const addEmptyOptionToFollowupItem = (index: number) => {
-    let added = false;
+    let focusKey: string | null = null;
     setFollowupStack((prev) => {
       const stack = [...prev];
       if (stack.length === 0) {
@@ -694,12 +723,13 @@ type FollowupState = {
       if (baseOptions.some((opt) => !opt.trim())) {
         return prev;
       }
-      added = true;
+      focusKey = makeOptionRefKey('followup', target.id, baseOptions.length);
       items[index] = { ...target, options: [...baseOptions, ''] } as Item;
       stack[stack.length - 1] = { ...cur, items };
       return stack;
     });
-    if (added) {
+    if (focusKey) {
+      pendingOptionFocusRef.current = focusKey;
       markDirty();
     }
   };
@@ -1947,6 +1977,7 @@ type FollowupState = {
                   confirmAndDeleteImage={confirmAndDeleteImage}
                   deleteItemImage={deleteItemImage}
                   uploadItemImage={uploadItemImage}
+                  registerOptionInputRef={registerOptionInputRef}
                 />
               </ModalBody>
               <ModalFooter>
@@ -1999,6 +2030,7 @@ type FollowupState = {
               confirmAndDeleteImage={confirmAndDeleteImage}
               deleteItemImage={deleteItemImage}
               uploadItemImage={uploadItemImage}
+              registerOptionInputRef={registerOptionInputRef}
             />
           </ModalBody>
           <ModalFooter>
@@ -2216,6 +2248,11 @@ type FollowupState = {
                   </Box>
                 </Alert>
               )}
+              {currentFollowup.depth >= 1 && (
+                <Text fontSize="sm" color="gray.600" mb={4}>
+                  追加質問の回答に対してさらに追質問を設定することはできません。
+                </Text>
+              )}
               <VStack align="stretch" spacing={4} mb={4}>
                 {currentFollowup.items.map((fi, fIdx) => (
                   <Box key={fi.id} borderWidth="1px" borderRadius="md" p={3}>
@@ -2357,6 +2394,7 @@ type FollowupState = {
                                 <DragHandleIcon />
                               </Box>
                               <Input
+                                ref={(el) => registerOptionInputRef(makeOptionRefKey('followup', fi.id, oIdx), el)}
                                 flex="1"
                                 value={opt}
                                 onChange={(e) => {
@@ -2386,37 +2424,6 @@ type FollowupState = {
                                   addEmptyOptionToFollowupItem(fIdx);
                                 }}
                               />
-                              <Tooltip label="追加質問を追加">
-                                <IconButton
-                                  aria-label="追質問を追加/編集"
-                                  icon={<QuestionIcon />}
-                                  size="sm"
-                                  isDisabled={!opt.trim() || currentFollowup.depth >= 2}
-                                  colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
-                                  onClick={() => {
-                                    const answerLabel = opt.trim() ? opt : '未設定';
-                                    openFollowups(
-                                      (fi.followups && fi.followups[opt]) || [],
-                                      (newItems, stack) => {
-                                        const parent = stack[stack.length - 1];
-                                        const items = [...parent.items];
-                                        const f = {
-                                          ...(items[fIdx].followups || {}),
-                                          [opt]: newItems,
-                                        };
-                                        items[fIdx] = { ...items[fIdx], followups: f };
-                                        stack[stack.length - 1] = { ...parent, items };
-                                        markDirty();
-                                      },
-                                      currentFollowup.depth + 1,
-                                      {
-                                        question: fi.label,
-                                        answer: answerLabel,
-                                      }
-                                    );
-                                  }}
-                                />
-                              </Tooltip>
                               <IconButton
                                 aria-label="選択肢を削除"
                                 icon={<DeleteIcon />}
@@ -2462,41 +2469,9 @@ type FollowupState = {
                       <Box mt={2}>
                         <FormLabel m={0} mb={2}>はい/いいえ 追質問</FormLabel>
                         <VStack align="stretch">
-                          {['yes', 'no'].map((opt) => (
-                            <HStack key={opt}>
-                              <Text w="40px">{opt === 'yes' ? 'はい' : 'いいえ'}</Text>
-                              <Tooltip label="追加質問を追加">
-                                <IconButton
-                                  aria-label="追質問を追加/編集"
-                                  icon={<QuestionIcon />}
-                                  size="sm"
-                                  colorScheme={fi.followups && fi.followups[opt] ? 'blue' : undefined}
-                                  onClick={() => {
-                                    const answerLabel = opt === 'yes' ? 'はい' : 'いいえ';
-                                    openFollowups(
-                                      (fi.followups && fi.followups[opt]) || [],
-                                      (newItems, stack) => {
-                                        const parent = stack[stack.length - 1];
-                                        const items = [...parent.items];
-                                        const f = {
-                                          ...(items[fIdx].followups || {}),
-                                          [opt]: newItems,
-                                        };
-                                        items[fIdx] = { ...items[fIdx], followups: f };
-                                        stack[stack.length - 1] = { ...parent, items };
-                                        markDirty();
-                                      },
-                                      currentFollowup.depth + 1,
-                                      {
-                                        question: fi.label,
-                                        answer: answerLabel,
-                                      }
-                                    );
-                                  }}
-                                />
-                              </Tooltip>
-                            </HStack>
-                          ))}
+                          <Text fontSize="sm" color="gray.500">
+                            この追加質問の回答に対してさらに追質問を設定することはできません。
+                          </Text>
                         </VStack>
                       </Box>
                     )}
@@ -2648,6 +2623,7 @@ interface ItemEditorModalContentProps {
   confirmAndDeleteImage: (url?: string) => Promise<boolean>;
   deleteItemImage: (url?: string) => Promise<void>;
   uploadItemImage: (file: File) => Promise<string | null>;
+  registerOptionInputRef: (key: string, el: HTMLInputElement | null) => void;
 }
 
 function ItemEditorModalContent({
@@ -2666,6 +2642,7 @@ function ItemEditorModalContent({
   confirmAndDeleteImage,
   deleteItemImage,
   uploadItemImage,
+  registerOptionInputRef,
 }: ItemEditorModalContentProps): JSX.Element {
   return (
     <VStack align="stretch" spacing={3}>
@@ -2766,6 +2743,7 @@ function ItemEditorModalContent({
                   <DragHandleIcon />
                 </Box>
                 <Input
+                  ref={(el) => registerOptionInputRef(makeOptionRefKey('item', item.id, optIdx), el)}
                   flex="1"
                   value={opt}
                   onChange={(e) => {
@@ -2798,7 +2776,7 @@ function ItemEditorModalContent({
                 <Tooltip label="追加質問を追加">
                   <IconButton
                     aria-label="追質問を追加/編集"
-                    icon={<QuestionIcon />}
+                    icon={<Icon as={BiGitBranch} boxSize={4} />}
                     size="sm"
                     isDisabled={!opt.trim()}
                     colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
@@ -2864,7 +2842,7 @@ function ItemEditorModalContent({
               <Tooltip label="追加質問を追加">
                 <IconButton
                   aria-label="追質問を追加/編集"
-                  icon={<QuestionIcon />}
+                  icon={<Icon as={BiGitBranch} boxSize={4} />}
                   size="sm"
                   colorScheme={item.followups && item.followups[opt] ? 'blue' : undefined}
                   onClick={() => {
@@ -3021,6 +2999,7 @@ interface NewItemModalContentProps {
   confirmAndDeleteImage: (url?: string) => Promise<boolean>;
   deleteItemImage: (url?: string) => Promise<void>;
   uploadItemImage: (file: File) => Promise<string | null>;
+  registerOptionInputRef: (key: string, el: HTMLInputElement | null) => void;
 }
 
 function NewItemModalContent({
@@ -3035,6 +3014,7 @@ function NewItemModalContent({
   confirmAndDeleteImage,
   deleteItemImage,
   uploadItemImage,
+  registerOptionInputRef,
 }: NewItemModalContentProps): JSX.Element {
   return (
     <VStack spacing={4} align="stretch">
@@ -3162,6 +3142,7 @@ function NewItemModalContent({
                   <DragHandleIcon />
                 </Box>
                 <Input
+                  ref={(el) => registerOptionInputRef(makeOptionRefKey('new', 'new', optIdx), el)}
                   flex="1"
                   value={opt}
                   onChange={(e) => {
