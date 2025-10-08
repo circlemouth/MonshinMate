@@ -422,6 +422,18 @@ def _collect_personal_info_for_header(
 ) -> tuple[list[ItemNode], dict[str, str]]:
     filtered_nodes: list[ItemNode] = []
     collected: dict[str, str] = {}
+
+    def _merge_from(raw: Any) -> None:
+        data = personal_info_coerce(raw)
+        if data is None:
+            return
+        for key, value in data.items():
+            text = value.strip()
+            if not text or text == PERSONAL_INFO_NORMALIZED:
+                continue
+            if key not in collected or not collected[key].strip():
+                collected[key] = text
+
     for node in nodes:
         item_type = str(_item_attr(node.item, "type", "") or "")
         if item_type != "personal_info":
@@ -437,15 +449,14 @@ def _collect_personal_info_for_header(
                 answer_value = answers.get(item_id_raw)  # type: ignore[arg-type]
             except Exception:  # pragma: no cover - defensive fallback
                 answer_value = None
-        data = personal_info_coerce(answer_value)
-        if data is None:
-            continue
-        for key, value in data.items():
-            text = value.strip()
-            if not text or text == PERSONAL_INFO_NORMALIZED:
-                continue
-            if key not in collected or not collected[key].strip():
-                collected[key] = text
+        _merge_from(answer_value)
+
+    # Fallback: when personal_info is stored directly under answers (no template item),
+    # merge the stored values so the PDF header can still show the details.
+    if isinstance(answers, Mapping):
+        for candidate_key in ("personal_info", "personalInfo", "patient_basic_info"):
+            if candidate_key in answers:
+                _merge_from(answers.get(candidate_key))
     return filtered_nodes, collected
 
 
