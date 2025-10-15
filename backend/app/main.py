@@ -1691,6 +1691,7 @@ def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
             enabled=req.enabled if req.enabled is not None else current.enabled,
             base_url=req.base_url or current.base_url,
             api_key=req.api_key or current.api_key,
+            followup_timeout_seconds=current.followup_timeout_seconds,
         )
         gateway = LLMGateway(temp)
         return gateway.test_connection()
@@ -1763,6 +1764,7 @@ class LogoCrop(BaseModel):
 class LogoSettings(BaseModel):
     url: str | None = None
     crop: LogoCrop | None = None
+
 
 @app.get("/system/timezone", response_model=TimezoneSettings)
 def get_system_timezone() -> TimezoneSettings:

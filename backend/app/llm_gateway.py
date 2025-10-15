@@ -23,6 +23,8 @@ DEFAULT_FOLLOWUP_PROMPT = (
     "各質問は丁寧な日本語の文章で記述し、文字列のみを要素とするJSON配列として返してください。"
 )
 
+DEFAULT_FOLLOWUP_TIMEOUT = 30.0
+
 
 LlmStatusValue = Literal["ok", "ng", "disabled", "pending"]
 
@@ -35,6 +37,7 @@ class ProviderProfile(BaseModel):
     system_prompt: str = DEFAULT_SYSTEM_PROMPT
     base_url: str | None = None
     api_key: str | None = None
+    followup_timeout_seconds: float = DEFAULT_FOLLOWUP_TIMEOUT
 
     class Config:
         extra = "ignore"
@@ -51,6 +54,7 @@ class LLMSettings(BaseModel):
     # リモート接続用設定（任意）。空の場合はスタブ動作を維持する。
     base_url: str | None = None
     api_key: str | None = None
+    followup_timeout_seconds: float = DEFAULT_FOLLOWUP_TIMEOUT
     provider_profiles: dict[str, ProviderProfile] = Field(default_factory=dict)
 
     def get_profile(self, provider: str | None = None) -> ProviderProfile:
@@ -69,6 +73,7 @@ class LLMSettings(BaseModel):
                     system_prompt=self.system_prompt,
                     base_url=self.base_url,
                     api_key=self.api_key,
+                    followup_timeout_seconds=self.followup_timeout_seconds,
                 )
             profiles = dict(profiles)
             profiles[key] = profile
@@ -86,16 +91,35 @@ class LLMSettings(BaseModel):
         self.system_prompt = profile.system_prompt or ""
         self.base_url = profile.base_url
         self.api_key = profile.api_key
+        timeout = (
+            profile.followup_timeout_seconds
+            if profile.followup_timeout_seconds is not None
+            else DEFAULT_FOLLOWUP_TIMEOUT
+        )
+        self.followup_timeout_seconds = max(5.0, min(120.0, float(timeout)))
 
     def sync_to_active_profile(self) -> None:
         """トップレベルの値をアクティブプロバイダ設定へ書き戻す。"""
 
+        safe_timeout = max(
+            5.0,
+            min(
+                120.0,
+                float(
+                    self.followup_timeout_seconds
+                    if self.followup_timeout_seconds is not None
+                    else DEFAULT_FOLLOWUP_TIMEOUT
+                ),
+            ),
+        )
+        self.followup_timeout_seconds = safe_timeout
         profile = ProviderProfile(
             model=self.model or "",
             temperature=max(0.0, min(2.0, float(self.temperature if self.temperature is not None else 0.2))),
             system_prompt=self.system_prompt or "",
             base_url=self.base_url,
             api_key=self.api_key,
+            followup_timeout_seconds=safe_timeout,
         )
         profiles = dict(self.provider_profiles or {})
         profiles[self.provider] = profile
@@ -429,8 +453,18 @@ class LLMGateway:
         if s.base_url:
             # セッション単位の直列化
             lock = self._get_lock(lock_key)
+
+            def _resolved_timeout() -> httpx.Timeout:
+                seconds = (
+                    s.followup_timeout_seconds
+                    if s.followup_timeout_seconds is not None
+                    else DEFAULT_FOLLOWUP_TIMEOUT
+                )
+                safe = max(5.0, min(120.0, float(seconds)))
+                return httpx.Timeout(safe)
+
             def _attempt() -> list[str]:
-                timeout = httpx.Timeout(15.0)
+                timeout = _resolved_timeout()
                 # プロバイダごとに構造化出力（JSON Schema）を強制する
                 if s.provider == "ollama":
                     # Ollama: /api/chat に JSON Schema を format フィールドで指定

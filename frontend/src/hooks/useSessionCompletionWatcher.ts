@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNotify } from '../contexts/NotificationContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -18,6 +18,7 @@ interface SessionUpdatesResponse {
 
 const STORAGE_KEY_LATEST = 'monshin.admin.latestFinalizedAt';
 const STORAGE_KEY_PROMPTED = 'monshin.admin.desktopNotificationPrompted';
+const STORAGE_KEY_NATIVE_NOTIFICATIONS = 'monshin.admin.nativeNotificationsEnabled';
 
 const POLLING_INTERVAL_MS = 20000;
 
@@ -51,9 +52,76 @@ export function useSessionCompletionWatcher() {
   const { notify } = useNotify();
   const navigate = useNavigate();
   const location = useLocation();
+  const [nativeNotificationsEnabled, setNativeNotificationsEnabled] = useState(false);
   const permissionRef = useRef<'default' | 'denied' | 'granted' | 'unsupported'>(
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported',
   );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let disposed = false;
+
+    const normalizePreference = (value: unknown): boolean => {
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'string') {
+        const lowered = value.trim().toLowerCase();
+        if (['true', '1', 'yes', 'on'].includes(lowered)) return true;
+        if (['false', '0', 'no', 'off'].includes(lowered)) return false;
+        return Boolean(value);
+      }
+      if (typeof value === 'number') return value !== 0;
+      return Boolean(value);
+    };
+
+    const applyPreference = (value: unknown) => {
+      if (disposed) return;
+      const normalized = normalizePreference(value);
+      setNativeNotificationsEnabled(normalized);
+      if (normalized) {
+        try {
+          localStorage.removeItem(STORAGE_KEY_PROMPTED);
+        } catch {
+          // ignore storage quota or availability errors
+        }
+      }
+    };
+
+    const readPreferenceFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY_NATIVE_NOTIFICATIONS);
+        if (raw === null) {
+          applyPreference(false);
+        } else {
+          applyPreference(raw);
+        }
+      } catch {
+        applyPreference(false);
+      }
+    };
+
+    const handleUpdated = (event: Event) => {
+      const custom = event as CustomEvent<{ enabled?: boolean }>;
+      applyPreference(custom.detail?.enabled ?? false);
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== STORAGE_KEY_NATIVE_NOTIFICATIONS) {
+        return;
+      }
+      readPreferenceFromStorage();
+    };
+
+    readPreferenceFromStorage();
+    window.addEventListener('systemNativeNotificationsUpdated', handleUpdated as EventListener);
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      disposed = true;
+      window.removeEventListener('systemNativeNotificationsUpdated', handleUpdated as EventListener);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -76,6 +144,7 @@ export function useSessionCompletionWatcher() {
     };
 
     const ensurePermissionPrompt = () => {
+      if (!nativeNotificationsEnabled) return;
       if (permissionRef.current === 'unsupported') return;
       updatePermissionState();
       if (permissionRef.current !== 'default') return;
@@ -138,6 +207,7 @@ export function useSessionCompletionWatcher() {
     };
 
     const showDesktopNotification = (title: string, body: string, sessionId?: string) => {
+      if (!nativeNotificationsEnabled) return;
       if (permissionRef.current !== 'granted') return;
       try {
         const notification = new Notification(title, {
@@ -253,6 +323,5 @@ export function useSessionCompletionWatcher() {
         window.clearTimeout(timer);
       }
     };
-  }, [notify, navigate, location.pathname]);
+  }, [notify, navigate, location.pathname, nativeNotificationsEnabled]);
 }
-

@@ -44,7 +44,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { label: 'テンプレート管理', to: '/admin/templates' },
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
-      { label: '外観設定', to: '/admin/appearance' },
+      { label: '外観・通知設定', to: '/admin/appearance' },
       { label: 'タイムゾーン設定', to: '/admin/timezone' },
       { label: 'セキュリティ', to: '/admin/security' },
       { label: 'バックアップ', to: '/admin/data-transfer' },

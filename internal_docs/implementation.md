@@ -88,6 +88,7 @@
     - LM Studio: `/v1/chat/completions` の `response_format.json_schema` に同スキーマを指定
     - 返却は文字列JSONのため受信後に `json.loads()` でパースして配列に変換
     - プロンプト側でも「JSON配列で返答」を明記（冗長対策）
+  - [x] 追加質問生成時のタイムアウト値を設定化（5〜120 秒、管理UIのモデル設定欄から更新可能）
 
 > 実装メモ（2025-08-27）：`backend/app/llm_gateway.py::generate_followups` を更新し、
 > LM Studio / Ollama 双方に対して JSON Schema による構造化出力を強制するよう変更。
@@ -145,7 +146,7 @@
   - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否や対象性別を設定する表とプレビュー
   - [x] `/admin/sessions`：問診結果の一覧
   - [x] `/admin/sessions/:id`：質問と回答の詳細表示
-  - [x] `/admin/appearance`：外観設定（表示名・メッセージ・ブランドカラー・ロゴ）
+  - [x] `/admin/appearance`：外観・通知設定（表示名・メッセージ・ブランドカラー・ロゴ・OS標準通知トグル）
   - [x] `/admin/timezone`：タイムゾーン設定（JST既定・変更可）
   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と保存時の自動疎通テスト
 4) **状態管理/永続化**
@@ -1072,10 +1073,17 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で標準テンプレート以外に「名称変更」ボタンを追加し、リセットボタン表示を標準テンプレート限定に変更。
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md` にリネームAPIとUI仕様を反映。
 - [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_rename_questionnaire_updates_related_data -q`（`couchdb` モジュール未導入のため ImportError）
-- [ ] フロントエンドビルド確認: `cd frontend && npm run build`
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）
 
 ## 132. PDF header personal_info fallback (2025-10-06)
 - [x] backend: backend/app/pdf_renderer.py now falls back to answers.personal_info when the template omits personal_info, keeping header fields filled.
 - [x] backend: PDF header completion date now falls back to finalized_at (or started_at) so the displayed 記入日 matches管理画面.
 - [x] backend: Removed the 'よみがな:' prefix from the patient header kana line in backend/app/pdf_renderer.py so the PDF shows only the kana text.
 - [ ] backend tests: cd backend && pytest -q (failed: FastAPI not installed in current environment)
+
+## 133. 外観・通知設定の端末別通知トグル（2025-10-15）
+- [x] 変更（バックエンド）: `/system/native-notifications` API を撤廃し、通知設定をアプリ共通設定から切り離して端末単位運用へ戻した。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx` の通知設定を localStorage 保存に切り替え、デフォルトOFFかつ端末ごとに保持できるトグルへ改修。
+- [x] 変更（フロントエンド）: `frontend/src/hooks/useSessionCompletionWatcher.ts` が localStorage / カスタムイベントを監視して通知可否を判断し、OFFの端末では OS 通知を発火させないように調整。
+- [x] ドキュメント更新: `docs/admin_user_manual.md` に端末別保存と初期OFFを追記。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）

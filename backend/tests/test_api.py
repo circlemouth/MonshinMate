@@ -59,6 +59,7 @@ def test_llm_settings_get_and_update() -> None:
             "system_prompt": "",
             "base_url": "http://localhost:11434",
             "api_key": "",
+            "followup_timeout_seconds": 30,
         },
         "lm_studio": {
             "model": "",
@@ -66,6 +67,7 @@ def test_llm_settings_get_and_update() -> None:
             "system_prompt": "",
             "base_url": "http://localhost:1234",
             "api_key": "",
+            "followup_timeout_seconds": 30,
         },
         "openai": {
             "model": "",
@@ -73,6 +75,7 @@ def test_llm_settings_get_and_update() -> None:
             "system_prompt": "",
             "base_url": "https://api.openai.com",
             "api_key": "",
+            "followup_timeout_seconds": 30,
         },
     }
 
@@ -92,6 +95,8 @@ def test_llm_settings_get_and_update() -> None:
     assert data["provider"] == "ollama"
     assert data["enabled"] is True
     assert data["provider_profiles"]["ollama"]["model"] == "llama2"
+    assert data["followup_timeout_seconds"] == 30
+    assert data["provider_profiles"]["ollama"]["followup_timeout_seconds"] == 30
 
     profiles["lm_studio"] = {
         "model": "test-model",
@@ -99,6 +104,7 @@ def test_llm_settings_get_and_update() -> None:
         "system_prompt": "test",
         "base_url": "http://localhost:1234",
         "api_key": "",
+        "followup_timeout_seconds": 45,
     }
     res = client.put(
         "/llm/settings",
@@ -116,6 +122,9 @@ def test_llm_settings_get_and_update() -> None:
     assert updated["enabled"] is True
     assert updated["provider_profiles"]["ollama"]["model"] == "llama2"
     assert updated["provider_profiles"]["lm_studio"]["model"] == "test-model"
+    assert updated["provider_profiles"]["ollama"]["followup_timeout_seconds"] == 30
+    assert updated["followup_timeout_seconds"] == 45
+    assert updated["provider_profiles"]["lm_studio"]["followup_timeout_seconds"] == 45
     chat_res = client.post("/llm/chat", json={"message": "hi"})
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
 
@@ -126,6 +135,7 @@ def test_llm_settings_get_and_update() -> None:
         "system_prompt": "openai",
         "base_url": "https://api.openai.com",
         "api_key": "sk-test",
+        "followup_timeout_seconds": 60,
     }
     res = client.put(
         "/llm/settings",
@@ -145,6 +155,10 @@ def test_llm_settings_get_and_update() -> None:
     assert openai_settings["provider_profiles"]["ollama"]["model"] == "llama2"
     assert openai_settings["provider_profiles"]["lm_studio"]["model"] == "test-model"
     assert openai_settings["provider_profiles"]["openai"]["api_key"] == "sk-test"
+    assert openai_settings["followup_timeout_seconds"] == 60
+    assert openai_settings["provider_profiles"]["ollama"]["followup_timeout_seconds"] == 30
+    assert openai_settings["provider_profiles"]["lm_studio"]["followup_timeout_seconds"] == 45
+    assert openai_settings["provider_profiles"]["openai"]["followup_timeout_seconds"] == 60
     openai_chat = client.post("/llm/chat", json={"message": "hello"})
     assert openai_chat.json()["reply"].startswith("LLM応答[openai:gpt-4.1-mini")
 
