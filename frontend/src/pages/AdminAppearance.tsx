@@ -4,6 +4,7 @@ import {
   Stack,
   FormControl,
   FormLabel,
+  FormHelperText,
   Input,
   Button,
   HStack,
@@ -26,6 +27,7 @@ import {
   CardBody,
   CardFooter,
   CardHeader,
+  Switch,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -59,6 +61,7 @@ const presetValues = colorPresets.map((preset) => preset.value);
 const defaultCustomColor = '#000000';
 const defaultCropState = { x: 0, y: 0, w: 1, h: 1 } as const;
 const logoDisplaySizePx = 28;
+const STORAGE_KEY_NATIVE_NOTIFICATIONS = 'monshin.admin.nativeNotificationsEnabled';
 
 function getContrastingIconColor(hex: string): 'black' | 'white' {
   if (!hex || hex.length < 7) return 'black';
@@ -124,6 +127,19 @@ export default function AdminAppearance() {
   const [selectedColor, setSelectedColor] = useState(color);
   const [isCustom, setIsCustom] = useState(false);
   const [customColor, setCustomColor] = useState(defaultCustomColor);
+  const [nativeNotificationsEnabled, setNativeNotificationsEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      const stored = window.localStorage.getItem(STORAGE_KEY_NATIVE_NOTIFICATIONS);
+      if (stored === null) return false;
+      const normalized = stored.trim().toLowerCase();
+      if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+      if (['false', '0', 'no', 'off'].includes(normalized)) return false;
+      return Boolean(stored);
+    } catch {
+      return false;
+    }
+  });
 
   // Common states
   const { notify } = useNotify();
@@ -298,7 +314,6 @@ export default function AdminAppearance() {
     },
     [showErrorToast]
   );
-
   const {
     status: nameStatus,
     errorMessage: nameError,
@@ -360,7 +375,6 @@ export default function AdminAppearance() {
     save: saveLogoConfig,
     onError: handleLogoError,
   });
-
   useEffect(() => {
     let canceled = false;
     const load = async () => {
@@ -420,6 +434,7 @@ export default function AdminAppearance() {
           markEntrySynced(fallback);
         }
       }
+
     };
 
     load();
@@ -492,6 +507,29 @@ export default function AdminAppearance() {
       dragStartRef.current = null;
     }
   }, [isCropModalOpen]);
+
+  const updateNativeNotifications = useCallback(
+    (enabled: boolean) => {
+      setNativeNotificationsEnabled(enabled);
+      if (typeof window !== 'undefined') {
+        try {
+          if (enabled) {
+            window.localStorage.setItem(STORAGE_KEY_NATIVE_NOTIFICATIONS, 'true');
+          } else {
+            window.localStorage.removeItem(STORAGE_KEY_NATIVE_NOTIFICATIONS);
+          }
+        } catch {
+          // ローカルストレージが利用できない場合は状態のみ保持
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('systemNativeNotificationsUpdated', { detail: { enabled } }));
+        } catch {
+          // ignore dispatch errors
+        }
+      }
+    },
+    []
+  );
 
   const selectPreset = (c: string) => {
     setSelectedColor(c);
@@ -595,9 +633,9 @@ export default function AdminAppearance() {
   return (
     <Stack spacing={6} align="stretch">
       <Stack spacing={1} align="flex-start">
-        <Heading size="lg">外観設定</Heading>
+        <Heading size="lg">外観・通知設定</Heading>
         <Text fontSize="sm" color="fg.muted">
-          管理画面と患者画面のブランド要素をまとめて調整できます。各項目は変更後すぐに自動保存され、全画面へ即時反映されます。
+          管理画面と患者画面のブランド要素に加えて、問診完了時の通知方法をまとめて調整できます。表示名・メッセージ・カラー・ロゴは入力後すぐに自動保存されます。通知設定は端末ごとに保持され、初期状態では無効です。
         </Text>
       </Stack>
 
@@ -802,6 +840,36 @@ export default function AdminAppearance() {
             </HStack>
           </VStack>
         </FormControl>
+      </Section>
+
+      <Section
+        title="通知設定"
+        description="問診完了時にOS標準の通知（ブラウザ通知）を使うかどうかを切り替えます。"
+      >
+        <Stack spacing={3} align="stretch">
+          <FormControl>
+            <HStack align="flex-start" justify="space-between" gap={3} flexWrap="wrap">
+              <Box flex="1" minW="220px">
+                <FormLabel htmlFor="native-notifications" mb={1}>
+                  OS標準通知（ブラウザ通知）
+                </FormLabel>
+                <FormHelperText mt={0}>
+                  ブラウザ通知を有効にすると、管理画面を開いていないときも問診完了をデスクトップ通知で受け取れます。
+                </FormHelperText>
+              </Box>
+              <Switch
+                id="native-notifications"
+                isChecked={nativeNotificationsEnabled}
+                onChange={(e) => updateNativeNotifications(e.target.checked)}
+                colorScheme="primary"
+                size="lg"
+              />
+            </HStack>
+          </FormControl>
+          <Text fontSize="sm" color="fg.muted">
+            この設定は現在操作中の端末とブラウザにのみ適用されます。通知を許可していないブラウザでは、ここで有効化しても通知は表示されません。無効化すると OS 標準通知は送信されませんが、画面内のトースト通知は引き続き表示されます。
+          </Text>
+        </Stack>
       </Section>
 
       {logoUrl ? (

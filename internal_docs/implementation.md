@@ -62,7 +62,7 @@
     - [x] Entry で氏名・生年月日を入力
     - [x] Entry で「当院の受診は初めてですか？」を選択（「初めて」= initial / 「受診したことがある」= followup）しセッション作成
     - [x] Questionnaire で text/multi/yesno/date に応じた入力フォームを表示
-    - [x] Questions で追加質問を順次表示
+    - [x] Questions で追加質問を一括表示し、まとめて送信
     - [x] 追加質問終了後は自動的に完了画面へ遷移
   - [x] Done で要約を表示
   - [x] **共通**：ヘッダー右上「管理画面」ボタン、フッター注意文の常時表示
@@ -88,6 +88,7 @@
     - LM Studio: `/v1/chat/completions` の `response_format.json_schema` に同スキーマを指定
     - 返却は文字列JSONのため受信後に `json.loads()` でパースして配列に変換
     - プロンプト側でも「JSON配列で返答」を明記（冗長対策）
+  - [x] 追加質問生成時のタイムアウト値を設定化（5〜120 秒、管理UIのモデル設定欄から更新可能）
 
 > 実装メモ（2025-08-27）：`backend/app/llm_gateway.py::generate_followups` を更新し、
 > LM Studio / Ollama 双方に対して JSON Schema による構造化出力を強制するよう変更。
@@ -145,7 +146,7 @@
   - [x] `/admin/templates/:id`：項目ごとに初診/再診の使用可否や対象性別を設定する表とプレビュー
   - [x] `/admin/sessions`：問診結果の一覧
   - [x] `/admin/sessions/:id`：質問と回答の詳細表示
-  - [x] `/admin/appearance`：外観設定（表示名・メッセージ・ブランドカラー・ロゴ）
+  - [x] `/admin/appearance`：外観・通知設定（表示名・メッセージ・ブランドカラー・ロゴ・OS標準通知トグル）
   - [x] `/admin/timezone`：タイムゾーン設定（JST既定・変更可）
   - [x] `/admin/llm`：接続設定（エンドポイント/モデル/上限N/ターン/タイムアウト）と保存時の自動疎通テスト
 4) **状態管理/永続化**
@@ -157,6 +158,7 @@
     - 再試行ボタン等のアクションは `actionLabel` と `onAction` で実装し、ブラウザ標準の `alert`/`prompt`/`confirm` は使用しない。
   - [x] 持続表示が必要なステータスは `StatusBanner` コンポーネントで表現し、自動保存やモデル一覧取得時の結果を集約。疎通テストの手動実行結果はトースト通知のみで扱う。
   - [x] `useDialog()` を追加し、確認ダイアログ（削除/リセット）と入力ダイアログ（テンプレート複製など）を Promise で扱う。
+  - [x] 管理画面滞在中に問診が「完了」した際は、`useSessionCompletionWatcher` で 20 秒間隔のポーリングを行い、OS 標準の通知 API とトーストの双方で完了を知らせる。初回は通知許諾の促しを出す。
 
 ---
 
@@ -169,7 +171,7 @@
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
 - 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `GET/PUT /system/timezone`, `POST /admin/login`
 - バックアップ系：`POST /admin/questionnaires/export`, `POST /admin/questionnaires/import`, `POST /admin/sessions/export`, `POST /admin/sessions/import`
-- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`
+- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/updates?since=ISO8601`
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 
@@ -205,6 +207,11 @@
 - **管理**：テンプレCRUD、LLM接続設定（テストボタン）。
 
 ---
+
+## 変更履歴（2025-10-16）
+- 追加質問UIを「1問ずつ表示」から「一括表示（複数カード）」へ仕様固定。
+  - 対応: `frontend/src/pages/Questions.tsx` を一括送信フローに改修。
+  - バックエンドAPIおよびテストは変更なし（`/llm-questions` は上限までの配列を返す現行仕様を利用）。
 
 ## 5. バリデーション / エラー（最小）
 - 必須：未入力はフィールド直下にエラー。
@@ -1072,10 +1079,17 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminTemplates.tsx` で標準テンプレート以外に「名称変更」ボタンを追加し、リセットボタン表示を標準テンプレート限定に変更。
 - [x] ドキュメント更新: `docs/session_api.md`, `docs/admin_user_manual.md` にリネームAPIとUI仕様を反映。
 - [ ] バックエンド自動テスト実行: `cd backend && pytest tests/test_api.py::test_rename_questionnaire_updates_related_data -q`（`couchdb` モジュール未導入のため ImportError）
-- [ ] フロントエンドビルド確認: `cd frontend && npm run build`
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）
 
 ## 132. PDF header personal_info fallback (2025-10-06)
 - [x] backend: backend/app/pdf_renderer.py now falls back to answers.personal_info when the template omits personal_info, keeping header fields filled.
 - [x] backend: PDF header completion date now falls back to finalized_at (or started_at) so the displayed 記入日 matches管理画面.
 - [x] backend: Removed the 'よみがな:' prefix from the patient header kana line in backend/app/pdf_renderer.py so the PDF shows only the kana text.
 - [ ] backend tests: cd backend && pytest -q (failed: FastAPI not installed in current environment)
+
+## 133. 外観・通知設定の端末別通知トグル（2025-10-15）
+- [x] 変更（バックエンド）: `/system/native-notifications` API を撤廃し、通知設定をアプリ共通設定から切り離して端末単位運用へ戻した。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx` の通知設定を localStorage 保存に切り替え、デフォルトOFFかつ端末ごとに保持できるトグルへ改修。
+- [x] 変更（フロントエンド）: `frontend/src/hooks/useSessionCompletionWatcher.ts` が localStorage / カスタムイベントを監視して通知可否を判断し、OFFの端末では OS 通知を発火させないように調整。
+- [x] ドキュメント更新: `docs/admin_user_manual.md` に端末別保存と初期OFFを追記。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）

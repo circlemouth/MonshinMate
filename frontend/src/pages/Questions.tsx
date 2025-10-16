@@ -1,26 +1,22 @@
-import { useEffect, useState } from 'react';
-import { VStack, Box, Input, Button } from '@chakra-ui/react';
+import { useEffect, useMemo, useState } from 'react';
+import { VStack, Box, Input, Button, Heading, Divider } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
 import { refreshLlmStatus } from '../utils/llmStatus';
 import { useNotify } from '../contexts/NotificationContext';
 
-interface LlmQuestion {
-  id: string;
-  text: string;
-}
+interface LlmQuestion { id: string; text: string }
 
-/** 追加質問を順次表示するページ。 */
+/** 追加質問を一括表示してまとめて回答するページ。 */
 export default function Questions() {
   const navigate = useNavigate();
   const sessionId = sessionStorage.getItem('session_id');
-  const [current, setCurrent] = useState<LlmQuestion | null>(null);
-  const [answer, setAnswer] = useState('');
   const [pending, setPending] = useState<LlmQuestion[]>([]);
-  const [answers, setAnswers] = useState<Record<string, any>>(
-    JSON.parse(sessionStorage.getItem('answers') || '{}')
-  );
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, any>>(JSON.parse(sessionStorage.getItem('answers') || '{}'));
   const { notify } = useNotify();
+
+  const hasQuestions = useMemo(() => pending.length > 0, [pending]);
 
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
@@ -62,7 +58,13 @@ export default function Questions() {
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         setPending(data.questions);
-        setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
+        // 既存回答があればフォーム初期値に反映
+        const initial: Record<string, string> = {};
+        for (const q of data.questions as LlmQuestion[]) {
+          const prev = (answers && typeof answers === 'object' ? answers[q.id] : undefined) as string | undefined;
+          initial[q.id] = typeof prev === 'string' ? prev : '';
+        }
+        setForm(initial);
       } else {
         sessionStorage.removeItem('pending_llm_questions');
         await finalize(answers);
@@ -94,7 +96,12 @@ export default function Questions() {
         const arr = JSON.parse(raw);
         if (Array.isArray(arr) && arr.length > 0) {
           setPending(arr);
-          setCurrent(arr[0]);
+          const initial: Record<string, string> = {};
+          for (const q of arr as LlmQuestion[]) {
+            const prev = (answers && typeof answers === 'object' ? answers[q.id] : undefined) as string | undefined;
+            initial[q.id] = typeof prev === 'string' ? prev : '';
+          }
+          setForm(initial);
           return;
         }
       } catch {
@@ -106,66 +113,71 @@ export default function Questions() {
   }, [sessionId, navigate]);
 
   const submit = async () => {
-    if (!sessionId || !current) return;
+    if (!sessionId || !hasQuestions) return;
+    const toSend = pending.map((q) => ({ id: q.id, answer: form[q.id] ?? '' }));
     try {
-      await postWithRetry(`/sessions/${sessionId}/llm-answers`, {
-        item_id: current.id,
-        answer,
-      });
-      const newAnswers = { ...answers, [current.id]: answer };
-      setAnswers(newAnswers);
-      setAnswer('');
-      const rest = pending.slice(1);
-      if (rest.length > 0) {
-        setPending(rest);
-        sessionStorage.setItem('pending_llm_questions', JSON.stringify(rest));
-        setCurrent(rest[0]);
+      // すべての回答を送信（順不同で可）。ネットワーク断時はキューへ退避。
+      await Promise.all(
+        toSend.map((x) => postWithRetry(`/sessions/${sessionId}/llm-answers`, { item_id: x.id, answer: x.answer }))
+      );
+      const merged: Record<string, any> = { ...answers };
+      for (const x of toSend) merged[x.id] = x.answer;
+      setAnswers(merged);
+      sessionStorage.setItem('answers', JSON.stringify(merged));
+
+      // 次のバッチを取得（前回で上限到達していれば0件が返る）
+      sessionStorage.removeItem('pending_llm_questions');
+      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!res.ok) throw new Error('http error');
+      const data = await res.json();
+      if (data.questions && data.questions.length > 0) {
+        sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
+        setPending(data.questions);
+        const initial: Record<string, string> = {};
+        for (const q of data.questions as LlmQuestion[]) initial[q.id] = '';
+        setForm(initial);
       } else {
-        sessionStorage.removeItem('pending_llm_questions');
-        const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-        if (!res.ok) throw new Error('http error');
-        const data = await res.json();
-        if (data.questions && data.questions.length > 0) {
-          sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
-          setPending(data.questions);
-          setCurrent({ id: data.questions[0].id, text: data.questions[0].text });
-        } else {
-          await finalize(newAnswers);
-        }
+        await finalize(merged);
       }
     } catch (e) {
-      const newAnswers = { ...answers, [current.id]: answer };
+      // どれかが失敗した場合でも finalize へ（postWithRetry がキューしている）
+      const merged: Record<string, any> = { ...answers };
+      for (const x of toSend) merged[x.id] = x.answer;
       try {
         const msg = e instanceof Error ? e.message : String(e);
         sessionStorage.setItem('llm_error', msg);
       } catch {}
       sessionStorage.removeItem('pending_llm_questions');
-      await finalize(newAnswers);
+      await finalize(merged);
     }
     refreshLlmStatus().catch(() => {});
   };
 
   return (
     <form autoComplete="off" onSubmit={(e) => e.preventDefault()}>
-    <VStack spacing={4} align="stretch">
-      {current && (
-        <>
-          <Box>{current.text}</Box>
-          <Input
-            value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
-            autoComplete="off"
-            name="llm-answer"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-          />
-          <Button onClick={submit} colorScheme="primary">
-            送信
-          </Button>
-        </>
-      )}
-    </VStack>
+      <VStack spacing={5} align="stretch">
+        {hasQuestions && (
+          <>
+            <Heading size="md">追加で確認をさせていただきます。分かる範囲でお答えください。</Heading>
+            {pending.map((q, idx) => (
+              <Box key={q.id}>
+                <Box mb={2}>{`${idx + 1}. ${q.text}`}</Box>
+                <Input
+                  value={form[q.id] ?? ''}
+                  onChange={(e) => setForm((m) => ({ ...m, [q.id]: e.target.value }))}
+                  autoComplete="off"
+                  name={`llm-answer-${q.id}`}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                />
+                {idx < pending.length - 1 && <Divider mt={4} />}
+              </Box>
+            ))}
+            <Button onClick={submit} colorScheme="primary">まとめて送信</Button>
+          </>
+        )}
+      </VStack>
     </form>
   );
 }

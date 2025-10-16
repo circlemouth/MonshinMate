@@ -15,6 +15,11 @@ import {
   SliderFilledTrack,
   SliderThumb,
   SliderTrack,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
   Stack,
   Switch,
   Text,
@@ -34,12 +39,15 @@ type ProviderKey = (typeof PROVIDER_KEYS)[number];
 const DEFAULT_SYSTEM_PROMPT =
   'あなたは日本語で応答する熟練した医療問診支援AIです。患者の入力を理解し、医学的に適切で簡潔な回答や質問を行ってください。不要な前置きや断り書きは避け、常に敬体で表現してください。';
 
+const DEFAULT_FOLLOWUP_TIMEOUT = 30;
+
 interface ProviderProfile {
   model: string;
   temperature: number;
   system_prompt: string;
   base_url: string;
   api_key: string;
+  followup_timeout_seconds: number;
 }
 
 interface SettingsState {
@@ -72,6 +80,13 @@ const normalizeTemp = (val: unknown): number => {
   return Math.min(2, Math.max(0, num));
 };
 
+const normalizeTimeout = (val: unknown): number => {
+  const num = typeof val === 'number' ? val : parseFloat(String(val ?? ''));
+  if (!Number.isFinite(num)) return DEFAULT_FOLLOWUP_TIMEOUT;
+  const clamped = Math.min(120, Math.max(5, num));
+  return Math.round(clamped);
+};
+
 const defaultBaseUrl = (provider: ProviderKey): string => {
   switch (provider) {
     case 'ollama':
@@ -90,6 +105,7 @@ const defaultProfile = (provider: ProviderKey): ProviderProfile => ({
   system_prompt: DEFAULT_SYSTEM_PROMPT,
   base_url: defaultBaseUrl(provider),
   api_key: '',
+  followup_timeout_seconds: DEFAULT_FOLLOWUP_TIMEOUT,
 });
 
 const ensureProviderKey = (value: unknown): ProviderKey => {
@@ -127,6 +143,9 @@ const hydrateProfile = (provider: ProviderKey, raw: any, fallback: any): Provide
     system_prompt: resolvedPrompt,
     base_url: baseUrl,
     api_key: typeof apiKey === 'string' ? apiKey : '',
+    followup_timeout_seconds: normalizeTimeout(
+      candidate.followup_timeout_seconds ?? fb.followup_timeout_seconds ?? DEFAULT_FOLLOWUP_TIMEOUT,
+    ),
   };
 };
 
@@ -153,6 +172,7 @@ const buildPayload = (state: SettingsState) => {
       system_prompt: profile.system_prompt,
       base_url: profile.base_url ?? '',
       api_key: profile.api_key ?? '',
+      followup_timeout_seconds: normalizeTimeout(profile.followup_timeout_seconds),
     };
   }
   const active = payloadProfiles[state.provider] ?? defaultProfile(state.provider);
@@ -164,6 +184,7 @@ const buildPayload = (state: SettingsState) => {
     system_prompt: active.system_prompt,
     base_url: active.base_url,
     api_key: active.api_key,
+    followup_timeout_seconds: active.followup_timeout_seconds,
     provider_profiles: payloadProfiles,
   };
 };
@@ -204,6 +225,9 @@ export default function AdminLlm() {
   const hasModel = (currentProfile.model ?? '').trim().length > 0;
   const canSave = !state.enabled || hasModel;
   const isEnabled = state.enabled;
+  const timeoutSeconds = Number.isFinite(currentProfile.followup_timeout_seconds)
+    ? currentProfile.followup_timeout_seconds
+    : DEFAULT_FOLLOWUP_TIMEOUT;
 
   useEffect(() => {
     const load = async () => {
@@ -580,6 +604,29 @@ export default function AdminLlm() {
                 </Text>
               </HStack>
               <FormHelperText>0.0〜2.0 の範囲で出力のランダム性を調整します。</FormHelperText>
+            </FormControl>
+
+            <FormControl isDisabled={!isEnabled}>
+              <FormLabel>追加質問タイムアウト（秒）</FormLabel>
+              <NumberInput
+                min={5}
+                max={120}
+                step={5}
+                value={timeoutSeconds}
+                onChange={(_, valueAsNumber) =>
+                  updateProfile(activeProvider, (profile) => ({
+                    ...profile,
+                    followup_timeout_seconds: normalizeTimeout(valueAsNumber),
+                  }))
+                }
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+              <FormHelperText>LLM 追質問生成のリクエストが失敗とみなされるまでの待機時間です。</FormHelperText>
             </FormControl>
 
             <FormControl isDisabled={!isEnabled}>

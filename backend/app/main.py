@@ -54,6 +54,7 @@ from .db import (
     save_session,
     list_sessions as db_list_sessions,
     get_session as db_get_session,
+    list_sessions_finalized_after,
     upsert_summary_prompt,
     get_summary_prompt,
     get_summary_config,
@@ -1690,6 +1691,7 @@ def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
             enabled=req.enabled if req.enabled is not None else current.enabled,
             base_url=req.base_url or current.base_url,
             api_key=req.api_key or current.api_key,
+            followup_timeout_seconds=current.followup_timeout_seconds,
         )
         gateway = LLMGateway(temp)
         return gateway.test_connection()
@@ -1762,6 +1764,7 @@ class LogoCrop(BaseModel):
 class LogoSettings(BaseModel):
     url: str | None = None
     crop: LogoCrop | None = None
+
 
 @app.get("/system/timezone", response_model=TimezoneSettings)
 def get_system_timezone() -> TimezoneSettings:
@@ -2608,6 +2611,22 @@ class SessionSummary(BaseModel):
     interrupted: bool = False
 
 
+class SessionFinalizeEvent(BaseModel):
+    """問診完了時のイベント通知用レスポンス。"""
+
+    id: str
+    patient_name: str | None = None
+    dob: str | None = None
+    visit_type: str | None = None
+    started_at: str | None = None
+    finalized_at: str
+
+
+class SessionUpdatesResponse(BaseModel):
+    sessions: list[SessionFinalizeEvent]
+    latest_finalized_at: str | None = None
+
+
 class SessionDetail(BaseModel):
     """管理画面で表示するセッション詳細。"""
 
@@ -2930,6 +2949,40 @@ def admin_list_sessions(
         end_date=end_date,
     )
     return [SessionSummary(**s) for s in sessions]
+
+
+@app.get("/admin/sessions/updates", response_model=SessionUpdatesResponse)
+def admin_session_updates(
+    since: str | None = Query(None), limit: int = Query(50, ge=1, le=200)
+) -> SessionUpdatesResponse:
+    """指定時刻以降に確定したセッションを通知用に取得する。"""
+
+    since_dt: datetime | None = None
+    if since:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_since")
+
+    events, latest_dt = list_sessions_finalized_after(since_dt, limit=limit)
+    event_models: list[SessionFinalizeEvent] = []
+    for event in events:
+        finalized = event.get("finalized_at")
+        session_id = event.get("id")
+        if not finalized or not session_id:
+            continue
+        event_models.append(
+            SessionFinalizeEvent(
+                id=str(session_id),
+                patient_name=event.get("patient_name"),
+                dob=event.get("dob"),
+                visit_type=event.get("visit_type"),
+                started_at=event.get("started_at"),
+                finalized_at=str(finalized),
+            )
+        )
+    latest_value = latest_dt.isoformat() if latest_dt else None
+    return SessionUpdatesResponse(sessions=event_models, latest_finalized_at=latest_value)
 
 
 @app.get("/admin/sessions/{session_id}", response_model=SessionDetail)
