@@ -86,7 +86,10 @@ from .validator import Validator
 from .session_fsm import SessionFSM
 from .structured_context import StructuredContextManager
 from .pdf_renderer import PDFLayoutMode, render_session_pdf
-from .personal_info import format_multiline as format_personal_info_multiline
+from .personal_info import (
+    format_lines as format_personal_info_lines,
+    format_multiline as format_personal_info_multiline,
+)
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -1556,23 +1559,80 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
 
 def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) -> list[str]:
     """セッション情報からMarkdown形式の行リストを生成する。"""
+
+    def _gender_label(raw: str | None) -> str:
+        if not raw:
+            return "未設定"
+        mapping = {"male": "男性", "female": "女性", "other": "その他"}
+        return mapping.get(str(raw).lower(), str(raw))
+
+    def _yesno_display(value: Any) -> str | None:
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"yes", "no"}:
+                return "はい" if lowered == "yes" else "いいえ"
+        if isinstance(value, bool):
+            return "はい" if value else "いいえ"
+        return None
+
+    patient_name = s.get("patient_name") or "未設定"
+    dob = s.get("dob") or "未設定"
+    gender = _gender_label(s.get("gender"))
+    answers = s.get("answers", {}) or {}
+    personal_info_value: Any = None
+    for key in ("personal_info", "personalInfo", "patient_basic_info"):
+        if key in answers and answers[key]:
+            personal_info_value = answers[key]
+            break
+    personal_info_lines = format_personal_info_lines(
+        personal_info_value,
+        skip_keys={"name"},
+        hide_empty=(s.get("visit_type") != "initial"),
+    )
+
     lines = [
         "# 問診結果",
         "",
         "## 患者情報",
-        f"- 患者名: {s['patient_name']}",
-        f"- 生年月日: {s['dob']}",
-        f"- 受診種別: {vt_label}",
-        f"- テンプレートID: {s['questionnaire_id']}",
-        "",
-        "## 回答",
+        f"- 患者名: {patient_name}",
     ]
+    kana_line = next((line for line in personal_info_lines if line.startswith("よみがな:")), None)
+    if kana_line:
+        lines.append(f"- {kana_line}")
+    lines.extend(
+        [
+            f"- 生年月日: {dob}",
+            f"- 性別: {gender}",
+            f"- 受診種別: {vt_label}",
+        ]
+    )
+    for line in personal_info_lines:
+        if line == kana_line:
+            continue
+        lines.append(f"- {line}")
+    lines.append(f"- テンプレートID: {s['questionnaire_id']}")
+    lines.append("")
+    lines.append("## 回答")
+
+    personal_info_labels = {
+        "personal_info",
+        "personalInfo",
+        "patient_basic_info",
+        "患者基本情報",
+        "患者基本情報セット",
+    }
     for label, ans in rows:
-        lines.append(f"- {label}: {ans or '未回答'}")
-    if s.get("summary"):
+        if label in personal_info_labels:
+            continue
+        display = ans or "未回答"
+        yesno_display = _yesno_display(display) if isinstance(display, str) else None
+        lines.append(f"- {label}: {yesno_display or display}")
+
+    summary = s.get("summary")
+    if summary:
         lines.append("")
         lines.append("## 自動生成サマリー")
-        lines.extend(str(s["summary"]).splitlines())
+        lines.extend(str(summary).splitlines())
     return lines
 
 
@@ -1610,13 +1670,32 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
     if isinstance(raw_qtexts, dict):
         question_texts = {str(k): v for k, v in raw_qtexts.items() if isinstance(v, str)}
 
-    def fmt_answer(ans: Any) -> str:
+    personal_info_keys = {"personal_info", "personalInfo", "patient_basic_info"}
+
+    def fmt_yesno(ans: Any) -> str | None:
+        if isinstance(ans, str):
+            lowered = ans.strip().lower()
+            if lowered in {"yes", "no"}:
+                return "はい" if lowered == "yes" else "いいえ"
+        if isinstance(ans, bool):
+            return "はい" if ans else "いいえ"
+        return None
+
+    def fmt_answer(ans: Any, item_type: str | None = None) -> str:
         if ans is None or ans == "":
             return ""
+        yesno_display = fmt_yesno(ans) if item_type == "yesno" else None
+        if yesno_display is not None:
+            return yesno_display
         if isinstance(ans, list):
-            return ", ".join(map(str, ans))
+            return ", ".join(
+                fmt_yesno(v) or str(v) for v in ans
+            )
         if isinstance(ans, dict):
             return json.dumps(ans, ensure_ascii=False)
+        yesno_display = fmt_yesno(ans)
+        if yesno_display is not None:
+            return yesno_display
         return str(ans)
 
     rows: list[tuple[str, str]] = []
@@ -1630,7 +1709,7 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
             if item_type == "personal_info":
                 display_answer = format_personal_info_multiline(answer_value)
             else:
-                display_answer = fmt_answer(answer_value)
+                display_answer = fmt_answer(answer_value, item_type)
             rows.append((label, display_answer))
             appended_ids.add(item_id)
         except Exception:
@@ -1647,6 +1726,10 @@ def build_session_rows_and_items(s: dict) -> tuple[list[tuple[str, str]], str, l
         if iid in appended_ids:
             continue
         label = question_texts.get(iid) or iid
+        if iid in personal_info_keys:
+            rows.append(("患者基本情報", format_personal_info_multiline(answers.get(iid))))
+            appended_ids.add(iid)
+            continue
         rows.append((label, fmt_answer(answers.get(iid))))
         appended_ids.add(iid)
 

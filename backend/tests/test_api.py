@@ -571,6 +571,49 @@ def test_admin_session_download() -> None:
         assert len(r.content) > 0
 
 
+def test_markdown_export_formats_personal_info_and_yesno() -> None:
+    """Markdown出力で個人情報とYES/NO回答が日本語で整形される。"""
+
+    on_startup()
+    payload = {
+        "patient_name": "問診 花子",
+        "dob": "1992-04-01",
+        "gender": "female",
+        "visit_type": "initial",
+        "answers": {
+            "personal_info": {
+                "name": "問診 花子",
+                "kana": "もんしん はなこ",
+                "postal_code": "123-4567",
+                "address": "東京都千代田区1-1-1",
+                "phone": "090-1234-5678",
+            },
+            "chief_complaint": "頭痛が続いている",
+            "symptom_location": ["頭・顔"],
+            "onset": "本日",
+            "pregnancy": "yes",
+        },
+    }
+    res = client.post("/sessions", json=payload)
+    assert res.status_code == 200
+    sid = res.json()["id"]
+    finalize = client.post(f"/sessions/{sid}/finalize")
+    assert finalize.status_code == 200
+
+    response = client.get(f"/admin/sessions/{sid}/download/md")
+    assert response.status_code == 200
+    text = response.text
+
+    assert "- 患者名: 問診 花子" in text
+    assert "- よみがな: もんしん はなこ" in text
+    assert "- 性別: 女性" in text
+    assert "- 受診種別: 初診" in text
+    assert "- 郵便番号: 123-4567" in text
+    assert "- 住所: 東京都千代田区1-1-1" in text
+    assert "- 電話番号: 090-1234-5678" in text
+    assert "- 妊娠中ですか？: はい" in text
+    assert "- personal_info:" not in text
+
 def test_admin_bulk_download() -> None:
     """複数セッションの一括ダウンロードが各形式で成功することを確認する。"""
     on_startup()
