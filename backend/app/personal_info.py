@@ -1,7 +1,7 @@
 """Utility helpers for bundled personal info questionnaire items."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 FIELD_DEFS: list[tuple[str, str]] = [
     ("name", "患者名"),
@@ -104,3 +104,26 @@ def format_multiline(value: Any, line_separator: str = "\n") -> str:
         display = text if text and text != NORMALIZED_EMPTY else EMPTY_PLACEHOLDER
         lines.append(f"{label}: {display}")
     return line_separator.join(lines)
+
+
+def format_lines(
+    value: Any,
+    *,
+    skip_keys: Iterable[str] | None = None,
+    hide_empty: bool = False,
+) -> list[str]:
+    """Return a list of "label: value" strings for patient information."""
+
+    data = coerce_to_strings(value) or {key: "" for key in FIELD_KEYS}
+    skip = set(skip_keys or [])
+    lines: list[str] = []
+    for key, label in FIELD_DEFS:
+        if key in skip:
+            continue
+        text = data.get(key, "").strip()
+        has_value = bool(text and text != NORMALIZED_EMPTY)
+        display = text if has_value else EMPTY_PLACEHOLDER
+        if hide_empty and not has_value:
+            continue
+        lines.append(f"{label}: {display}")
+    return lines

@@ -1093,3 +1093,9 @@
 - [x] 変更（フロントエンド）: `frontend/src/hooks/useSessionCompletionWatcher.ts` が localStorage / カスタムイベントを監視して通知可否を判断し、OFFの端末では OS 通知を発火させないように調整。
 - [x] ドキュメント更新: `docs/admin_user_manual.md` に端末別保存と初期OFFを追記。
 - [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）
+
+## 134. Markdown出力の患者情報整形改善（2025-10-20）
+- [x] 変更（バックエンド）: `backend/app/main.py::build_markdown_lines` と `build_session_rows_and_items` で個人情報を患者情報セクションへ整理し、YES/NO回答を日本語表記へ統一。
+- [x] 変更（バックエンド）: `backend/app/personal_info.py` に `format_lines` を追加し、氏名・よみがな等の整形済みリストを再利用できるようにした。
+- [x] テスト追加: `backend/tests/test_api.py::test_markdown_export_formats_personal_info_and_yesno` を新設し、Markdown出力の体裁を検証。
+- [x] ドキュメント更新: `docs/admin_user_manual.md` にMarkdown出力の整形仕様を追記。
