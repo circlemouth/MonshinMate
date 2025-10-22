@@ -43,6 +43,7 @@ import {
   FiFile,
   FiFileText,
   FiLayers,
+  FiRefreshCcw,
   FiTable,
 } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
@@ -341,10 +342,10 @@ export default function AdminMain() {
   }, [loadSessions, loadTemplates, loadDatabaseStatus, loadLlmInfo]);
 
   useEffect(() => {
-    if (!templatesLoading && !dbLoading && !llmLoading) {
+    if (!sessionsLoading && !templatesLoading && !dbLoading && !llmLoading) {
       setLastUpdatedAt(new Date());
     }
-  }, [templatesLoading, dbLoading, llmLoading]);
+  }, [sessionsLoading, templatesLoading, dbLoading, llmLoading]);
 
   useEffect(() => {
     setPage((prev) => {
@@ -560,9 +561,21 @@ export default function AdminMain() {
         boxShadow="sm"
         p={4}
       >
-        <Heading size="lg" mb={4}>
+        <Heading size="lg" mb={2}>
           問診結果
         </Heading>
+        <Button
+          size="sm"
+          leftIcon={<FiRefreshCcw />}
+          onClick={() => {
+            void loadSessions();
+          }}
+          isLoading={sessionsLoading}
+          variant="outline"
+          mb={4}
+        >
+          最新の状態に更新
+        </Button>
         {sessionsLoading ? (
           <HStack spacing={3} align="center">
             <Spinner size="sm" color="accent.solid" />

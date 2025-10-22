@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table,
   Thead,
@@ -47,6 +47,7 @@ import {
   FiFileText,
   FiTable,
   FiTrash,
+  FiRefreshCcw,
   FiChevronLeft,
   FiChevronRight,
   FiChevronsLeft,
@@ -91,6 +92,7 @@ export default function AdminSessions() {
     }[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [listLoading, setListLoading] = useState(false);
   const [copyingMarkdownTarget, setCopyingMarkdownTarget] = useState<string | null>(null);
   const preview = useDisclosure();
   const { notify } = useNotify();
@@ -104,40 +106,59 @@ export default function AdminSessions() {
   const [confirmState, setConfirmState] = useState<{ type: 'bulk-selected' | 'bulk-displayed' | 'row'; id?: string } | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
-  const loadSessions = (filters: {
-    patientName?: string;
-    dob?: string;
-    startDate?: string;
-    endDate?: string;
-  }) => {
-    const params = new URLSearchParams();
-    const trimmedPatient = filters.patientName?.trim();
-    const trimmedDob = filters.dob?.trim();
-    const trimmedStart = filters.startDate?.trim();
-    const trimmedEnd = filters.endDate?.trim();
-    if (trimmedPatient) params.append('patient_name', trimmedPatient);
-    if (trimmedDob) params.append('dob', trimmedDob);
-    if (trimmedStart) params.append('start_date', trimmedStart);
-    if (trimmedEnd) params.append('end_date', trimmedEnd);
-    const qs = params.toString();
-    fetch(`/admin/sessions${qs ? `?${qs}` : ''}`)
-      .then((r) => r.json())
-      .then((data: SessionSummary[]) => {
-        // 最新の開始日時順でソート
+  const loadSessions = useCallback(
+    async (filters: {
+      patientName?: string;
+      dob?: string;
+      startDate?: string;
+      endDate?: string;
+    }) => {
+      setListLoading(true);
+      try {
+        const params = new URLSearchParams();
+        const trimmedPatient = filters.patientName?.trim();
+        const trimmedDob = filters.dob?.trim();
+        const trimmedStart = filters.startDate?.trim();
+        const trimmedEnd = filters.endDate?.trim();
+        if (trimmedPatient) params.append('patient_name', trimmedPatient);
+        if (trimmedDob) params.append('dob', trimmedDob);
+        if (trimmedStart) params.append('start_date', trimmedStart);
+        if (trimmedEnd) params.append('end_date', trimmedEnd);
+        const query = params.toString();
+        const response = await fetch(`/admin/sessions${query ? `?${query}` : ''}`);
+        if (!response.ok) {
+          throw new Error('failed to load sessions');
+        }
+        const data: SessionSummary[] = await response.json();
         const sorted = [...data].sort((a, b) => {
           const av = a.started_at || a.finalized_at || '';
           const bv = b.started_at || b.finalized_at || '';
           return av < bv ? 1 : av > bv ? -1 : 0;
         });
         setSessions(sorted);
-                <Th>状態</Th>
         setSelectedSessionIds([]);
         setPage(0);
-      });
-  };
+      } catch (error) {
+        console.error(error);
+        notify({
+          title: '問診結果の取得に失敗しました',
+          status: 'error',
+          channel: 'admin',
+          duration: 4000,
+        });
+      } finally {
+        setListLoading(false);
+      }
+    },
+    [notify]
+  );
+
+  const refreshWithCurrentFilters = useCallback(() => {
+    void loadSessions({ patientName, dob, startDate, endDate });
+  }, [loadSessions, patientName, dob, startDate, endDate]);
 
   const handleSearch = () => {
-    loadSessions({ patientName, dob, startDate, endDate });
+    refreshWithCurrentFilters();
   };
 
   const handleReset = () => {
@@ -145,22 +166,22 @@ export default function AdminSessions() {
     setDob('');
     setStartDate('');
     setEndDate('');
-    loadSessions({});
+    void loadSessions({});
   };
 
   useEffect(() => {
-    loadSessions({});
-  }, []);
+    void loadSessions({});
+  }, [loadSessions]);
 
   useEffect(() => {
     const handler = () => {
-      loadSessions({ patientName, dob, startDate, endDate });
+      refreshWithCurrentFilters();
     };
     window.addEventListener('adminSessionsRefreshRequested', handler as EventListener);
     return () => {
       window.removeEventListener('adminSessionsRefreshRequested', handler as EventListener);
     };
-  }, [patientName, dob, startDate, endDate]);
+  }, [refreshWithCurrentFilters]);
 
   useEffect(() => {
     setPage((prev) => {
@@ -534,47 +555,6 @@ export default function AdminSessions() {
         boxShadow="sm"
       >
         <VStack align="stretch" spacing={4}>
-          <HStack spacing={4} align="flex-end">
-            <FormControl>
-              <FormLabel>患者名</FormLabel>
-              <Input
-                bg="white"
-                _dark={{ bg: 'gray.800' }}
-                value={patientName}
-                onChange={(e) => setPatientName(e.target.value)}
-              />
-            </FormControl>
-            <FormControl>
-              <FormLabel>生年月日</FormLabel>
-              <Input
-                type="date"
-                bg="white"
-                _dark={{ bg: 'gray.800' }}
-                value={dob}
-                onChange={(e) => setDob(e.target.value)}
-              />
-            </FormControl>
-            <FormControl>
-              <FormLabel>問診日(開始)</FormLabel>
-              <Input
-                type="date"
-                bg="white"
-                _dark={{ bg: 'gray.800' }}
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </FormControl>
-            <FormControl>
-              <FormLabel>問診日(終了)</FormLabel>
-              <Input
-                type="date"
-                bg="white"
-                _dark={{ bg: 'gray.800' }}
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </FormControl>
-          </HStack>
           <Flex align="center" justify="space-between" wrap="wrap" gap={3}>
             <HStack spacing={3}>
               <Menu isLazy>
@@ -616,7 +596,7 @@ export default function AdminSessions() {
                   {endDate && ` 終了:${endDate}`}
                 </Text>
               )}
-              <Button size="md" onClick={handleSearch}>
+              <Button size="md" onClick={handleSearch} isLoading={listLoading}>
                 検索
               </Button>
               <Button size="md" onClick={handleReset}>
@@ -624,6 +604,58 @@ export default function AdminSessions() {
               </Button>
             </Flex>
           </Flex>
+
+          <Button
+            size="sm"
+            leftIcon={<FiRefreshCcw />}
+            onClick={refreshWithCurrentFilters}
+            isLoading={listLoading}
+            alignSelf={{ base: 'stretch', sm: 'flex-start' }}
+            variant="outline"
+          >
+            最新の状態に更新
+          </Button>
+          <HStack spacing={4} align="flex-end">
+            <FormControl>
+              <FormLabel>患者名</FormLabel>
+              <Input
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>生年月日</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(開始)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(終了)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </FormControl>
+          </HStack>
         </VStack>
       </Box>
       <Box
