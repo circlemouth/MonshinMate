@@ -4,15 +4,13 @@
 
 移動した主なファイル一覧（2025-08-31 時点）
 - AGENTS.md（開発エージェント向け運用指針）
-- GEMINI.md（LLM運用ガイド）
 - plannedSystem.md（システム全体設計）
-- PlannedDesign.md（設計/改善計画）
+- PlannedDesign.md（UI設計ガイド）
 - LLMcommunication.md（LLM入出力契約/プロンプト設計）
 - implementation.md（実装状況チェックリスト／更新ログ）
+- implementation_cloud_run_firebase.md（Cloud Run + Firebase 実装計画）
 - admin_system_setup.md（管理/運用向けセットアップ）
 - docker_setup.md（開発/運用向け Docker 手順）
-- UI_Redesign_Plan.md（UI再設計計画）
-- Accessibility_And_Typography_Verification.md（アクセシビリティ検証）
 
 注意事項
 - 本フォルダは原則として非公開リポジトリでのみ管理してください。

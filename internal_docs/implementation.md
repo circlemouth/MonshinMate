@@ -245,7 +245,7 @@
 
 ## 付録：ドキュメント整理（非公開化）
 - [x] `docs/` 配下のうち、公開不要な文書を `internal_docs/` に移動（2025-08-31）。
-  - 対象: `AGENTS.md`, `GEMINI.md`, `plannedSystem.md`, `PlannedDesign.md`, `LLMcommunication.md`, `implementation.md`, `admin_system_setup.md`, `docker_setup.md`, `UI_Redesign_Plan.md`, `Accessibility_And_Typography_Verification.md`
+  - 対象: `AGENTS.md`, `plannedSystem.md`, `PlannedDesign.md`, `LLMcommunication.md`, `implementation.md`, `implementation_cloud_run_firebase.md`, `admin_system_setup.md`, `docker_setup.md`
   - `docs/` 側には移動案内のプレースホルダを設置し、既存リンクの断絶を最小化。
   - `docs/` に残す公開想定ドキュメント: `session_api.md`, `admin_user_manual.md`
 2) 管理画面で `llm_settings` と初診/再診テンプレ投入
@@ -281,7 +281,7 @@
 ---
 
 ## 11. UIデザイン改修（医療問診向け）チェックリスト
-> 詳細方針は `docs/UI_Redesign_Plan.md` を参照。plannedSystem.md と整合。
+> 詳細方針は `internal_docs/PlannedDesign.md` を参照。plannedSystem.md と整合。
 
 - [ ] デザイン原則と情報設計の合意（患者/管理フロー）
 - [x] デザイントークン定義（色・タイポ・間隔・ブレークポイント）
@@ -1099,3 +1099,8 @@
 - [x] 変更（バックエンド）: `backend/app/personal_info.py` に `format_lines` を追加し、氏名・よみがな等の整形済みリストを再利用できるようにした。
 - [x] テスト追加: `backend/tests/test_api.py::test_markdown_export_formats_personal_info_and_yesno` を新設し、Markdown出力の体裁を検証。
 - [x] ドキュメント更新: `docs/admin_user_manual.md` にMarkdown出力の整形仕様を追記。
+
+## 135. Docker Hub へのコンテナ公開準備（2025-10-22）
+- [x] `Makefile` に `docker-build-backend` / `docker-build-frontend` / `docker-build` / `docker-push-*` ターゲットを追加し、`BACKEND_IMAGE`・`FRONTEND_IMAGE`・`IMAGE_TAG` でビルド／プッシュ先を指定できるようにした。
+- [ ] Docker デーモン起動後に `make docker-build` を実行し、`Backend`/`Frontend` イメージがローカルで生成されることを検証（手元環境の Docker 未起動により未対応）。
+- [x] Docker Hub へのアップロード手順メモ（`docker login` → 環境変数設定 → `make docker-build docker-push`）を依頼者報告・手順書に反映。

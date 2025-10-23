@@ -93,6 +93,12 @@ docker compose up -d
 - `docs/`（公開向け）と `internal_docs/`（社内向け）で内容が二重管理されているため、更新時は両方の整合性を必ず確認する。
 - 公開用に成果物をまとめるときは `make export-public` あるいは `bash tools/export_public.sh public_export` を使用し、内部資料が混入しないようにする。
 - UI やワークフローを変更した場合は `docs/admin_user_manual.md` と `docs/session_api.md` の該当箇所を更新する。
+- **内部ドキュメントの役割整理**（重複参照を避けるため必読）
+  - `internal_docs/system_overview.md`: 現行実装の一次情報。エージェントはまずここを参照し、システム構成・LLM 接続・データフローを把握する。
+  - `internal_docs/implementation.md`: 実装履歴と判断メモのログ。進捗更新・未解決事項の記録先として継続利用する。
+  - `internal_docs/plannedSystem.md`, `internal_docs/PlannedDesign.md`: 初期計画・設計のアーカイブ。背景確認が必要な場合のみ参照し、現行仕様の根拠には用いない。
+  - `internal_docs/LLMcommunication.md`: LLM 接続手順の補足資料。最新の通信手順は `system_overview.md` の LLM 節を基にし、本ファイルは具体的なコマンド例を確認したい場合に限定する。
+  - `internal_docs/admin_system_setup.md`: 管理者向け運用手順（パスワード・TOTP・非常用リセット）。セキュリティ関連の作業前に必ず参照する。
 
 ## 11. 納品前チェックリスト
 - [ ] コード・設定の変更内容を説明できるか（Why/How を整理済みか）。
