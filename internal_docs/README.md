@@ -8,7 +8,7 @@
 - PlannedDesign.md（UI設計ガイド）
 - LLMcommunication.md（LLM入出力契約/プロンプト設計）
 - implementation.md（実装状況チェックリスト／更新ログ）
-- implementation_cloud_run_firebase.md（Cloud Run + Firebase 実装計画）
+- implementation_cloud_run_firebase.md（Cloud Run + Firebase 実装計画：詳細は private サブモジュールへ移管済み）
 - admin_system_setup.md（管理/運用向けセットアップ）
 - docker_setup.md（開発/運用向け Docker 手順）
 
@@ -19,9 +19,9 @@
 
 ---
 
-公開用エクスポートの使い方（公開レポ作成手順）
+公開用スナップショット作成（任意作業）
 
-この非公開リポジトリから、公開してよい成果物のみを抽出して新規の公開用レポジトリを作る手順です。履歴は持ち込みません（スナップショット公開）。
+リポジトリ自体は現在公開運用ですが、配布物を最小構成でまとめたい場合は `tools/export_public.sh` を使ってスナップショットを生成できます。生成したディレクトリは一時的なものなので、利用後は削除してください（Git には含めない）。
 
 1) 依存関係と前提
 - 本リポジトリは private を維持します（`internal_docs/` はこのまま Git 管理対象）。
@@ -35,19 +35,19 @@
   - `make export-public`
 
 3) 出力
-- `public_export/` ディレクトリが生成され、以下を含みます:
+- 指定した出力先（例: `public_export/`）が生成され、以下を含みます:
   - ルート: `LICENSE`, `README.md`, `Makefile`, `docker-compose.yml`, `dev.sh`, `dev.ps1`
   - プロダクト: `backend/`, `frontend/`
   - 公開用ドキュメント: `docs/admin_user_manual.md`, `docs/session_api.md`
 - 含まれないもの（自動で除外）:
   - `internal_docs/`, `wrapper/`, `.pytest_cache/`, `venv/`, `.git/` など
 
-4) 公開レポジトリへの初回 push
+4) 公開レポジトリへの初回 push（必要な場合のみ）
 - `cd public_export`
 - `git remote add origin <public-repo-url>`
 - `git branch -M main && git push -u origin main`
 
 5) 運用ノート
 - 公開対象の調整は `tools/export_public.sh` を編集して行います。
-- 非公開情報を誤って公開しないため、`internal_docs/` は「非公開リポでは Git 管理するが、公開物には含めない」方針です。
-- 公開側 README に非公開ドキュメントへのリンクを張る場合、社内ポータルや別 private リポへの導線を用いてください（直接のファイル参照は不可）。
+- スクリプトで生成したディレクトリは Git の管理対象にしないでください（必要なタイミングで再生成する）。
+- 非公開情報を誤って公開しないため、サブモジュール `private/cloud-run-adapter` や `internal_docs/` はスナップショットから除外されます。

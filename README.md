@@ -90,7 +90,7 @@ npm run dev
 - `COUCHDB_DB`: 使用 DB 名（既定: `monshin_sessions`）。
 - `COUCHDB_USER`, `COUCHDB_PASSWORD`: CouchDB の認証情報。
 
-Docker Compose での既定値は `docker-compose.yml` と リポジトリ直下の `.env.example` を参照してください。
+Docker Compose での既定値は `docker-compose.yml` とリポジトリ直下の `.env.example`（ローカル開発向け）を参照してください。Cloud Run 向けの環境変数例は非公開サブモジュール（`private/cloud-run-adapter/.env.cloudrun.example`）に用意しています。
 
 ## 認証と二段階認証（Authenticator/TOTP）
 - 管理ログインはパスワード必須。初回は `admin`/`ADMIN_PASSWORD` でログインし、パスワードを変更してください。
@@ -128,6 +128,12 @@ Docker Compose での既定値は `docker-compose.yml` と リポジトリ直下
 - `backend/tools/audit_dump.py`: 監査ログのダンプ（`--limit`/`--db` 指定可）。
 - `backend/tools/encrypt_totp_secrets.py`: 既存 DB の TOTP シークレットを暗号化に移行。
 
-## ライセンス
-- 本プロジェクトは GNU GPL v3.0 に基づき公開されています。詳細はリポジトリ直下の `LICENSE` を参照してください。
+## Cloud Run / Firestore 拡張（プライベートモジュール）
+- Google Cloud Run + Firestore 向けの永続化アダプタと Secret Manager 連携は、`private/` 配下に追加する非公開サブモジュールで提供します。
+- プライベートモジュールを導入した場合は、以下の環境変数で実装を指定してください。
+  - `MONSHINMATE_FIRESTORE_ADAPTER=monshinmate_cloud.firestore_adapter:FirestoreAdapter`
+  - `MONSHINMATE_SECRET_MANAGER_ADAPTER=monshinmate_cloud.secret_manager:load_secrets`
+- サブモジュールの配置例や要件は `private/README.md` を参照してください。プラグインが存在しない場合、既定の SQLite + CouchDB 構成で動作します。
 
+## ライセンス
+- 本プロジェクトは GNU Affero General Public License v3.0 (AGPLv3) に基づき公開されています。詳細はリポジトリ直下の `LICENSE` を参照してください。

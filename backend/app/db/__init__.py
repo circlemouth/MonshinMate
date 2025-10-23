@@ -1,7 +1,9 @@
 """永続化アダプタの切替ハブ。"""
 from __future__ import annotations
 
-from typing import Any, Callable
+import os
+from importlib import import_module
+from typing import Any, Callable, Optional, Tuple, Type
 
 from ..config import get_settings
 from .interfaces import PersistenceAdapter
@@ -14,16 +16,69 @@ from .sqlite_adapter import (
     couch_db as SQLITE_COUCH_DB,
     get_couch_db,
 )
-from .firestore_adapter import FirestoreAdapter
+
+
+def _parse_adapter_spec(spec: str) -> Tuple[str, str]:
+    stripped = spec.strip()
+    if not stripped:
+        return ("", "FirestoreAdapter")
+    if ":" in stripped:
+        module_name, attr = stripped.split(":", 1)
+        return (module_name.strip(), (attr or "FirestoreAdapter").strip() or "FirestoreAdapter")
+    if "." in stripped:
+        module_name, attr = stripped.rsplit(".", 1)
+        return (module_name.strip(), (attr or "FirestoreAdapter").strip() or "FirestoreAdapter")
+    return (stripped, "FirestoreAdapter")
+
+
+def _load_firestore_adapter_class() -> Optional[Type[PersistenceAdapter]]:
+    env_spec = os.getenv("MONSHINMATE_FIRESTORE_ADAPTER", "")
+    candidates: list[str] = []
+    if env_spec:
+        candidates.extend(part for part in env_spec.split(",") if part.strip())
+    candidates.extend(
+        [
+            "monshinmate_cloud.firestore_adapter:FirestoreAdapter",
+            "monshinmate_cloud_run.firestore_adapter:FirestoreAdapter",
+            "app.db.firestore_adapter:FirestoreAdapter",
+        ]
+    )
+    seen: set[Tuple[str, str]] = set()
+    for spec in candidates:
+        module_name, attr_name = _parse_adapter_spec(spec)
+        if not module_name:
+            continue
+        key = (module_name, attr_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            module = import_module(module_name)
+        except ModuleNotFoundError:
+            continue
+        adapter_class = getattr(module, attr_name, None)
+        if adapter_class is None:
+            continue
+        if not callable(adapter_class):
+            continue
+        return adapter_class
+    return None
 
 
 _settings = get_settings()
+_firestore_adapter_class = _load_firestore_adapter_class()
 
 
 def _select_adapter() -> PersistenceAdapter:
     backend = (_settings.persistence_backend or "sqlite").lower()
     if backend == "firestore":
-        return FirestoreAdapter(_settings.firestore)
+        if _firestore_adapter_class is None:
+            raise RuntimeError(
+                "Firestore バックエンドが選択されていますが、利用可能な実装が見つかりません。"
+                " MONSHINMATE_FIRESTORE_ADAPTER 環境変数でプライベートモジュールを指定し、"
+                "Cloud Run 用サブモジュールを追加してください。"
+            )
+        return _firestore_adapter_class(_settings.firestore)  # type: ignore[call-arg]
     return SQLiteAdapter()
 
 

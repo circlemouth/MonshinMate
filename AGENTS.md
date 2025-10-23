@@ -91,7 +91,7 @@ docker compose up -d
 
 ## 10. ドキュメント更新
 - `docs/`（公開向け）と `internal_docs/`（社内向け）で内容が二重管理されているため、更新時は両方の整合性を必ず確認する。
-- 公開用に成果物をまとめるときは `make export-public` あるいは `bash tools/export_public.sh public_export` を使用し、内部資料が混入しないようにする。
+- 公開用に成果物をまとめる必要がある場合のみ `make export-public` / `bash tools/export_public.sh <dir>` を使い、一時ディレクトリでスナップショットを作成する（生成後は不要になったら削除する）。
 - UI やワークフローを変更した場合は `docs/admin_user_manual.md` と `docs/session_api.md` の該当箇所を更新する。
 - **内部ドキュメントの役割整理**（重複参照を避けるため必読）
   - `internal_docs/system_overview.md`: 現行実装の一次情報。エージェントはまずここを参照し、システム構成・LLM 接続・データフローを把握する。

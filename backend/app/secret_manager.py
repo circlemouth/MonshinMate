@@ -1,15 +1,14 @@
-"""Secret Manager integration helpers."""
+"""Secret Manager フックのローダー。
+
+Google Cloud Secret Manager へのアクセス実装はプライベートサブモジュール側で提供し、
+ここでは利用可能であればそれを呼び出す役割のみを担う。
+"""
 from __future__ import annotations
 
 import logging
 import os
-from functools import lru_cache
-from typing import Dict
-
-try:  # pragma: no cover - optional dependency
-    from google.cloud import secretmanager  # type: ignore
-except Exception:  # pragma: no cover
-    secretmanager = None  # type: ignore
+from importlib import import_module
+from typing import Callable, Dict, List, Optional, Tuple
 
 from .config import get_settings
 
@@ -23,63 +22,67 @@ _DEFAULT_SECRET_KEYS = [
 ]
 
 
-def _build_secret_id(prefix: str | None, key: str) -> str:
-    env_override = os.getenv(f"SECRET_MANAGER_{key}_SECRET_ID")
-    if env_override:
-        return env_override
-    normalized = key.lower().replace("_", "-")
-    if prefix:
-        return f"{prefix}-{normalized}"
-    return normalized
+def _parse_spec(spec: str) -> Tuple[str, str]:
+    stripped = spec.strip()
+    if not stripped:
+        return ("", "load_secrets")
+    if ":" in stripped:
+        module_name, attr = stripped.split(":", 1)
+        return (module_name.strip(), (attr or "load_secrets").strip() or "load_secrets")
+    if "." in stripped:
+        module_name, attr = stripped.rsplit(".", 1)
+        return (module_name.strip(), (attr or "load_secrets").strip() or "load_secrets")
+    return (stripped, "load_secrets")
 
 
-@lru_cache(maxsize=1)
-def _client():
-    if secretmanager is None:
-        raise RuntimeError("google-cloud-secret-manager is not installed")
-    return secretmanager.SecretManagerServiceClient()
+def _load_secret_loader() -> Optional[Callable[[List[str], list[str] | None], Dict[str, str]]]:
+    env_spec = os.getenv("MONSHINMATE_SECRET_MANAGER_ADAPTER", "")
+    candidates: list[str] = []
+    if env_spec:
+        candidates.extend(part for part in env_spec.split(",") if part.strip())
+    candidates.extend(
+        [
+            "monshinmate_cloud.secret_manager:load_secrets",
+            "monshinmate_cloud_run.secret_manager:load_secrets",
+            "app.secret_manager_cloud:load_secrets",
+        ]
+    )
+    seen: set[Tuple[str, str]] = set()
+    for spec in candidates:
+        module_name, attr_name = _parse_spec(spec)
+        if not module_name:
+            continue
+        key = (module_name, attr_name)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            module = import_module(module_name)
+        except ModuleNotFoundError:
+            continue
+        loader = getattr(module, attr_name, None)
+        if not callable(loader):
+            continue
+        return loader
+    return None
+
+
+_secret_loader = _load_secret_loader()
 
 
 def load_secrets(extra_keys: list[str] | None = None) -> Dict[str, str]:
-    """Load secrets from Google Secret Manager and populate environment variables.
-
-    Returns a dict mapping key -> value for successfully loaded secrets.
-    """
+    """Secret Manager からシークレットを読み込む（利用可能な場合）。"""
 
     settings = get_settings()
     if not settings.secret_manager.enabled:
         return {}
-    project_id = settings.secret_manager.project_id
-    if not project_id:
-        logger.warning("Secret Manager enabled but SECRET_MANAGER_PROJECT is unset")
+    if _secret_loader is None:
+        logger.info(
+            "Secret Manager が有効化されていますが、実装プラグインがロードできませんでした。"
+            " Cloud Run 用サブモジュールを追加し、MONSHINMATE_SECRET_MANAGER_ADAPTER を設定してください。"
+        )
         return {}
-    if secretmanager is None:
-        logger.warning("google-cloud-secret-manager not available; skipping secret load")
-        return {}
-
-    keys = list(_DEFAULT_SECRET_KEYS)
-    if extra_keys:
-        for key in extra_keys:
-            if key not in keys:
-                keys.append(key)
-
-    loaded: Dict[str, str] = {}
-    client = _client()
-    for key in keys:
-        secret_id = _build_secret_id(settings.secret_manager.prefix, key)
-        if not secret_id:
-            continue
-        resource_name = f"projects/{project_id}/secrets/{secret_id}/versions/latest"
-        try:
-            response = client.access_secret_version(name=resource_name)
-            value = response.payload.data.decode("utf-8")
-        except Exception as exc:  # pragma: no cover - runtime dependent
-            logger.warning("failed to access secret %s: %s", resource_name, exc)
-            continue
-        if not os.getenv(key):
-            os.environ[key] = value
-        loaded[key] = value
-    return loaded
+    return _secret_loader(_DEFAULT_SECRET_KEYS, extra_keys)
 
 
-__all__ = ["load_secrets"]
+__all__ = ["_DEFAULT_SECRET_KEYS", "load_secrets"]

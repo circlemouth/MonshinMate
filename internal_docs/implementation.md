@@ -445,8 +445,8 @@
   - 変更: `docs/admin_user_manual.md`
 
 ## 39. GPLライセンス本文の同梱と表示（2025-08-31）
-- [x] GNU GPL v3 のライセンス本文をレポジトリに同梱し、フロント配信に含めた。
-  - 追加: `frontend/public/docs/LICENSE_GPL-3.0.md`
+- [x] GNU GPL v3 のライセンス本文をレポジトリに同梱し、フロント配信に含めた。（2025-10-23 に AGPLv3 へ更新済み）
+  - 追加（現行）: `frontend/public/docs/LICENSE_AGPL-3.0.md`
 - [x] 管理画面にライセンス表示ページを追加し、ナビに「ライセンス」を追加。
   - 追加: `frontend/src/pages/AdminLicense.tsx`
   - 変更: `frontend/src/App.tsx`（ルート追加）, `frontend/src/components/AdminLayout.tsx`（ナビ項目追加）
@@ -1124,3 +1124,29 @@
 - [x] テスト追加: Firestore エミュレータ用の `backend/tests/test_firestore_adapter.py` を作成。`FIRESTORE_EMULATOR_HOST` 設定時にテンプレート/セッション/ユーザー/監査ログ操作を検証。
 - [x] ツール追加: `tools/migrate_to_firestore.py` で SQLite から Firestore へのテンプレート・セッション移行（PoC）を実装。
 - [x] シークレット対応: `backend/app/secret_manager.py` を追加し、Secret Manager から主要シークレットを読み込む仕組みを導入。ローテーション手順と Terraform/CI ドラフト (`internal_docs/infra/terraform_cloud_run.md`)・デプロイ検証手順 (`internal_docs/operations/cloud_run_staging_prod_plan.md`) を文書化。
+
+## 138. Cloud Run 実装のサブモジュール分離（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/db/__init__.py` をプラグインローダー化し、Firestore 実装を `MONSHINMATE_FIRESTORE_ADAPTER` で指定する方式へ変更。既存の Firestore コードは公開リポジトリから削除。
+- [x] 変更（バックエンド）: `backend/app/secret_manager.py` をプラグインローダーに置き換え、`MONSHINMATE_SECRET_MANAGER_ADAPTER` で非公開実装を呼び出す方式に統一。
+- [x] 依存整理: `backend/pyproject.toml` および `backend/monshinmate_backend.egg-info/*` から Google Cloud 系依存（firestore/storage/secret-manager/firebase-admin）を除去。
+- [x] 構成整理: `tools/migrate_to_firestore.py`, `backend/tests/test_firestore_adapter.py`, `firebase.json`, `firestore-debug.log` を削除し、Cloud Run 用の `private/README.md` を追加。
+- [x] ドキュメント: Cloud Run 関連の internal_docs をサブモジュール移管告知に差し替え、`README.md` と `internal_docs/system_overview.md` にプラグイン導入手順を追記。
+- [x] テスト: `cd backend && pytest -q`（Firestore 実装削除後の回帰確認）。
+
+## 139. ライセンスを AGPLv3 へ更新（2025-10-23）
+- [x] ライセンス本文: ルート `LICENSE` と `frontend/public/LICENSE`、`frontend/public/docs/LICENSE_AGPL-3.0.md`、`frontend/dist/LICENSE` を AGPLv3 へ差し替え。
+- [x] UI 反映: `frontend/src/pages/AdminLicense.tsx` のライセンス判別ロジックと説明文を AGPLv3 向けに更新。
+- [x] ドキュメント: `README.md` に AGPLv3 への変更を明記し、`internal_docs/implementation.md` の既存記録を補足更新。
+- [x] ビルド: `cd frontend && npm run build`（AGPL 表記に合わせた dist 再生成）。
+
+## 140. LLM 追加質問フォールバックの無効化（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py` のフォールバック処理を更新し、リモート問い合わせ失敗時は追加質問を提示しないようにした。
+- [x] テスト更新: `backend/tests/test_api.py` の LLM 関連テストを、フォールバックが空配列を返す前提に合わせて更新。
+- [x] サブモジュール整備: `private/cloud-run-adapter` サブモジュールを追加し、Firestore アダプタと Secret Manager 連携をプライベートリポジトリで提供するよう分離。
+- [x] テスト: `cd backend && pytest -q`。
+
+## 141. 環境変数サンプルの分離（2025-10-23）
+- [x] 変更（ルート）: `.env.example` をローカル開発用に整理し、Cloud Run 用の設定例を削除。
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/.env.cloudrun.example` を追加し、Cloud Run 向け環境変数サンプルを非公開リポジトリで管理。
+- [x] ドキュメント: `README.md` と `internal_docs/system_overview.md` に Cloud Run 版 `.env` の参照先を追記。
+

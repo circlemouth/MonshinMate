@@ -29,6 +29,13 @@
 - **環境変数**: `backend/.env` とリポジトリ直下 `.env`（Docker 用）を読み込む。`MONSHINMATE_DB` を未設定の場合、`backend/app/app.sqlite3` を使用。
 - **静的アセット**: 問診項目画像は `backend/app/questionnaire_item_images/`、ロゴは `backend/app/system_logo/` に保存し、FastAPI で静的配信。
 
+### 3.5 Cloud Run / Firestore 拡張
+- Cloud Run + Firestore 向けの永続化アダプタおよび Secret Manager 連携は、`private/` 配下に配置する非公開サブモジュールで提供する。
+- プライベートモジュールが提供する `FirestoreAdapter` を利用する場合は、`MONSHINMATE_FIRESTORE_ADAPTER` 環境変数に `モジュール:クラス` 形式で指定する（例: `monshinmate_cloud.firestore_adapter:FirestoreAdapter`）。
+- Secret Manager 連携を有効化する際は `MONSHINMATE_SECRET_MANAGER_ADAPTER` を設定し、プラグイン側の `load_secrets` をロードさせる。
+- 本リポジトリのみで運用する場合は `PERSISTENCE_BACKEND=sqlite` を既定とし、Cloud Run 向け設定値は読み込まれない。
+- Cloud Run 部署時に利用する `.env` サンプルはサブモジュール側の `.env.cloudrun.example` を参照する。
+
 ## 4. バックエンド（FastAPI）
 ### 4.1 主要モジュール
 - `main.py`: エントリポイント。Pydantic モデル、API ルーティング、PDF/CSV生成、エクスポート暗号化、TOTP・JWT ロジック、メトリクスを包含。
