@@ -90,6 +90,7 @@ from .personal_info import (
     format_lines as format_personal_info_lines,
     format_multiline as format_personal_info_multiline,
 )
+from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -99,6 +100,7 @@ _BASE_DIR = Path(__file__).resolve().parents[1]
 _PROJECT_ROOT = _BASE_DIR.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 load_dotenv(_BASE_DIR / ".env")
+load_secrets()
 
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")

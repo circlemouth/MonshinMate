@@ -43,4 +43,4 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_HTTP_PORT:-5173}:80"
+      - "${FRONTEND_HTTP_PORT:-5173}:8080"

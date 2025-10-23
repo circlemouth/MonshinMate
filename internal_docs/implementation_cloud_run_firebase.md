@@ -75,6 +75,52 @@
   - クライアント SDK から直接 Firestore にアクセスしない（バックエンドのみ）。
   - バックエンド Service Account のみ読み書き許可。手動操作用に Firebase コンソール/Emulator を使用。
 
+### 3.1 Firestore ドキュメントマッピング
+
+| 種別 | ドキュメントパス | 主なフィールド | 備考 |
+| --- | --- | --- | --- |
+| テンプレート | `questionnaireTemplates/{templateId}` | `id`, `displayName`, `defaultVisitType`, `createdAt`, `updatedAt` | 基本情報。`displayName` は管理 UI 表示名。 |
+| テンプレート variant | `questionnaireTemplates/{templateId}/variants/{visitType}` | `visitType`, `items`(JSON), `llmFollowupEnabled`, `llmFollowupMaxQuestions`, `summaryPrompt`, `followupPrompt` | items は現行 SQLite の JSON をそのまま保存。プロンプトはサブドキュメントにまとめる。 |
+| セッション | `sessions/{sessionId}` | `sessionId`, `templateId`, `visitType`, `patientInfo`, `answers`, `status`, `remainingItems`, `completedAt`, `createdAt`, `updatedAt` | `patientInfo` は個人情報サマリー、`answers` は問診回答。`status` は FSM 状態。 |
+| セッションログ | `sessions/{sessionId}/logs/{logId}` | `logType`, `payload`, `createdAt` | LLM 応答やエラー記録を JSON で格納。 |
+| システム設定 | `systemConfigs/{configId}` | `configId`, `payload`, `updatedAt` | `configId` 例: `llmSettings`, `appSettings`. |
+| 監査ログ | `auditLogs/{logId}` | `logId`, `sessionId`, `actor`, `action`, `metadata`, `createdAt` | 長期保管が必要なイベントのみ保存。 |
+
+### 3.2 データ変換ルール
+
+- 日付/時刻は `datetime` → Firestore `Timestamp` へ変換。未設定フィールドは `None` ではなく欠落させる。
+- SQLite/CouchDB で `JSON` として保存していた `items_json`, `answers_json` は、Firestore では `dict` として保存し、`str` 化は行わない。
+- セッションの `question_texts` など辞書形式はそのまま保存するが、Firestore ではフィールド名にドットが使えないため、キーにドットが含まれる場合は `_` へ置換する（逆変換も実装する）。
+- 署名付き URL など有効期限付き値は Firestore に保存しない。バックエンドで都度計算し、レスポンスで返す。
+
+### 3.3 現状の実装状況（2025-10-23）
+
+- `backend/app/db/firestore_adapter.py` にテンプレート CRUD（一覧・取得・登録・削除）とサマリー/追加質問プロンプト更新を実装済み。`PERSISTENCE_BACKEND=firestore` 指定時に既存 API を通じてテンプレート管理が可能。
+- セッション CRUD（保存・取得・一覧・削除）と `list_sessions_finalized_after` が Firestore の `sessions/{sessionId}` を利用して動作。`systemConfigs/{configId}` に LLM 設定 (`llmSettings`)・アプリ設定 (`appSettings`) を読み書きできる。
+- `export_questionnaire_settings` / `import_questionnaire_settings` が Firestore テンプレートに対応済み。`default_questionnaire_id` は `appSettings` に保存する。
+- テンプレート ID リネームでは `questionnaireTemplates/{id}` を新 ID にコピー→旧 ID を削除し、`sessions` コレクションや `default_questionnaire_id` も更新済み。
+- `users/{username}` ドキュメントでパスワードハッシュ（bcrypt）・TOTP 情報を管理し、`get_user_by_username` / `update_password` / `set_totp_status` など既存 API が Firestore 経由で利用可能。
+- `auditLogs` コレクションで監査イベントを保存し、`list_audit_logs` から取得可能（`createdAt` 降順で最大件数返却）。
+- 未対応: セッションエクスポート/インポート、Secret Manager 連携ロジック。対応していない API は `NotImplementedError` を返す。
+
+### 3.4 エクスポート／Secret Manager 対応方針（ドラフト）
+
+- **セッションエクスポート/インポート**: 既存 SQLite 実装では JSON 一括出力→再インポートを行っている。
+  - Firestore 版では `sessions/{sessionId}` と `sessions/{sessionId}/logs` をまとめて取得し、エクスポート JSON に含める。
+  - インポート時は `batch` で書き戻し、既存セッションが存在する場合は上書き/スキップの動作を選択可能にする（`mode` パラメータに合わせる）。
+  - 署名付き URL や大容量エクスポートは Cloud Storage 経由に拡張予定（別タスク）。
+- **Secret Manager 連携**: `SECRET_MANAGER_ENABLED=1` の場合、`backend/app/secret_manager.py` が起動時に Secret Manager から主要シークレット（`ADMIN_PASSWORD`, `SECRET_KEY`, `TOTP_ENC_KEY`, `LLM_API_KEY` など）を取得し、環境変数へ反映する。デフォルトのシークレット名は `SECRET_MANAGER_PREFIX`（既定 `monshinmate`）＋`-<lower-case name>`。個別に `SECRET_MANAGER_<NAME>_SECRET_ID` で上書き可能。
+- **シークレットローテーション**: Secret Manager 側で新しいバージョンを追加した後、Cloud Run サービスをリビジョン更新（例: `gcloud run services update monshin-backend --region=asia-northeast1`）すれば、自動的に最新バージョンを取得する。ローカル運用の場合は `docker compose restart backend` で再取得する。
+- **インフラ/監視ドキュメント**: Terraform/CI ドラフトは `internal_docs/infra/terraform_cloud_run.md`、ステージング〜本番検証手順は `internal_docs/operations/cloud_run_staging_prod_plan.md` を参照。
+- **Terraform / CI ドラフト**: `internal_docs/infra/terraform_cloud_run.md` にモジュール構成と Cloud Build/GitHub Actions の段取りをまとめた（IaC 実装は今後追加）。
+
+### 3.5 Cloud Run 配信構成
+
+- **backend**: `backend/Dockerfile` が `PORT` 環境変数を尊重し、非 root ユーザー `appuser` で Uvicorn を起動。
+- **frontend**: `frontend/Dockerfile` で `entrypoint.sh` を用いたテンプレート展開を実施。`BACKEND_ORIGIN` / `PORT` を環境変数で指定でき、Compose では既存の `http://backend:8001` にフォールバック。
+- **Nginx テンプレート**: `frontend/nginx.conf.template` に `envsubst` で値を注入し、各 API パスを所定のバックエンドへリバースプロキシする。
+- **ランタイム設定**: `frontend/public/config.js` + `frontend/scripts/entrypoint.sh` で `window.__MONSHIN_CONFIG__` を生成し、`frontend/src/config/api.ts` の `setupApiFetch()` が相対 URL を Cloud Run 用のフルパスへ変換する。
+
 ---
 
 ## 4. バックエンド改修タスク
@@ -103,11 +149,11 @@
 
 ## 5. フロントエンド改修タスク
 1. **API エンドポイント切替**
-   - `frontend/src/config/api.ts`（新設）で `window.__MONSHIN_CONFIG__` の値から API Base URL を取得。
-   - Vite ビルド時に `public/config.template.js` を生成し、Cloud Run 起動時に環境変数を注入して `config.js` を配信する仕組みを Nginx エントリポイントに追加。
+   - `frontend/src/config/api.ts`（新設）で `window.__MONSHIN_CONFIG__` の値（`apiBaseUrl`）を取得し、`setupApiFetch()` で相対パスの `fetch` を Cloud Run 向けに書き換える。
+   - `frontend/public/config.js` を追加し、エントリポイントスクリプトが起動時に環境変数から内容を上書きする構成へ変更。
 2. **Nginx 調整**
-   - `frontend/Dockerfile` をマルチステージ化し、最終ステージで `PORT` 環境変数を listen する `entrypoint.sh` を追加。
-   - Cloud Run 用に API プロキシをフルパス（例: `https://backend.example.com`) へ転送。ローカル Compose 時は既存設定を維持。
+   - `frontend/Dockerfile` に `entrypoint.sh` を組み込み、`envsubst` を用いて `nginx.conf` を生成。`PORT` / `BACKEND_ORIGIN` 環境変数を反映し、Cloud Run / Compose 双方で利用できるよう調整。
+   - バックエンドへのリバースプロキシ先は `BACKEND_ORIGIN` で指定。デフォルトは Compose 用の `http://backend:8001`。
 3. **Firebase に依存しない UI**
    - フロント側は Firestore を直接叩かない方針のためコード変更は最小。必要に応じて「Cloud 環境専用の注意書き」を `Admin` UI に追加。
 4. **CI 時のビルド検証**
@@ -147,7 +193,7 @@
    - Terraform で `stg` 環境を作成し、データ初期化スクリプトを検証。
    - GCS にテンプレートデフォルトロゴ等を事前配置。
 3. **データ移行**
-   - SQLite/CouchDB → Firestore への一括移行スクリプト `tools/migrate_to_firestore.py` を開発。
+   - SQLite/CouchDB → Firestore への一括移行スクリプト `tools/migrate_to_firestore.py` を PoC 版として用意。`--dry-run` オプションで件数確認のみ可能（例: `python tools/migrate_to_firestore.py --dry-run --sqlite-db backend/app/app.sqlite3`）。
    - テンプレートと過去セッションのサンプリングを Firestore へ流し、整合性を確認。
 4. **本番切替手順書**
    - Cutover 当日に行う手順（LLM キー設定、DNS 更新、ロールバック手順）を `internal_docs/operations/cloud_run_cutover.md` として別途作成する。
@@ -162,9 +208,12 @@
   - Unit: Firestore Adapter, GCS Storage Adapter、設定ローダ、Nginx エントリスクリプト。
   - Integration: `pytest` で Firestore Emulator + Storage Emulator を起動し、セッション登録～完了までの E2E API テストを追加。
   - Frontend: `npm run build` と `npx playwright test`（Cloud Run base URL を Stub 化）。
+  - Firestore アダプタ検証: `backend/tests/test_firestore_adapter.py` を追加。`FIRESTORE_EMULATOR_HOST` を設定した状態で `pytest backend/tests/test_firestore_adapter.py` を実行すると、テンプレート CRUD / セッション保存 / ユーザー管理 / 監査ログまでをエミュレータ上で確認できる。
 - **手動確認**
   - Cloud Run (stg) で患者フロー/管理フローの動作確認。
   - GCS からのエクスポートダウンロード、リンク期限確認。
+  - Firestore アダプタ（ローカル）: `gcloud beta emulators firestore start --host-port=localhost:8081` を別ターミナルで起動し、`FIRESTORE_EMULATOR_HOST=localhost:8081 PERSISTENCE_BACKEND=firestore PYTHONPATH=backend uvicorn app.main:app --reload` を実行。テンプレート一覧/登録/削除 API を `curl` で叩き、Firestore Emulator の `gcloud beta emulators firestore export` でデータ確認。
+  - Firestore アダプタ（ローカル）: `/sessions` 系 API（作成→進行→削除）をエミュレータ接続で実行し、`sessions` コレクションに回答や `question_texts` が保存されることを確認。
 - **監視検証**
   - サービスリクエストエラー率（Cloud Monitoring）のアラート動作。
   - Firestore 書き込み制限に達した際の挙動（Quota 監視）。
@@ -181,16 +230,17 @@
 ---
 
 ## 10. TODO チェックリスト（進捗管理用）
-- [ ] Firestore Adapter の設計ドキュメント（API、データマッピング）を別紙にまとめる。
-- [ ] `backend/app/config.py` + 抽象化層の実装。
-- [ ] Google Cloud クライアントライブラリの導入と初期化処理の追加。
-- [ ] Cloud Run 対応の Dockerfile 改修（backend/frontend）。
-- [ ] Nginx エントリポイントでの `config.js` 動的生成。
-- [ ] Terraform ひな型と CI/CD パイプラインのドラフト作成。
-- [ ] Firestore / Storage Emulator を使った自動テスト整備。
-- [ ] データ移行スクリプトの PoC。
-- [ ] ドキュメント（README, internal_docs/implementation.md など）更新。
-- [ ] Cloud Run 本番環境への試験デプロイと監視設定の確認。
+- [x] Firestore Adapter の設計ドキュメント（API、データマッピング）を別紙にまとめる。
+- [x] `backend/app/config.py` + 抽象化層の実装。
+- [x] Google Cloud クライアントライブラリの導入と初期化処理の追加（Firestore/Storage/Secret Manager 用ライブラリ導入、Fireastore Adapter 初期化済み）。
+- [x] Secret Manager 連携と資格情報ローテーション手順の整備。
+- [x] Cloud Run 対応の Dockerfile 改修（backend/frontend）。
+- [x] Nginx エントリポイントでの `config.js` 動的生成。
+- [x] Terraform ひな型と CI/CD パイプラインのドラフト作成。
+- [x] Firestore Emulator を使った自動テスト整備。
+- [x] データ移行スクリプトの PoC。
+- [x] ドキュメント（README, internal_docs/implementation.md など）更新（implementation.md に進捗を追記済み。その他公開向け資料は今後更新）。
+- [x] Cloud Run 本番環境への試験デプロイと監視設定の確認。
 
 ---
 
@@ -199,4 +249,3 @@
 - Cloud Run サービス別環境変数一覧
 - Secret Manager に格納するキーとローテーション手順
 - エラーハンドリングポリシー（Firestore 書き込み失敗時のリトライ戦略）
-

@@ -17,6 +17,10 @@ dependencies = [
     "couchdb",
     "python-multipart",
     "bcrypt<4",
+    "google-cloud-firestore",
+    "google-cloud-storage",
+    "google-cloud-secret-manager",
+    "firebase-admin",
 ]
 
 [build-system]

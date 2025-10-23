@@ -1104,3 +1104,23 @@
 - [x] `Makefile` に `docker-build-backend` / `docker-build-frontend` / `docker-build` / `docker-push-*` ターゲットを追加し、`BACKEND_IMAGE`・`FRONTEND_IMAGE`・`IMAGE_TAG` でビルド／プッシュ先を指定できるようにした。
 - [ ] Docker デーモン起動後に `make docker-build` を実行し、`Backend`/`Frontend` イメージがローカルで生成されることを検証（手元環境の Docker 未起動により未対応）。
 - [x] Docker Hub へのアップロード手順メモ（`docker login` → 環境変数設定 → `make docker-build docker-push`）を依頼者報告・手順書に反映。
+
+## 136. Cloud Run/Firebase 永続化抽象化の導入（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/db.py` をパッケージ化し、`backend/app/db/sqlite_adapter.py` へ既存 SQLite/CouchDB 実装を移動。`SQLiteAdapter` クラスで既存関数をラップし、環境による切替が可能な構造へ変更。
+- [x] 変更（バックエンド）: `backend/app/config.py` を新設し、`PERSISTENCE_BACKEND` / `FILE_STORAGE_BACKEND` / Firestore/GCS 関連環境変数の読み込みを統合。`backend/app/db/__init__.py` で設定に応じたアダプタ選択を行う。
+- [x] 変更（バックエンド）: `backend/app/db/firestore_adapter.py` に Firestore クライアント初期化を含むスケルトン実装を追加。未実装メソッドは `NotImplementedError` を送出する。
+- [x] 変更（バックエンド）: FirestoreAdapter にテンプレート CRUD／セッション CRUD／LLM・アプリ設定保存・問診テンプレート import/export を実装し、`PERSISTENCE_BACKEND=firestore` で基本操作が通るよう調整。
+- [x] 変更（バックエンド）: FirestoreAdapter の `rename_template` を実装し、テンプレート ID 変更時に `sessions` コレクションと既定テンプレート設定を更新するようにした。
+- [x] 変更（バックエンド）: FirestoreAdapter に監査ログ保存 (`auditLogs`) と TOTP/パスワード更新時の監査イベント記録を追加し、`list_audit_logs` が Firestore から取得できるようにした。
+- [x] ドキュメント: `internal_docs/firestore_adapter_design.md` を新設し、Firestore コレクション構成・API 対応表・エミュレータ手順を整理。
+- [x] 依存更新: `backend/pyproject.toml` に `google-cloud-firestore`, `google-cloud-storage`, `google-cloud-secret-manager`, `firebase-admin` を追加。
+- [ ] 動作確認: `couchdb` パッケージ未導入環境のため `PYTHONPATH=backend python -m pytest` を未実施。ローカル SQLite での既存機能回帰は次回 `couchdb` インストール後に実行予定。
+- [ ] TODO: Firestore アダプタのセッションエクスポート/インポートと Secret Manager 連携を実装し、`internal_docs/implementation_cloud_run_firebase.md` に反映する。
+
+## 137. Cloud Run 対応 Dockerfile / Nginx 改修（2025-10-23）
+- [x] 変更（バックエンド）: `backend/Dockerfile` を Cloud Run 対応に更新し、`PORT` 環境変数でリッスンポートを切替、非 root ユーザーで起動するよう調整。
+- [x] 変更（フロントエンド）: `frontend/Dockerfile` にエントリポイントスクリプトとテンプレート生成 (`frontend/scripts/entrypoint.sh`, `frontend/nginx.conf.template`) を導入し、`BACKEND_ORIGIN`/`PORT` を環境変数で差し替えつつ `config.js` を動的生成。
+- [x] 変更（フロントエンド）: `frontend/public/config.js` と `frontend/src/config/api.ts` を追加し、Cloud Run 環境で `apiBaseUrl` を注入して相対パスの `fetch` を補正。`index.html` で `config.js` を読み込むよう追加。
+- [x] テスト追加: Firestore エミュレータ用の `backend/tests/test_firestore_adapter.py` を作成。`FIRESTORE_EMULATOR_HOST` 設定時にテンプレート/セッション/ユーザー/監査ログ操作を検証。
+- [x] ツール追加: `tools/migrate_to_firestore.py` で SQLite から Firestore へのテンプレート・セッション移行（PoC）を実装。
+- [x] シークレット対応: `backend/app/secret_manager.py` を追加し、Secret Manager から主要シークレットを読み込む仕組みを導入。ローテーション手順と Terraform/CI ドラフト (`internal_docs/infra/terraform_cloud_run.md`)・デプロイ検証手順 (`internal_docs/operations/cloud_run_staging_prod_plan.md`) を文書化。
