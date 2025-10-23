@@ -57,11 +57,10 @@ try {
     & "$VenvDir/Scripts/python.exe" -m pip install -e .
     Pop-Location
 
-    # Load backend/.env to export environment variables (for emergency reset, CouchDB, etc.)
-    $BackendDir = Join-Path $RootDir 'backend'
-    $DotenvPath = Join-Path $BackendDir '.env'
+    # Load repository root .env to export environment variables for backend/frontend
+    $DotenvPath = Join-Path $RootDir '.env'
     if (Test-Path $DotenvPath) {
-        Write-Host "[setup] Loading backend/.env"
+        Write-Host "[setup] Loading .env"
         Get-Content $DotenvPath | ForEach-Object {
             $line = $_.Trim()
             if (-not $line -or $line.StartsWith('#')) { return }

@@ -183,6 +183,12 @@
 
 ---
 
+## 付録：実施メモ（2025-10-23）
+
+- [x] README の該当セクション（機能概要〜Cloud Run/Firestore〜ライセンス）を日本語として自然な文面に調整。
+  - 語尾と改行の統一、用語表記の揺れ（「初診/再診」→「初診・再診」など）を整理。
+  - 技術的な記述や手順の意味は変更しない範囲で可読性を向上。
+
 ## 付録：実施メモ（2025-10-06）
 
 - [x] dermatology_intake.json を更新（問診テンプレート）
@@ -1149,4 +1155,3 @@
 - [x] 変更（ルート）: `.env.example` をローカル開発用に整理し、Cloud Run 用の設定例を削除。
 - [x] 変更（サブモジュール）: `private/cloud-run-adapter/.env.cloudrun.example` を追加し、Cloud Run 向け環境変数サンプルを非公開リポジトリで管理。
 - [x] ドキュメント: `README.md` と `internal_docs/system_overview.md` に Cloud Run 版 `.env` の参照先を追記。
-

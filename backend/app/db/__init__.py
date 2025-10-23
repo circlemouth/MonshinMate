@@ -3,7 +3,19 @@ from __future__ import annotations
 
 import os
 from importlib import import_module
+import sys
+from pathlib import Path
+import logging
 from typing import Any, Callable, Optional, Tuple, Type
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PRIVATE_DIR = _PROJECT_ROOT / "private"
+_ADAPTER_DIR = _PRIVATE_DIR / "cloud-run-adapter"
+for candidate in (_ADAPTER_DIR, _PRIVATE_DIR):
+    if candidate.exists():
+        path_str = str(candidate)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
 
 from ..config import get_settings
 from .interfaces import PersistenceAdapter
@@ -65,6 +77,8 @@ def _load_firestore_adapter_class() -> Optional[Type[PersistenceAdapter]]:
     return None
 
 
+logger = logging.getLogger(__name__)
+
 _settings = get_settings()
 _firestore_adapter_class = _load_firestore_adapter_class()
 
@@ -84,6 +98,29 @@ def _select_adapter() -> PersistenceAdapter:
 
 _adapter: PersistenceAdapter = _select_adapter()
 
+def get_current_persistence_backend() -> str:
+    """現在選択されている永続化バックエンド名を返す。"""
+    name = getattr(_adapter, "name", None)
+    if isinstance(name, str) and name:
+        return name.lower()
+    return (_settings.persistence_backend or "sqlite").lower()
+
+
+def check_firestore_health() -> bool:
+    """Firestore 接続のヘルスチェックを行う。"""
+    if get_current_persistence_backend() != "firestore":
+        return False
+    adapter = _adapter
+    try:
+        health_check = getattr(adapter, "health_check", None)
+        if callable(health_check):
+            health_check()
+        else:
+            adapter.list_templates()  # type: ignore[attr-defined]
+        return True
+    except Exception as exc:  # pragma: no cover - 例外時のみ
+        logger.warning("firestore_health_check_failed: %s", exc)
+        return False
 
 def _delegate(name: str) -> Callable[..., Any]:
     def _proxy(*args: Any, **kwargs: Any) -> Any:
@@ -155,6 +192,8 @@ __all__ = [
     "DEFAULT_DB_PATH",
     "COUCHDB_URL",
     "couch_db",
+    "check_firestore_health",
+    "get_current_persistence_backend",
     "fernet",
     "pwd_context",
     "get_couch_db",

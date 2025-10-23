@@ -18,16 +18,21 @@ import base64
 import hashlib
 import secrets
 from urllib.parse import urlparse
+from pathlib import Path
 try:
     from dotenv import load_dotenv
 except Exception:  # ランタイム環境に dotenv が無い場合でも起動を継続
     def load_dotenv(*_args, **_kwargs):  # type: ignore
         return False
 
+# .env の読み込み（リポジトリルートのみ）
+_BASE_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _BASE_DIR.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 import shutil
 import sqlite3
 from pydantic import BaseModel, Field
@@ -44,6 +49,7 @@ from .llm_gateway import (
 )
 from cryptography.fernet import Fernet, InvalidToken
 
+from .config import get_settings
 from .db import (
     init_db,
     upsert_template,
@@ -75,6 +81,8 @@ from .db import (
     DEFAULT_DB_PATH,
     couch_db,
     COUCHDB_URL,
+    check_firestore_health,
+    get_current_persistence_backend,
     export_questionnaire_settings,
     import_questionnaire_settings,
     export_sessions_data,
@@ -93,13 +101,7 @@ from .personal_info import (
 from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-# .env の読み込み（リポジトリルート -> backend/.env の順に適用）
-_BASE_DIR = Path(__file__).resolve().parents[1]
-_PROJECT_ROOT = _BASE_DIR.parent
-load_dotenv(_PROJECT_ROOT / ".env")
-load_dotenv(_BASE_DIR / ".env")
 load_secrets()
 
 # JWT settings for password reset
@@ -2123,6 +2125,13 @@ class LLMStatusResponse(BaseModel):
 @app.get("/system/database-status", response_model=DatabaseStatus)
 def get_database_status() -> DatabaseStatus:
     """データベースの使用状況を返す。"""
+    backend = get_current_persistence_backend()
+    if backend == "firestore":
+        if check_firestore_health():
+            settings = get_settings()
+            status = "firestore_emulator" if settings.firestore.use_emulator else "firestore"
+            return DatabaseStatus(status=status)
+        return DatabaseStatus(status="error")
     if not COUCHDB_URL:
         return DatabaseStatus(status="sqlite")
     try:

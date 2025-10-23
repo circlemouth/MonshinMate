@@ -7,8 +7,19 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from importlib import import_module
+from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_PRIVATE_DIR = _PROJECT_ROOT / "private"
+_ADAPTER_DIR = _PRIVATE_DIR / "cloud-run-adapter"
+for candidate in (_ADAPTER_DIR, _PRIVATE_DIR):
+    if candidate.exists():
+        path_str = str(candidate)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
 
 from .config import get_settings
 

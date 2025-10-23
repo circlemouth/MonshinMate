@@ -29,6 +29,8 @@
 ### 5.1 共通前提
 - 必須バージョン: Python 3.11 以上、Node.js 18 以上、npm または pnpm/yarn。Docker Compose はオプション。
 - Python の依存関係は必ず仮想環境（`python -m venv venv`）にインストールする。共有環境にグローバルインストールしない。
+- Cloud Run / Firestore 対応は `private/cloud-run-adapter` サブモジュール（非公開リポジトリ）で管理し、本リポジトリには含めない。サブモジュールの参照だけを更新すること。
+
 - `.env` は `backend/.env` を基点に作成し、機密情報はコミットしない。
 
 ### 5.2 バックエンド
