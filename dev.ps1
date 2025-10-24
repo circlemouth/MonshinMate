@@ -77,6 +77,41 @@ try {
         }
     }
 
+    $requiresFirestore = $false
+    if ($env:PERSISTENCE_BACKEND) {
+        $requiresFirestore = $env:PERSISTENCE_BACKEND.ToLowerInvariant() -eq 'firestore'
+    }
+    if (-not $requiresFirestore -and $env:MONSHINMATE_FIRESTORE_ADAPTER) {
+        $requiresFirestore = $true
+    }
+
+    if ($requiresFirestore) {
+        $pipExe = Join-Path $VenvDir 'Scripts\pip.exe'
+        if (-not (Test-Path -LiteralPath $pipExe)) {
+            $pipExe = Join-Path $VenvDir 'Scripts\pip'
+        }
+        $firestorePackages = @(
+            "google-cloud-firestore",
+            "google-cloud-secret-manager",
+            "google-cloud-storage",
+            "firebase-admin"
+        )
+        $missingPackages = @()
+        foreach ($pkg in $firestorePackages) {
+            & $pipExe 'show' $pkg *> $null
+            if ($LASTEXITCODE -ne 0) {
+                $missingPackages += $pkg
+            }
+        }
+        if ($missingPackages.Count -gt 0) {
+            Write-Host "[setup] Installing Firestore dependencies: $($missingPackages -join ', ')"
+            $pipArgs = @('install') + $missingPackages
+            & $pipExe @pipArgs
+        } else {
+            Write-Host "[setup] Firestore dependencies already installed."
+        }
+    }
+
     # If CouchDB is configured but unreachable, fall back to SQLite for local development
     if ($env:COUCHDB_URL) {
         $reachable = $false
