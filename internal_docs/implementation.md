@@ -1164,3 +1164,8 @@
 - [x] 変更（サブモジュール）: `private/cloud-run-adapter/monshinmate_cloud/firestore_adapter.py` の `upsert_template` でトランザクション内の read/write 順序を調整し、先に `template_ref` と `variant_ref` を取得してから書き込みを行うようにして `ReadAfterWriteError` を回避。
 - [x] 変更（サブモジュール）: Firestore `init` 時に `admin` ユーザーが存在しない場合は `ADMIN_PASSWORD`（未設定時は `admin`）でシードし、初回ログインできなくなる問題を解消。
 - [ ] 動作確認: Firebase エミュレータで `dev.sh` 起動確認を再実施予定。
+
+## 144. Secret Manager 登録メモの追記（2025-10-24）
+- [x] ドキュメント（サブモジュール）: `private/cloud-run-adapter/README.md` に「Secrets」節を追加し、GSM で管理するシークレットの一覧（ID のみ）と運用ルール（値はコミットしない、権限、確認手順、ローテーション方針、複数テナント時のプレフィックス運用）を明記。
+- [x] 登録済み ID を記録（値は非掲載）: `monshinmate-ADMIN_PASSWORD` / `monshinmate-LLM_API_KEY` / `monshinmate-SECRET_KEY` / `monshinmate-TOTP_ENC_KEY`。
+- [x] 既存方針と整合: `internal_docs/admin_system_setup.md` の TOTP 暗号化手順と `backend/app/config.py` の Secret Manager 設定項目にリンクを合わせた。
