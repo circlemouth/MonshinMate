@@ -1155,3 +1155,12 @@
 - [x] 変更（ルート）: `.env.example` をローカル開発用に整理し、Cloud Run 用の設定例を削除。
 - [x] 変更（サブモジュール）: `private/cloud-run-adapter/.env.cloudrun.example` を追加し、Cloud Run 向け環境変数サンプルを非公開リポジトリで管理。
 - [x] ドキュメント: `README.md` と `internal_docs/system_overview.md` に Cloud Run 版 `.env` の参照先を追記。
+
+## 142. Firestore エミュレータ設定の補完（2025-10-24）
+- [x] 変更（ルート）: `.env` の `FIRESTORE_EMULATOR_HOST` を `127.0.0.1:8081` に修正し、Firebase Emulator Suite の既定ポートに合わせた。
+- [ ] 動作確認: Firestore エミュレータ接続での `pytest backend/tests/test_firestore_adapter.py` は次回のバックエンド検証タスクで実行予定。
+
+## 143. Firestore テンプレート初期化のトランザクション修正（2025-10-24）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/monshinmate_cloud/firestore_adapter.py` の `upsert_template` でトランザクション内の read/write 順序を調整し、先に `template_ref` と `variant_ref` を取得してから書き込みを行うようにして `ReadAfterWriteError` を回避。
+- [x] 変更（サブモジュール）: Firestore `init` 時に `admin` ユーザーが存在しない場合は `ADMIN_PASSWORD`（未設定時は `admin`）でシードし、初回ログインできなくなる問題を解消。
+- [ ] 動作確認: Firebase エミュレータで `dev.sh` 起動確認を再実施予定。
