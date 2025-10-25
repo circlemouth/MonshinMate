@@ -25,6 +25,14 @@
 - `dev.sh` / `dev.ps1` / `Makefile`: ローカル開発用の起動・テストコマンド集。
 - `docker-compose.yml`: CouchDB + backend + frontend の統合環境。
 
+## GCP 関連コンテンツの配置方針（重要）
+- GCP のコンテナデプロイに関わる記載・スクリプト・Cloud Build 設定は、原則としてサブモジュール `private/cloud-run-adapter` 配下に置くこと。
+  - 例: `private/cloud-run-adapter/cloudbuild.yaml`, `private/cloud-run-adapter/tools/gcp/*.sh`
+  - ルートリポジトリには最小限の参照（README からの案内など）のみを残し、具体的な実行スクリプトや設定ファイルは置かない。
+- ルートの Dockerfile は汎用（SQLite/CouchDB 前提）を維持する。GCP 依存の同梱や手順はサブモジュール側の設定・スクリプトで対応する。
+- Cloud Build を利用する場合は、リポジトリのルートで `--config private/cloud-run-adapter/cloudbuild.yaml` を指定して実行する運用とする。
+
+
 ## 5. 開発環境の準備と起動
 ### 5.1 共通前提
 - 必須バージョン: Python 3.11 以上、Node.js 18 以上、npm または pnpm/yarn。Docker Compose はオプション。

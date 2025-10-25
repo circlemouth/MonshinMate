@@ -40,3 +40,7 @@ docker-push-frontend:
 	@docker push $(FRONTEND_IMAGE):$(IMAGE_TAG)
 
 docker-push: docker-push-backend docker-push-frontend
+
+# --- GCP / Cloud Run helpers ---
+# GCP 関連のビルド/デプロイはサブモジュール (private/cloud-run-adapter) 側へ移管
+# 例: bash private/cloud-run-adapter/tools/gcp/build_and_push.sh

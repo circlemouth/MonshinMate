@@ -21,7 +21,7 @@ Dockerコンテナで簡単にセットアップできます。
 - エクスポート/出力: 問診結果を PDF / CSV / Markdown で出力可能。複数選択の ZIP（MD/PDF）や集計 CSV に対応。テンプレート・セッションの JSON エクスポート/インポートはパスワード付き暗号化（Fernet）に対応し、画像（項目画像・ロゴ）も同梱します。
 - 管理画面（設定）: タイムゾーン、施設表示名、導入文/完了文のカスタマイズ、テーマカラー、ロゴ/アイコンのアップロード、PDF レイアウト（構造化/レガシー）、既定テンプレートの切替を提供します。状態カードで DB 種別・LLM 疎通状況を表示します。
 - 二段階認証（Authenticator/TOTP）: 管理者ログインに TOTP を導入できます。TOTP シークレットの暗号化保存（`TOTP_ENC_KEY`）や非常用リセット（`ADMIN_EMERGENCY_RESET_PASSWORD`）、適用モード（off/reset_only/login_and_reset）を備えます。
-- データ永続化: 既定は SQLite。環境変数で CouchDB を有効化するとセッション/回答のみを CouchDB に保存します。Firestore 利用はプライベートサブモジュールを追加のうえ `PERSISTENCE_BACKEND=firestore` で切替可能です。
+- データ永続化: 既定は SQLite。環境変数で CouchDB を有効化するとセッション/回答のみを CouchDB に保存します。
 - 運用補助: ヘルスチェック（/health, /healthz, /readyz）、メトリクス（/metrics, /metrics/ui）、監査ログ（パスワード/TOTP変更・ログイン試行）を提供します。
 
 ## システム構成
@@ -30,7 +30,6 @@ Dockerコンテナで簡単にセットアップできます。
 - 永続化:
   - SQLite（既定）: テンプレート/各種設定/監査ログ/管理ユーザー等を保存。`MONSHINMATE_DB` 未設定時は `backend/app/app.sqlite3` を使用。
   - CouchDB（任意）: セッションと回答を保存。`COUCHDB_URL` を設定すると有効化。
-  - Firestore（任意）: プライベートサブモジュール導入のうえ `PERSISTENCE_BACKEND=firestore` で切替可（詳細は後述）。
 - LLM ゲートウェイ: ollama または OpenAI 互換 API（LM Studio 等）に接続（`backend/app/llm_gateway.py`）。モデル一覧取得と疎通テストを提供。
 - 配布/起動: `docker-compose.yml` で `couchdb` / `backend` / `frontend` を定義。`FRONTEND_HTTP_PORT` でフロントのホスト側ポート変更可。
 
@@ -96,16 +95,13 @@ npm run dev
 - データベース（SQLite/CouchDB）:
   - `MONSHINMATE_DB`（SQLite ファイルパス。Compose 既定は `/app/data/sqlite/app.sqlite3`）
   - `COUCHDB_URL`、`COUCHDB_DB`（既定 `monshin_sessions`）、`COUCHDB_USER`、`COUCHDB_PASSWORD`
-- 永続化バックエンド切替: `PERSISTENCE_BACKEND`（`sqlite`|`firestore`）
-- Firestore（任意・プライベートモジュール導入時）:
-  - `MONSHINMATE_FIRESTORE_ADAPTER`（例: `monshinmate_cloud.firestore_adapter:FirestoreAdapter`）
-  - `FIRESTORE_PROJECT_ID`、`FIRESTORE_NAMESPACE`、`FIRESTORE_USE_EMULATOR`、`FIRESTORE_EMULATOR_HOST`、`GOOGLE_APPLICATION_CREDENTIALS`
+- （CouchDB を使う場合は `COUCHDB_URL` 等を設定してください）
 - Secret Manager（任意・プライベートモジュール導入時）:
   - `MONSHINMATE_SECRET_MANAGER_ADAPTER`（例: `monshinmate_cloud.secret_manager:load_secrets`）
   - `SECRET_MANAGER_ENABLED`、`SECRET_MANAGER_PROJECT`、`SECRET_MANAGER_PREFIX`
 - ファイルストレージ（任意）: `FILE_STORAGE_BACKEND`（既定 `local`）、`GCS_BUCKET`、`STORAGE_EMULATOR_HOST`、`GCS_SIGNED_URL_TTL`
 
-Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照してください。Cloud Run 向けの例は `private/cloud-run-adapter/.env.cloudrun.example` にあります。
+Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照してください。
 
 ## 認証と二段階認証（Authenticator/TOTP）
 - 管理ログインにはパスワードが必須です。初回は `admin` / `ADMIN_PASSWORD` でログインし、速やかに変更してください。
@@ -117,10 +113,9 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
   - `TOTP_ENC_KEY` を設定すると TOTP シークレットを暗号化保存します。
   - パスワード変更/TOTP 状態変更/ログイン試行は `backend/app/logs/security.log` と SQLite `audit_logs` に監査記録します（PII は平文で出力しません）。
 
-## データ管理（SQLite / CouchDB / Firestore）
+## データ管理（SQLite / CouchDB）
 - 既定は SQLite。Compose では `./data/sqlite/app.sqlite3`（コンテナ内 `/app/data/sqlite/app.sqlite3`）に保存します。
 - `COUCHDB_URL` を設定すると、セッション/回答のみ CouchDB に保存されます。テンプレート・設定は SQLite に保存します。
-- Firestore を利用する場合は、プライベートサブモジュールを導入し `PERSISTENCE_BACKEND=firestore` とアダプタ（`MONSHINMATE_FIRESTORE_ADAPTER`）を指定してください。
 - 管理画面の「メイン」カードで、現在の DB 種別（SQLite/CouchDB/エラー）を確認できます。
 
 ## エクスポート（PDF / CSV / Markdown / JSON）
@@ -154,18 +149,12 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 - `backend/tools/encrypt_totp_secrets.py`: 既存 DB の TOTP シークレットを暗号化保存へ移行
 - `backend/tools/collect_licenses.py`: 依存ライブラリのライセンス情報を収集
 
-## Cloud Run / Firestore 拡張（プライベートモジュール）
-- Google Cloud Run + Firestore 向けの永続化アダプタと Secret Manager 連携は、`private/cloud-run-adapter` の非公開サブモジュールで提供します。
-- 導入時は少なくとも次を設定してください。
-  - `PERSISTENCE_BACKEND=firestore`
-  - `MONSHINMATE_FIRESTORE_ADAPTER=monshinmate_cloud.firestore_adapter:FirestoreAdapter`
-  - （任意）`MONSHINMATE_SECRET_MANAGER_ADAPTER=monshinmate_cloud.secret_manager:load_secrets`
-- 認証情報やプロジェクト設定は `.env` 等で指定します。詳細は `private/cloud-run-adapter/README.md` と `.env.cloudrun.example` を参照してください。プラグインが無い場合は SQLite +（任意で）CouchDB で動作します。
+ 
 
 ## ライセンス
 - 本プロジェクトは GNU AFFERO GENERAL PUBLIC LICENSE に基づき公開しています。詳細はリポジトリ直下の `LICENSE` を参照してください。
 
-## 但し書き（Firebase について）
+## 但し書き（Firestore について）
 - 本リポジトリの本体は、上記のとおり単体で全機能が動作します（Docker Compose またはローカル開発手順のみで可）。
-- 作者が管理・運用するサービスでは一部で Firebase を利用しています。これに関連するサブモジュールや設定は、セキュリティ上の理由から非公開としています。
+- 作者が管理・運用するサービスでは一部で Firestore を利用しています。これに関連するサブモジュールや設定は、セキュリティ上の理由から非公開としています。
 - これらのサブモジュールは本体機能の必須要件ではなく、存在しなくても全機能が利用できます。必要に応じて各自のインフラ（例: 自前の DB/認証/ホスティング）へ置き換えて運用してください。

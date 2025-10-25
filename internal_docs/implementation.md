@@ -1169,3 +1169,10 @@
 - [x] ドキュメント（サブモジュール）: `private/cloud-run-adapter/README.md` に「Secrets」節を追加し、GSM で管理するシークレットの一覧（ID のみ）と運用ルール（値はコミットしない、権限、確認手順、ローテーション方針、複数テナント時のプレフィックス運用）を明記。
 - [x] 登録済み ID を記録（値は非掲載）: `monshinmate-ADMIN_PASSWORD` / `monshinmate-LLM_API_KEY` / `monshinmate-SECRET_KEY` / `monshinmate-TOTP_ENC_KEY`。
 - [x] 既存方針と整合: `internal_docs/admin_system_setup.md` の TOTP 暗号化手順と `backend/app/config.py` の Secret Manager 設定項目にリンクを合わせた。
+- [x] 追加（ビルド/デプロイ自動化 2025-10-25）
+  - 変更: `backend/Dockerfile` に `ARG ENABLE_GCP` を導入し、GCP 依存の `pip install` を条件分岐（既定 0）。サブモジュール依存のコピーは削除。
+  - 移管: GCP 関連の Cloud Build 設定とデプロイスクリプトをサブモジュール側へ移動。
+    - `private/cloud-run-adapter/cloudbuild.yaml`
+    - `private/cloud-run-adapter/tools/gcp/*.sh`
+  - ルートから削除: `cloudbuild.yaml`, `.gcloudignore`, `tools/gcp/*`。`Makefile` の GCP ターゲットは廃止（サブモジュールのスクリプトを直接利用）。
+  - 実行方法: ルートで `gcloud builds submit --config private/cloud-run-adapter/cloudbuild.yaml ...` を使用。

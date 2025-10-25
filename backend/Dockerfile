@@ -6,11 +6,21 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 # ソースコードをコピー
 COPY backend /app
+# GCP 用のプライベートアダプタはサブモジュール側の Dockerfile/Cloud Build で同梱します
 # 依存を仮想環境にインストール
+# ENABLE_GCP=1 のときのみ GCP 依存を追加インストール（デフォルト 0 で軽量化）
+ARG ENABLE_GCP=0
 RUN python -m venv /venv \
     && . /venv/bin/activate \
     && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -e .
+    && pip install --no-cache-dir -e . \
+    && if [ "$ENABLE_GCP" = "1" ]; then \
+         pip install --no-cache-dir \
+           google-cloud-firestore \
+           google-cloud-secret-manager \
+           google-cloud-storage \
+           firebase-admin \
+       ; fi
 # PATH を仮想環境に設定
 ENV PATH="/venv/bin:$PATH"
 
