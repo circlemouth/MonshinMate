@@ -3,6 +3,10 @@ server {
     server_name _;
 
     proxy_set_header Host ${BACKEND_HOST_HEADER};
+    # FastAPI から返る JWT 等のレスポンスヘッダが大きい場合に備え、バッファを拡張
+    proxy_buffer_size 16k;
+    proxy_buffers 8 16k;
+    proxy_busy_buffers_size 24k;
 
     root /usr/share/nginx/html;
     index index.html;

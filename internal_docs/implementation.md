@@ -1181,3 +1181,8 @@
 - [x] 変更（バックエンド）: `backend/app/main.py` に `CORSMiddleware` を追加し、`FRONTEND_ALLOWED_ORIGINS` を読み取って許可リストを構成。未設定で `MONSHINMATE_ENV=local` の場合は `localhost:5173` 系を自動許可するフォールバックを実装。
 - [x] 変更（環境変数サンプル）: `.env.example` に `FRONTEND_ALLOWED_ORIGINS` のサンプル値を追記。Cloud Run 用 `.env` には本番ドメインを設定。
 - [x] ドキュメント: `internal_docs/system_overview.md` に CORS 設定の説明を追加。
+
+## 146. Cloud Run フロントエンドのヘッダバッファ調整（2025-10-26）
+- [x] 変更（フロントエンド Nginx）: `frontend/nginx.conf.template` に `proxy_buffer_size`・`proxy_buffers`・`proxy_busy_buffers_size` を追加し、大きめのレスポンスヘッダ（JWT 等）でも 502 を返さず通過できるようにした。
+- [x] ビルド＆デプロイ: `gcloud builds submit --config private/cloud-run-adapter/cloudbuild.yaml --substitutions _TAG=prod-20251026-buf2` → `ENV_FILE=/tmp/deploy.env TAG=prod-20251026-buf2 private/cloud-run-adapter/tools/gcp/deploy_stack.sh` で Cloud Run (backend/frontend) を再デプロイし、デプロイ後に `gcloud run services update monshinmate-backend --env-vars-file=/tmp/backend_env.yaml` で CORS 許可オリジン（Cloud Run ドメイン + カスタムドメイン）を反映。
+- [x] 動作確認: `curl https://monshinmate-frontend-s42tflqaoq-an.a.run.app/admin/auth/status` と `curl -X POST .../admin/login`（Origin 付き含む）が 200 を返すこと、カスタムドメイン `https://monshinmate.maruguchi-clinic.com` からも同様にログインできることを確認。
