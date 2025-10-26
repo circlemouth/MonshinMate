@@ -27,6 +27,7 @@
 - **Docker Compose（推奨）**: `docker-compose.yml` で `backend`（FastAPI/Uvicorn）、`frontend`（Nginx 配信）、`couchdb` を起動。`FRONTEND_HTTP_PORT` でホストポート変更可。
 - **ローカル開発**: Python 3.11+ と Node.js 18+ が前提。`make dev` / `./dev.sh` でバックエンドと Vite 開発サーバを同時起動。CouchDB を使う場合は別途起動し `.env` に接続設定を記載。
 - **環境変数**: `backend/.env` とリポジトリ直下 `.env`（Docker 用）を読み込む。`MONSHINMATE_DB` を未設定の場合、`backend/app/app.sqlite3` を使用。
+- **CORS 設定**: Cloud Run 等でフロントとバックエンドを別ドメイン運用する場合は `FRONTEND_ALLOWED_ORIGINS` に許可ドメインをカンマ区切りで指定する。未設定かつ `MONSHINMATE_ENV=local` では `http://localhost:5173` 系を自動許可する。
 - **静的アセット**: 問診項目画像は `backend/app/questionnaire_item_images/`、ロゴは `backend/app/system_logo/` に保存し、FastAPI で静的配信。
 
 ### 3.5 Cloud Run / Firestore 拡張

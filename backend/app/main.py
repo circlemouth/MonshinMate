@@ -31,6 +31,7 @@ _PROJECT_ROOT = _BASE_DIR.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 import shutil
@@ -103,6 +104,22 @@ import logging
 from logging.handlers import RotatingFileHandler
 
 load_secrets()
+_settings = get_settings()
+
+
+def _resolve_allowed_origins() -> list[str]:
+    env_value = os.getenv("FRONTEND_ALLOWED_ORIGINS", "")
+    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    if origins:
+        return origins
+    if _settings.environment.lower() == "local":
+        return [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+    return []
 
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
@@ -111,6 +128,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 init_db()
 app = FastAPI(title="MonshinMate API")
+
+_allowed_origins = _resolve_allowed_origins()
+if _allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # 問診項目画像の保存先を初期化し、静的配信を行う
 IMAGE_DIR = Path(__file__).resolve().parent / "questionnaire_item_images"

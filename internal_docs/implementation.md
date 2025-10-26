@@ -1176,3 +1176,8 @@
     - `private/cloud-run-adapter/tools/gcp/*.sh`
   - ルートから削除: `cloudbuild.yaml`, `.gcloudignore`, `tools/gcp/*`。`Makefile` の GCP ターゲットは廃止（サブモジュールのスクリプトを直接利用）。
   - 実行方法: ルートで `gcloud builds submit --config private/cloud-run-adapter/cloudbuild.yaml ...` を使用。
+
+## 145. Cloud Run 向け CORS 許可の実装（2025-10-26）
+- [x] 変更（バックエンド）: `backend/app/main.py` に `CORSMiddleware` を追加し、`FRONTEND_ALLOWED_ORIGINS` を読み取って許可リストを構成。未設定で `MONSHINMATE_ENV=local` の場合は `localhost:5173` 系を自動許可するフォールバックを実装。
+- [x] 変更（環境変数サンプル）: `.env.example` に `FRONTEND_ALLOWED_ORIGINS` のサンプル値を追記。Cloud Run 用 `.env` には本番ドメインを設定。
+- [x] ドキュメント: `internal_docs/system_overview.md` に CORS 設定の説明を追加。
