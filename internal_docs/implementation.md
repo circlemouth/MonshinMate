@@ -171,7 +171,7 @@
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
 - 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `GET/PUT /system/timezone`, `POST /admin/login`
 - バックアップ系：`POST /admin/questionnaires/export`, `POST /admin/questionnaires/import`, `POST /admin/sessions/export`, `POST /admin/sessions/import`
-- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/updates?since=ISO8601`
+- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/stream`（SSE）
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 
@@ -211,6 +211,13 @@
   - 初診の固定UIで全項目が必須となっており、保存時に `personal_info` 回答としてセッションへ登録されるため、問診フォーム側で同項目を再入力するケースは発生しないことを 2025-09-24 時点で自動テストにより確認済み。
 - **管理ログイン**：/admin/login でID/メール + パスワード。成功で /admin/main へ。
 - **管理**：テンプレCRUD、LLM接続設定（テストボタン）。
+
+---
+
+## 変更履歴（2025-10-26）
+- [x] 管理画面の問診完了通知を SSE に移行。
+  - `POST /sessions/{id}/finalize` 完了時に `SessionEventBroker` へ publish し、`GET /admin/sessions/stream` で通知。
+  - フロントの `useSessionCompletionWatcher` は `EventSource` を利用して通知を購読し、旧ポーリング `/admin/sessions/updates` は廃止。
 
 ---
 

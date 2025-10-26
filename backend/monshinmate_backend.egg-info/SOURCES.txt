@@ -4,6 +4,7 @@ pyproject.toml
 ./app/config.py
 ./app/llm_gateway.py
 ./app/main.py
+./app/notifications.py
 ./app/pdf_renderer.py
 ./app/personal_info.py
 ./app/secret_manager.py
@@ -17,6 +18,7 @@ app/__init__.py
 app/config.py
 app/llm_gateway.py
 app/main.py
+app/notifications.py
 app/pdf_renderer.py
 app/personal_info.py
 app/secret_manager.py

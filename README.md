@@ -135,7 +135,7 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 - 項目画像/ロゴ: `POST /questionnaire-item-images` `DELETE /questionnaire-item-images/{filename}` `POST /system-logo` `GET /system/logo`
 - システム設定: `GET/PUT /system/timezone` `GET/PUT /system/display-name` `GET/PUT /system/entry-message` `GET/PUT /system/completion-message` `GET/PUT /system/theme-color` `GET/PUT /system/pdf-layout` `GET/PUT /system/default-questionnaire`
 - セッション: `POST /sessions` `POST /sessions/{id}/answers` `POST /sessions/{id}/llm-questions` `POST /sessions/{id}/llm-answers` `POST /sessions/{id}/finalize`
-- 管理/セッション一覧: `GET /admin/sessions`（検索クエリ: `patient_name`/`dob`/`start_date`/`end_date`） `GET /admin/sessions/{id}` `GET /admin/sessions/updates`
+- 管理/セッション一覧: `GET /admin/sessions`（検索クエリ: `patient_name`/`dob`/`start_date`/`end_date`） `GET /admin/sessions/{id}` `GET /admin/sessions/stream`（SSE）
 - ダウンロード/入出力: `GET /admin/sessions/{id}/download/{fmt}` `GET /admin/sessions/bulk/download/{fmt}` `POST /admin/sessions/export` `POST /admin/sessions/import`
 - 削除: `DELETE /admin/sessions/{id}` `POST /admin/sessions/bulk/delete`
 - LLM 設定/テスト: `GET/PUT /llm/settings` `POST /llm/settings/test` `POST /llm/list-models`

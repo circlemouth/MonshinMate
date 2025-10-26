@@ -55,7 +55,7 @@
 - **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
 - **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers`、`/sessions/{id}/finalize`。
-- **管理セッション**: `GET /admin/sessions`（フィルタ: 氏名・DOB・期間）、`/admin/sessions/{id}`、`/admin/sessions/updates`、`/admin/sessions/bulk/download/{fmt}`、`/admin/sessions/{id}/download/{fmt}`、削除 API。
+- **管理セッション**: `GET /admin/sessions`（フィルタ: 氏名・DOB・期間）、`/admin/sessions/{id}`、`/admin/sessions/stream`（SSE）、`/admin/sessions/bulk/download/{fmt}`、`/admin/sessions/{id}/download/{fmt}`、削除 API。
 - **メトリクス**: `GET /metrics`（OpenMetrics テキスト）、`POST /metrics/ui`（UI 追跡イベント）。
 
 ### 4.3 セッションライフサイクル

@@ -102,6 +102,7 @@ from .personal_info import (
 from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
+from .notifications import SessionEventBroker
 
 load_secrets()
 _settings = get_settings()
@@ -874,6 +875,7 @@ llm_gateway = LLMGateway(default_llm_settings)
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
+session_events = SessionEventBroker()
 
 
 @app.get("/health")
@@ -2743,11 +2745,6 @@ class SessionFinalizeEvent(BaseModel):
     finalized_at: str
 
 
-class SessionUpdatesResponse(BaseModel):
-    sessions: list[SessionFinalizeEvent]
-    latest_finalized_at: str | None = None
-
-
 class SessionDetail(BaseModel):
     """管理画面で表示するセッション詳細。"""
 
@@ -2765,6 +2762,27 @@ class SessionDetail(BaseModel):
     started_at: str | None = None
     finalized_at: str | None = None
     interrupted: bool = False
+
+
+def _ensure_isoformat(value: datetime | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _build_finalize_event_from_session(session: Session) -> SessionFinalizeEvent:
+    finalized_at = session.finalized_at or datetime.now(UTC)
+    started_at = session.started_at or finalized_at
+    return SessionFinalizeEvent(
+        id=session.id,
+        patient_name=session.patient_name,
+        dob=session.dob,
+        visit_type=session.visit_type,
+        started_at=_ensure_isoformat(started_at),
+        finalized_at=_ensure_isoformat(finalized_at) or datetime.now(UTC).isoformat(),
+    )
 
 
 class FinalizeRequest(BaseModel):
@@ -2925,7 +2943,7 @@ def get_llm_questions(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/finalize")
-def finalize_session(
+async def finalize_session(
     session_id: str, background: BackgroundTasks, payload: FinalizeRequest | None = None
 ) -> dict:
     """セッションを確定し要約を返す。"""
@@ -2956,6 +2974,11 @@ def finalize_session(
     session.completion_status = "finalized"
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
+    event = _build_finalize_event_from_session(session)
+    try:
+        await session_events.publish(event.dict(), event_id=event.finalized_at)
+    except Exception:
+        logger.exception("session_finalize_event_publish_failed id=%s", session_id)
     # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
     def _bg_summary_task(sid: str) -> None:
         s = sessions.get(sid)
@@ -3055,6 +3078,58 @@ async def import_sessions_api(
     }
 
 
+@app.get("/admin/sessions/stream")
+async def admin_session_stream(
+    request: Request,
+    since: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+) -> StreamingResponse:
+    """問診完了イベントを Server-Sent Events で配信する。"""
+
+    last_event_id = request.headers.get("last-event-id")
+    since_candidate = last_event_id or since or None
+    since_dt: datetime | None = None
+    if since_candidate:
+        try:
+            since_dt = datetime.fromisoformat(since_candidate)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_since")
+
+    backlog_messages: list[bytes] = []
+    if since_dt is not None:
+        events, _ = list_sessions_finalized_after(since_dt, limit=limit)
+        for event in events:
+            finalized = event.get("finalized_at")
+            session_id = event.get("id")
+            if not finalized or not session_id:
+                continue
+            payload = SessionFinalizeEvent(
+                id=str(session_id),
+                patient_name=event.get("patient_name"),
+                dob=event.get("dob"),
+                visit_type=event.get("visit_type"),
+                started_at=_ensure_isoformat(event.get("started_at")),
+                finalized_at=str(finalized),
+            )
+            backlog_messages.append(
+                session_events.serialize(payload.dict(), event_id=payload.finalized_at)
+            )
+
+    async def event_generator() -> Iterable[bytes]:
+        for message in backlog_messages:
+            yield message
+        stream = session_events.stream()
+        try:
+            async for message in stream:
+                if await request.is_disconnected():
+                    break
+                yield message
+        finally:
+            await stream.aclose()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/admin/sessions", response_model=list[SessionSummary])
 def admin_list_sessions(
     patient_name: str | None = None,
@@ -3070,40 +3145,6 @@ def admin_list_sessions(
         end_date=end_date,
     )
     return [SessionSummary(**s) for s in sessions]
-
-
-@app.get("/admin/sessions/updates", response_model=SessionUpdatesResponse)
-def admin_session_updates(
-    since: str | None = Query(None), limit: int = Query(50, ge=1, le=200)
-) -> SessionUpdatesResponse:
-    """指定時刻以降に確定したセッションを通知用に取得する。"""
-
-    since_dt: datetime | None = None
-    if since:
-        try:
-            since_dt = datetime.fromisoformat(since)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_since")
-
-    events, latest_dt = list_sessions_finalized_after(since_dt, limit=limit)
-    event_models: list[SessionFinalizeEvent] = []
-    for event in events:
-        finalized = event.get("finalized_at")
-        session_id = event.get("id")
-        if not finalized or not session_id:
-            continue
-        event_models.append(
-            SessionFinalizeEvent(
-                id=str(session_id),
-                patient_name=event.get("patient_name"),
-                dob=event.get("dob"),
-                visit_type=event.get("visit_type"),
-                started_at=event.get("started_at"),
-                finalized_at=str(finalized),
-            )
-        )
-    latest_value = latest_dt.isoformat() if latest_dt else None
-    return SessionUpdatesResponse(sessions=event_models, latest_finalized_at=latest_value)
 
 
 @app.get("/admin/sessions/{session_id}", response_model=SessionDetail)
