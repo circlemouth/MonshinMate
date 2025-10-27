@@ -1309,12 +1309,15 @@ def export_questionnaire_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, A
 
     settings = load_app_settings(db_path) or {}
     default_qid = settings.get("default_questionnaire_id")
+    llm_settings = load_llm_settings(db_path) or {}
 
     return {
         "templates": templates,
         "summary_prompts": summary_prompts,
         "followup_prompts": followup_prompts,
         "default_questionnaire_id": default_qid,
+        "app_settings": settings,
+        "llm_settings": llm_settings,
     }
 
 
@@ -1396,6 +1399,8 @@ def import_questionnaire_settings(
     summary_prompts = data.get("summary_prompts") or []
     followup_prompts = data.get("followup_prompts") or []
     default_qid = data.get("default_questionnaire_id")
+    app_settings_payload = data.get("app_settings")
+    llm_settings_payload = data.get("llm_settings")
 
     def _normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(item)
@@ -1479,15 +1484,44 @@ def import_questionnaire_settings(
     finally:
         conn.close()
 
-    if default_qid is not None:
+    app_settings_saved = False
+    default_applied = False
+    if isinstance(app_settings_payload, dict):
+        base_settings = {} if mode == "replace" else (load_app_settings(db_path) or {})
+        merged_settings = dict(base_settings)
+        merged_settings.update(app_settings_payload)
+        if default_qid is not None:
+            merged_settings["default_questionnaire_id"] = default_qid
+            default_applied = True
+        elif "default_questionnaire_id" in app_settings_payload:
+            default_applied = True
+        save_app_settings(merged_settings, db_path)
+        app_settings_saved = True
+
+    if default_qid is not None and not default_applied:
         current_settings = load_app_settings(db_path) or {}
         current_settings["default_questionnaire_id"] = default_qid
         save_app_settings(current_settings, db_path)
+        app_settings_saved = True
+        default_applied = True
+
+    llm_settings_saved = False
+    if isinstance(llm_settings_payload, dict):
+        if mode == "merge":
+            current_llm = load_llm_settings(db_path) or {}
+            merged_llm = dict(current_llm)
+            merged_llm.update(llm_settings_payload)
+        else:
+            merged_llm = dict(llm_settings_payload)
+        save_llm_settings(merged_llm, db_path)
+        llm_settings_saved = True
 
     return {
         "templates": len(templates),
         "summary_prompts": len(summary_prompts),
         "followup_prompts": len(followup_prompts),
+        "app_settings": 1 if app_settings_saved else 0,
+        "llm_settings": 1 if llm_settings_saved else 0,
     }
 
 

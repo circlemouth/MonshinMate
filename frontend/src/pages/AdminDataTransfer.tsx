@@ -634,7 +634,7 @@ export default function AdminDataTransfer() {
         <CardHeader pb={2}>
           <Heading size="md">問診テンプレート設定のエクスポート/インポート</Heading>
           <Text fontSize="sm" color="fg.muted">
-            テンプレート・プロンプト・画像などの設定一式をバックアップできます。
+            テンプレート・LLM/システム設定・画像などの設定一式をバックアップできます。
           </Text>
         </CardHeader>
         <CardBody pt={0}>
@@ -642,7 +642,7 @@ export default function AdminDataTransfer() {
             <Box>
               <Heading size="sm" mb={1}>設定ファイルの出力</Heading>
               <Text fontSize="xs" color="fg.muted" mb={2}>
-                暗号化したい場合は任意のパスワードを指定してください。
+                テンプレート・LLM設定・画面表示設定・画像をまとめて書き出します。暗号化したい場合は任意のパスワードを指定してください。
               </Text>
               <HStack align="flex-end" spacing={3} wrap="wrap">
                 <FormControl maxW="280px">
@@ -664,7 +664,7 @@ export default function AdminDataTransfer() {
             <Box>
               <Heading size="sm" mb={1}>設定ファイルのインポート</Heading>
               <Text fontSize="xs" color="fg.muted" mb={2}>
-                既存の設定に上書きするか、全て入れ替えるかを選択できます。
+                テンプレートやLLM設定、ブランド設定を既存に上書きするか、全て入れ替えるかを選択できます。
               </Text>
               <VStack align="stretch" spacing={3}>
                 <FormControl>
