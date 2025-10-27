@@ -172,6 +172,7 @@ DEFAULT_SUMMARY_PROMPT = (
 EXPORT_PBKDF_ITERATIONS = 390_000
 IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 IMAGE_STORAGE_SEGMENT = "questionnaire-item-images/files/"
+SYSTEM_LOGO_STORAGE_SEGMENT = "system-logo/files/"
 
 
 def _build_export_envelope(data: Any, export_type: str, password: str | None) -> dict[str, Any]:
@@ -243,28 +244,35 @@ def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str,
     return str(export_type or ""), payload_data
 
 
-def _extract_image_filename(image_url: str | None) -> str | None:
-    if not image_url:
+def _extract_storage_filename(raw_url: str | None, segment: str) -> str | None:
+    if not raw_url:
         return None
-    value = image_url.strip()
+    value = raw_url.strip()
     if not value or value.startswith("data:"):
         return None
     parsed = urlparse(value)
     candidates = [parsed.path or "", value]
     for candidate in candidates:
-        idx = candidate.find(IMAGE_STORAGE_SEGMENT)
+        idx = candidate.find(segment)
         if idx == -1:
-            # `/questionnaire-item-images/...` のように先頭に `/` が付くケースを許容
-            if candidate.startswith("/" + IMAGE_STORAGE_SEGMENT):
+            if candidate.startswith("/" + segment):
                 idx = 1
-            elif candidate.startswith(IMAGE_STORAGE_SEGMENT):
+            elif candidate.startswith(segment):
                 idx = 0
         if idx != -1:
-            remainder = candidate[idx + len(IMAGE_STORAGE_SEGMENT) :]
+            remainder = candidate[idx + len(segment) :]
             filename = remainder.split("/")[0].split("?")[0].split("#")[0]
             if filename:
                 return filename
     return None
+
+
+def _extract_image_filename(image_url: str | None) -> str | None:
+    return _extract_storage_filename(image_url, IMAGE_STORAGE_SEGMENT)
+
+
+def _extract_logo_filename(logo_url: str | None) -> str | None:
+    return _extract_storage_filename(logo_url, SYSTEM_LOGO_STORAGE_SEGMENT)
 
 
 def _sanitize_image_filename(name: str) -> str:
@@ -354,6 +362,89 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
             continue
         payloads[sanitized] = base64.b64encode(path.read_bytes()).decode("ascii")
     return payloads
+
+
+def _canonicalize_logo_url(raw_url: Any) -> tuple[str | None, dict[str, str]]:
+    if not isinstance(raw_url, str):
+        return None, {}
+    trimmed = raw_url.strip()
+    if not trimmed:
+        return "", {}
+    filename = _extract_logo_filename(trimmed)
+    if not filename:
+        return trimmed, {}
+    try:
+        sanitized = _sanitize_image_filename(filename)
+    except ValueError:
+        return trimmed, {}
+    path = LOGO_DIR / sanitized
+    if not path.exists() or not path.is_file():
+        return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {}
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {sanitized: encoded}
+
+
+def _normalize_app_settings_for_transfer(settings: Any) -> tuple[dict[str, Any], dict[str, str]]:
+    if not isinstance(settings, dict):
+        return {}, {}
+    normalized = dict(settings)
+    logo_payloads: dict[str, str] = {}
+    if "logo_url" in normalized:
+        normalized_logo, payload = _canonicalize_logo_url(normalized.get("logo_url"))
+        if normalized_logo == "":
+            normalized.pop("logo_url", None)
+        elif normalized_logo is not None:
+            normalized["logo_url"] = normalized_logo
+        if payload:
+            logo_payloads.update(payload)
+    return normalized, logo_payloads
+
+
+def _sanitize_app_settings_payload(settings: Any) -> dict[str, Any]:
+    if not isinstance(settings, dict):
+        return {}
+    sanitized = dict(settings)
+    logo_url = sanitized.get("logo_url")
+    if isinstance(logo_url, str):
+        normalized_logo, _ = _canonicalize_logo_url(logo_url)
+        if normalized_logo == "":
+            sanitized.pop("logo_url", None)
+        elif normalized_logo is not None:
+            sanitized["logo_url"] = normalized_logo
+    return sanitized
+
+
+def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
+    if not logo_payloads:
+        if mode == "replace":
+            # replace 指定時は既存ロゴを削除
+            for child in LOGO_DIR.glob("*"):
+                if child.is_file():
+                    child.unlink()
+        return 0
+    if not isinstance(logo_payloads, dict):
+        raise HTTPException(status_code=400, detail="invalid_logo_payload")
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    if mode == "replace":
+        for child in LOGO_DIR.glob("*"):
+            if child.is_file():
+                child.unlink()
+    restored = 0
+    for name, encoded in logo_payloads.items():
+        if not isinstance(name, str) or not isinstance(encoded, str):
+            continue
+        try:
+            sanitized = _sanitize_image_filename(name)
+        except ValueError:
+            continue
+        try:
+            data = base64.b64decode(encoded)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_logo_payload")
+        target = LOGO_DIR / sanitized
+        target.write_bytes(data)
+        restored += 1
+    return restored
 
 
 def _restore_images(image_payloads: Any, mode: str) -> int:
@@ -1295,6 +1386,10 @@ def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingRespon
     export_payload = dict(data)
     export_payload["templates"] = normalized_templates
     export_payload["images"] = images
+    app_settings = data.get("app_settings") if isinstance(data, dict) else None
+    normalized_app_settings, logo_payloads = _normalize_app_settings_for_transfer(app_settings)
+    export_payload["app_settings"] = normalized_app_settings
+    export_payload["logo_files"] = logo_payloads
     envelope = _build_export_envelope(export_payload, "questionnaire_settings", payload.password or None)
     content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
     filename = f"questionnaire-settings-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -1326,8 +1421,11 @@ async def import_questionnaire_settings_api(
         raw_templates if isinstance(raw_templates, list) else []
     )
     payload_data["templates"] = normalized_templates
+    payload_data["app_settings"] = _sanitize_app_settings_payload(payload_data.get("app_settings"))
     images_payload = payload_data.pop("images", {}) or {}
     restored_images = _restore_images(images_payload, mode_value)
+    logo_payload = payload_data.pop("logo_files", {}) or {}
+    restored_logos = _restore_logo_files(logo_payload, mode_value)
     try:
         stats = import_questionnaire_settings(payload_data, mode=mode_value)
     except ValueError:
@@ -1340,10 +1438,19 @@ async def import_questionnaire_settings_api(
         else:
             logger.exception("import_questionnaire_settings failed")
             raise
+    try:
+        stored_llm = load_llm_settings()
+        if stored_llm:
+            llm_gateway.update_settings(LLMSettings(**stored_llm))
+            llm_gateway.settings.sync_from_active_profile()
+    except Exception:
+        logger.exception("apply_imported_llm_settings_failed")
+
     return {
         "status": "ok",
         "imported": stats,
         "images_restored": restored_images,
+        "logos_restored": restored_logos,
         "mode": mode_value,
     }
 

@@ -50,7 +50,7 @@
 ### 4.2 API グルーピング（抜粋）
 - **ヘルスチェック**: `/health`, `/healthz`, `/readyz`。
 - **テンプレート管理**: `GET/POST/DELETE /questionnaires`, `/questionnaires/{id}/duplicate|rename|reset`, `/questionnaires/{id}/summary-prompt`, `/questionnaires/{id}/followup-prompt`。
-- **テンプレート入出力**: `/admin/questionnaires/export|import`。エクスポート時に PBKDF2+Fernet で暗号化可。
+- **テンプレート入出力**: `/admin/questionnaires/export|import`。テンプレート・LLM設定・システム設定をまとめて転送でき、エクスポート時に PBKDF2+Fernet で暗号化可。
 - **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。
 - **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
@@ -86,7 +86,7 @@
 
 ### 4.6 エクスポートとファイル処理
 - **セッション**: `/admin/sessions/export|import` は JSON エンベロープ（`version`, `type`, `exported_at`, `payload`）でやり取りし、オプションパスワードで PBKDF2+Fernet 暗号化。CSV/Markdown/PDF ダウンロード API を併設。
-- **テンプレート**: `/admin/questionnaires/export|import` でテンプレートと画像をまとめてエクスポート。インポート時は mode=`merge|replace` を指定。
+- **テンプレート**: `/admin/questionnaires/export|import` でテンプレート・LLM設定・ブランド設定・関連画像をまとめてエクスポート。インポート時は mode=`merge|replace` を指定。
 - **PDF**: `pdf_renderer.render_session_pdf` が構造化テーブル、Followup 条件表示、個人情報ブロックを描画。施設名やレイアウトモードは `/system/pdf-layout` で設定。
 
 ### 4.7 ロギング・監査・メトリクス
