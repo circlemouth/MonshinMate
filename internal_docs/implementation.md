@@ -1199,3 +1199,10 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminDataTransfer.tsx` の説明文を更新し、LLM 設定やブランド設定も含む旨を明記。
 - [x] ドキュメント: `docs/admin_user_manual.md` と `internal_docs/system_overview.md` のバックアップ節を更新し、出力対象がテンプレート以外の設定にも拡張されたことを追記。
 - [x] テスト: `backend/tests/test_export_import.py` にロゴ・LLM 設定を含むエクスポート/インポートの往復確認を追加。
+
+## 148. Cloud Run リージョン調整（2025-10-27）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/common.sh` の `latest_tag_for_image` で `--project` を明示し、Artifact Registry のタグ取得がリージョン依存にならないようにした。
+- [x] 変更（ルート／サブモジュール）: デフォルトリージョンを `asia-northeast1`（東京）に戻し、`build_and_push.sh` / `deploy_*` スクリプトおよび Cloud Build 設定が東京リージョンを前提として動作するように修正（環境変数 `REGION` への依存を廃止し、スクリプト内で固定値を使用）。
+- [x] サンプル環境変数: `.env` / `private/cloud-run-adapter/.env.cloudrun.example` に `REGION=asia-northeast1` と `REPO=monshinmate` を設定し、`SECRET_PRUNE_OLD_VERSIONS` / `SECRET_VERSION_RETENTION` で Secret Manager バージョン整理を自動化。
+- [x] CORS 設定: Cloud Run デフォルトドメインからのアクセスを許可するため、`FRONTEND_ALLOWED_ORIGINS` に `run.app` ドメインを追加し、再デプロイ後のプリフライト 400 を解消。
+- [ ] 動作確認: `REGION=asia-northeast1` を指定した `build_and_push.sh` → `deploy_stack.sh` を実行し、Cloud Run (backend/frontend) の最新リビジョンが東京リージョンの Artifact Registry イメージに切り替わったことをログ付きで確認する。

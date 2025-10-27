@@ -2,6 +2,8 @@
 set -Eeuo pipefail
 
 MONSHINMATE_SYNCED_SECRETS=""
+SECRET_VERSION_RETENTION=${SECRET_VERSION_RETENTION:-5}
+SECRET_PRUNE_OLD_VERSIONS=${SECRET_PRUNE_OLD_VERSIONS:-1}
 
 require() {
   local name=$1
@@ -155,6 +157,9 @@ sync_secret_from_env() {
   printf '%s' "$value" | gcloud secrets versions add "$secret_id" --project="$SECRET_MANAGER_PROJECT_RESOLVED" --data-file=- >/dev/null
   echo "[INFO] Uploaded secret version for $secret_id"
   MONSHINMATE_SYNCED_SECRETS="${MONSHINMATE_SYNCED_SECRETS}|$secret_id|"
+  if [[ "${SECRET_PRUNE_OLD_VERSIONS:-1}" == "1" ]]; then
+    prune_secret_versions "$secret_id"
+  fi
 }
 
 sync_default_secrets() {
@@ -163,6 +168,35 @@ sync_default_secrets() {
   sync_secret_from_env "TOTP_ENC_KEY" "TOTP_ENC_KEY"
   sync_secret_from_env "LLM_API_KEY" "LLM_API_KEY" "change-me"
   sync_secret_from_env "ADMIN_EMERGENCY_RESET_PASSWORD" "ADMIN_EMERGENCY_RESET_PASSWORD"
+}
+
+prune_secret_versions() {
+  local secret_id=$1
+  if [[ -z "$secret_id" ]]; then
+    return
+  fi
+  local retention="$SECRET_VERSION_RETENTION"
+  if ! [[ "$retention" =~ ^[0-9]+$ ]]; then
+    retention=5
+  fi
+  if (( retention < 1 )); then
+    retention=1
+  fi
+  _resolve_secret_project
+  ensure_gcloud
+  local project="$SECRET_MANAGER_PROJECT_RESOLVED"
+  local count=0
+  while IFS=$'\t' read -r version state; do
+    [[ -z "$version" ]] && continue
+    ((count++))
+    if (( count <= retention )); then
+      continue
+    fi
+    if [[ "$state" == "enabled" ]]; then
+      gcloud secrets versions disable "$version" --secret="$secret_id" --project="$project" >/dev/null
+      echo "[INFO] Disabled old secret version ${version} for ${secret_id}"
+    fi
+  done < <(gcloud secrets versions list "$secret_id" --project="$project" --sort-by=~createTime --format='value(name,state)')
 }
 
 latest_tag_for_image() {
@@ -178,6 +212,7 @@ latest_tag_for_image() {
   local image_path
   image_path="$(registry_repo)/${image_name}"
   gcloud artifacts docker tags list "$image_path" \
+    --project="$PROJECT_ID" \
     --sort-by="~CREATE_TIME" \
     --limit=1 \
     --format="value(TAG)" | head -n1

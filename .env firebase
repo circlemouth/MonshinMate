@@ -27,4 +27,4 @@ FRONTEND_HTTP_PORT=8080
 ADMIN_EMERGENCY_RESET_PASSWORD=UDJV9090JJNJnjh
 SECRET_KEY=0_qD9L_KAq7RM92e9mF9hZ7fUMANkjhiYBww9o4qd2I=
 TOTP_ENC_KEY=3ItMG2QIX7z2bDYv-d4WYB-8mElPLd5L3c6iI9ikH5Q=
-FRONTEND_ALLOWED_ORIGINS=https://monshinmate-frontend-s42tflqaoq-an.a.run.app,https://monshinmate-frontend-111678642417.asia-northeast1.run.app,https://monshinmate.maruguchi-clinic.com
+FRONTEND_ALLOWED_ORIGINS=https://monshinmate.maruguchi-clinic.com
