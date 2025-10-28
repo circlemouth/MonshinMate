@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <title>手背</title>
-  <rect id="hand_back" x="40" y="80" width="120" height="100" stroke="black" fill="none"/>
-  <rect id="thumb_back" x="20" y="80" width="20" height="60" stroke="black" fill="none"/>
-  <rect id="index_back" x="60" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="middle_back" x="90" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="ring_back" x="120" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="little_back" x="150" y="60" width="20" height="40" stroke="black" fill="none"/>
-</svg>

@@ -3,6 +3,7 @@ node_modules/
 venv
 backend/.venv/
 .venv/
+venv*/
 .pytest_cache/
 .DS_Store
 .env
@@ -17,3 +18,51 @@ backend/app/*.sqlite3
 
 # 公開用エクスポート生成物
 public_export/
+
+# ------------------------------------------------------------
+# 追加: 開発生成物・キャッシュ・機密ファイルの除外
+# ------------------------------------------------------------
+
+# Node/Vite（フロントエンド）
+frontend/dist/
+frontend/tmp/
+**/.vite/
+**/.eslintcache
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python ビルド・テスト生成物
+**/__pycache__/
+**/.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.coverage
+coverage.xml
+htmlcov/
+backend/build/
+backend/dist/
+**/*.egg-info/
+
+# 環境変数ファイル（例外のサンプルは許可）
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+
+# ランタイムデータ・ログ
+data/
+backend/app/logs/
+
+# エディタ/OS 依存ファイル
+.idea/
+.vscode/
+Thumbs.db
+.python-version
+
+# Playwright などのテスト成果物
+playwright-report/
+test-results/
+.playwright/
