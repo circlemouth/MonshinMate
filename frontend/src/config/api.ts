@@ -2,6 +2,7 @@ const globalObj: any = typeof window !== 'undefined' ? window : {};
 const monshinConfig = (globalObj.__MONSHIN_CONFIG__ ?? {}) as { apiBaseUrl?: string };
 
 const apiBase = typeof monshinConfig.apiBaseUrl === 'string' ? monshinConfig.apiBaseUrl.trim().replace(/\/$/, '') : '';
+const STATIC_BYPASS_PREFIXES = ['/docs/', '/docs.', '/LICENSE'];
 
 function resolveUrl(input: string): string {
   if (!input) return input;
@@ -11,13 +12,20 @@ function resolveUrl(input: string): string {
   if (input.startsWith('//')) {
     return input;
   }
-  if (!input.startsWith('/')) {
-    input = `/${input}`;
-  }
+  let normalized = input.startsWith('/') ? input : `/${input}`;
   if (!apiBase) {
-    return input;
+    return normalized;
   }
-  return `${apiBase}${input}`;
+  const shouldBypass = STATIC_BYPASS_PREFIXES.some((prefix) => {
+    if (prefix.endsWith('/')) {
+      return normalized.startsWith(prefix);
+    }
+    return normalized === prefix;
+  });
+  if (shouldBypass) {
+    return normalized;
+  }
+  return `${apiBase}${normalized}`;
 }
 
 export function apiUrl(path: string): string {
