@@ -8,7 +8,19 @@ from pathlib import Path
 import logging
 from typing import Any, Callable, Optional, Tuple, Type
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+def _resolve_project_root() -> Path:
+    """Detect the repository root both locally and inside the Cloud Run image."""
+
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        candidate = parent / "private" / "cloud-run-adapter"
+        if candidate.exists():
+            return parent
+    # Fallback to the previous heuristic (kept for backwards compatibility).
+    return Path(__file__).resolve().parents[3]
+
+
+_PROJECT_ROOT = _resolve_project_root()
 _PRIVATE_DIR = _PROJECT_ROOT / "private"
 _ADAPTER_DIR = _PRIVATE_DIR / "cloud-run-adapter"
 for candidate in (_ADAPTER_DIR, _PRIVATE_DIR):
