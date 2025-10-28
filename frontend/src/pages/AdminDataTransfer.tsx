@@ -642,7 +642,7 @@ export default function AdminDataTransfer() {
             <Box>
               <Heading size="sm" mb={1}>設定ファイルの出力</Heading>
               <Text fontSize="xs" color="fg.muted" mb={2}>
-                暗号化したい場合は任意のパスワードを指定してください。
+                テンプレート・LLM設定・画面表示設定・画像をまとめて書き出します。暗号化したい場合は任意のパスワードを指定してください。
               </Text>
               <HStack align="flex-end" spacing={3} wrap="wrap">
                 <FormControl maxW="280px">
