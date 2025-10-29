@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <title>手掌</title>
-  <rect id="palm" x="40" y="80" width="120" height="100" stroke="black" fill="none"/>
-  <rect id="thumb_palm" x="20" y="80" width="20" height="60" stroke="black" fill="none"/>
-  <rect id="index_palm" x="60" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="middle_palm" x="90" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="ring_palm" x="120" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="little_palm" x="150" y="60" width="20" height="40" stroke="black" fill="none"/>
-</svg>

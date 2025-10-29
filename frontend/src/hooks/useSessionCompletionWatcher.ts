@@ -11,16 +11,11 @@ interface SessionFinalizeEvent {
   finalized_at: string;
 }
 
-interface SessionUpdatesResponse {
-  sessions?: SessionFinalizeEvent[];
-  latest_finalized_at?: string | null;
-}
-
 const STORAGE_KEY_LATEST = 'monshin.admin.latestFinalizedAt';
 const STORAGE_KEY_PROMPTED = 'monshin.admin.desktopNotificationPrompted';
 const STORAGE_KEY_NATIVE_NOTIFICATIONS = 'monshin.admin.nativeNotificationsEnabled';
 
-const POLLING_INTERVAL_MS = 20000;
+const STREAM_ENDPOINT = '/admin/sessions/stream';
 
 const visitTypeLabel = (value: string | null | undefined): string => {
   switch (value) {
@@ -125,9 +120,13 @@ export function useSessionCompletionWatcher() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!('EventSource' in window)) {
+      console.warn('EventSource is not supported; admin session notifications are disabled.');
+      return;
+    }
 
     let disposed = false;
-    let timer: number | undefined;
+    let eventSource: EventSource | null = null;
     let lastSince: string | null = sessionStorage.getItem(STORAGE_KEY_LATEST);
     let lastErrorAt = 0;
 
@@ -268,59 +267,72 @@ export function useSessionCompletionWatcher() {
       }
     };
 
-    const fetchUpdates = async (shouldNotify: boolean) => {
+    const handleEventPayload = (event: SessionFinalizeEvent | null | undefined) => {
+      if (!event || !event.finalized_at) return;
+      const finalizedAt = event.finalized_at;
+      const isDuplicate = lastSince !== null && finalizedAt <= lastSince;
+      updateSince(finalizedAt);
+      if (isDuplicate) return;
+      lastErrorAt = 0;
+      notifySessions([event]);
+    };
+
+    const handleStreamMessage = (message: MessageEvent<string>) => {
+      if (disposed) return;
+      if (!message.data) return;
       try {
-        const params = new URLSearchParams();
-        if (lastSince) {
-          params.set('since', lastSince);
+        const parsed = JSON.parse(message.data) as SessionFinalizeEvent | SessionFinalizeEvent[];
+        if (Array.isArray(parsed)) {
+          parsed.forEach((event) => handleEventPayload(event));
+        } else {
+          handleEventPayload(parsed);
         }
-        const qs = params.toString();
-        const res = await fetch(`/admin/sessions/updates${qs ? `?${qs}` : ''}`);
-        if (!res.ok) {
-          throw new Error(`failed with status ${res.status}`);
-        }
-        const data: SessionUpdatesResponse = await res.json();
-        updateSince(data.latest_finalized_at ?? null);
-        if (shouldNotify && Array.isArray(data.sessions) && data.sessions.length > 0) {
-          notifySessions(data.sessions);
-        }
-        lastErrorAt = 0;
       } catch (error) {
+        console.warn('failed to parse session notification payload', error);
+      }
+    };
+
+    const connectStream = () => {
+      if (disposed) return;
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      const params = new URLSearchParams();
+      if (lastSince) {
+        params.set('since', lastSince);
+      }
+      const qs = params.toString();
+      const streamUrl = `${STREAM_ENDPOINT}${qs ? `?${qs}` : ''}`;
+      const source = new EventSource(streamUrl);
+      eventSource = source;
+      const handler = (evt: MessageEvent<string>) => handleStreamMessage(evt);
+      source.onmessage = handler;
+      source.addEventListener('session.finalized', handler as EventListener);
+      source.onerror = (error) => {
+        if (disposed) return;
+        console.warn('session notification stream error', error);
         const now = Date.now();
         if (!lastErrorAt || now - lastErrorAt > 5 * 60 * 1000) {
-          console.warn('failed to poll session updates', error);
           lastErrorAt = now;
           notify({
             channel: 'admin',
             status: 'warning',
-            title: '問診完了通知の取得に失敗しました',
+            title: '問診完了通知の受信に失敗しました',
             description: 'ネットワーク状態を確認後、ページを再読み込みしてください。',
           });
         }
-      }
-    };
-
-    const scheduleNext = (shouldNotify: boolean) => {
-      timer = window.setTimeout(async () => {
-        await fetchUpdates(shouldNotify);
-        if (!disposed) {
-          scheduleNext(true);
-        }
-      }, POLLING_INTERVAL_MS);
+      };
     };
 
     ensurePermissionPrompt();
-
-    fetchUpdates(false).then(() => {
-      if (!disposed) {
-        scheduleNext(true);
-      }
-    });
+    connectStream();
 
     return () => {
       disposed = true;
-      if (timer) {
-        window.clearTimeout(timer);
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
       }
     };
   }, [notify, navigate, location.pathname, nativeNotificationsEnabled]);

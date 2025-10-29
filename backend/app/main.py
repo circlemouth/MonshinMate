@@ -18,16 +18,22 @@ import base64
 import hashlib
 import secrets
 from urllib.parse import urlparse
+from pathlib import Path
 try:
     from dotenv import load_dotenv
 except Exception:  # ランタイム環境に dotenv が無い場合でも起動を継続
     def load_dotenv(*_args, **_kwargs):  # type: ignore
         return False
 
+# .env の読み込み（リポジトリルートのみ）
+_BASE_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _BASE_DIR.parent
+load_dotenv(_PROJECT_ROOT / ".env")
+
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 import shutil
 import sqlite3
 from pydantic import BaseModel, Field
@@ -44,6 +50,7 @@ from .llm_gateway import (
 )
 from cryptography.fernet import Fernet, InvalidToken
 
+from .config import get_settings
 from .db import (
     init_db,
     upsert_template,
@@ -75,6 +82,8 @@ from .db import (
     DEFAULT_DB_PATH,
     couch_db,
     COUCHDB_URL,
+    check_firestore_health,
+    get_current_persistence_backend,
     export_questionnaire_settings,
     import_questionnaire_settings,
     export_sessions_data,
@@ -90,15 +99,28 @@ from .personal_info import (
     format_lines as format_personal_info_lines,
     format_multiline as format_personal_info_multiline,
 )
+from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
+from .notifications import SessionEventBroker
 
-# .env の読み込み（リポジトリルート -> backend/.env の順に適用）
-_BASE_DIR = Path(__file__).resolve().parents[1]
-_PROJECT_ROOT = _BASE_DIR.parent
-load_dotenv(_PROJECT_ROOT / ".env")
-load_dotenv(_BASE_DIR / ".env")
+load_secrets()
+_settings = get_settings()
+
+
+def _resolve_allowed_origins() -> list[str]:
+    env_value = os.getenv("FRONTEND_ALLOWED_ORIGINS", "")
+    origins = [origin.strip() for origin in env_value.split(",") if origin.strip()]
+    if origins:
+        return origins
+    if _settings.environment.lower() == "local":
+        return [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "http://localhost:4173",
+            "http://127.0.0.1:4173",
+        ]
+    return []
 
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
@@ -107,6 +129,16 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 
 init_db()
 app = FastAPI(title="MonshinMate API")
+
+_allowed_origins = _resolve_allowed_origins()
+if _allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # 問診項目画像の保存先を初期化し、静的配信を行う
 IMAGE_DIR = Path(__file__).resolve().parent / "questionnaire_item_images"
@@ -140,6 +172,7 @@ DEFAULT_SUMMARY_PROMPT = (
 EXPORT_PBKDF_ITERATIONS = 390_000
 IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 IMAGE_STORAGE_SEGMENT = "questionnaire-item-images/files/"
+SYSTEM_LOGO_STORAGE_SEGMENT = "system-logo/files/"
 
 
 def _build_export_envelope(data: Any, export_type: str, password: str | None) -> dict[str, Any]:
@@ -211,28 +244,35 @@ def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str,
     return str(export_type or ""), payload_data
 
 
-def _extract_image_filename(image_url: str | None) -> str | None:
-    if not image_url:
+def _extract_storage_filename(raw_url: str | None, segment: str) -> str | None:
+    if not raw_url:
         return None
-    value = image_url.strip()
+    value = raw_url.strip()
     if not value or value.startswith("data:"):
         return None
     parsed = urlparse(value)
     candidates = [parsed.path or "", value]
     for candidate in candidates:
-        idx = candidate.find(IMAGE_STORAGE_SEGMENT)
+        idx = candidate.find(segment)
         if idx == -1:
-            # `/questionnaire-item-images/...` のように先頭に `/` が付くケースを許容
-            if candidate.startswith("/" + IMAGE_STORAGE_SEGMENT):
+            if candidate.startswith("/" + segment):
                 idx = 1
-            elif candidate.startswith(IMAGE_STORAGE_SEGMENT):
+            elif candidate.startswith(segment):
                 idx = 0
         if idx != -1:
-            remainder = candidate[idx + len(IMAGE_STORAGE_SEGMENT) :]
+            remainder = candidate[idx + len(segment) :]
             filename = remainder.split("/")[0].split("?")[0].split("#")[0]
             if filename:
                 return filename
     return None
+
+
+def _extract_image_filename(image_url: str | None) -> str | None:
+    return _extract_storage_filename(image_url, IMAGE_STORAGE_SEGMENT)
+
+
+def _extract_logo_filename(logo_url: str | None) -> str | None:
+    return _extract_storage_filename(logo_url, SYSTEM_LOGO_STORAGE_SEGMENT)
 
 
 def _sanitize_image_filename(name: str) -> str:
@@ -322,6 +362,89 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
             continue
         payloads[sanitized] = base64.b64encode(path.read_bytes()).decode("ascii")
     return payloads
+
+
+def _canonicalize_logo_url(raw_url: Any) -> tuple[str | None, dict[str, str]]:
+    if not isinstance(raw_url, str):
+        return None, {}
+    trimmed = raw_url.strip()
+    if not trimmed:
+        return "", {}
+    filename = _extract_logo_filename(trimmed)
+    if not filename:
+        return trimmed, {}
+    try:
+        sanitized = _sanitize_image_filename(filename)
+    except ValueError:
+        return trimmed, {}
+    path = LOGO_DIR / sanitized
+    if not path.exists() or not path.is_file():
+        return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {}
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {sanitized: encoded}
+
+
+def _normalize_app_settings_for_transfer(settings: Any) -> tuple[dict[str, Any], dict[str, str]]:
+    if not isinstance(settings, dict):
+        return {}, {}
+    normalized = dict(settings)
+    logo_payloads: dict[str, str] = {}
+    if "logo_url" in normalized:
+        normalized_logo, payload = _canonicalize_logo_url(normalized.get("logo_url"))
+        if normalized_logo == "":
+            normalized.pop("logo_url", None)
+        elif normalized_logo is not None:
+            normalized["logo_url"] = normalized_logo
+        if payload:
+            logo_payloads.update(payload)
+    return normalized, logo_payloads
+
+
+def _sanitize_app_settings_payload(settings: Any) -> dict[str, Any]:
+    if not isinstance(settings, dict):
+        return {}
+    sanitized = dict(settings)
+    logo_url = sanitized.get("logo_url")
+    if isinstance(logo_url, str):
+        normalized_logo, _ = _canonicalize_logo_url(logo_url)
+        if normalized_logo == "":
+            sanitized.pop("logo_url", None)
+        elif normalized_logo is not None:
+            sanitized["logo_url"] = normalized_logo
+    return sanitized
+
+
+def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
+    if not logo_payloads:
+        if mode == "replace":
+            # replace 指定時は既存ロゴを削除
+            for child in LOGO_DIR.glob("*"):
+                if child.is_file():
+                    child.unlink()
+        return 0
+    if not isinstance(logo_payloads, dict):
+        raise HTTPException(status_code=400, detail="invalid_logo_payload")
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    if mode == "replace":
+        for child in LOGO_DIR.glob("*"):
+            if child.is_file():
+                child.unlink()
+    restored = 0
+    for name, encoded in logo_payloads.items():
+        if not isinstance(name, str) or not isinstance(encoded, str):
+            continue
+        try:
+            sanitized = _sanitize_image_filename(name)
+        except ValueError:
+            continue
+        try:
+            data = base64.b64decode(encoded)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_logo_payload")
+        target = LOGO_DIR / sanitized
+        target.write_bytes(data)
+        restored += 1
+    return restored
 
 
 def _restore_images(image_payloads: Any, mode: str) -> int:
@@ -843,6 +966,7 @@ llm_gateway = LLMGateway(default_llm_settings)
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
+session_events = SessionEventBroker()
 
 
 @app.get("/health")
@@ -1262,6 +1386,10 @@ def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingRespon
     export_payload = dict(data)
     export_payload["templates"] = normalized_templates
     export_payload["images"] = images
+    app_settings = data.get("app_settings") if isinstance(data, dict) else None
+    normalized_app_settings, logo_payloads = _normalize_app_settings_for_transfer(app_settings)
+    export_payload["app_settings"] = normalized_app_settings
+    export_payload["logo_files"] = logo_payloads
     envelope = _build_export_envelope(export_payload, "questionnaire_settings", payload.password or None)
     content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
     filename = f"questionnaire-settings-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -1293,8 +1421,11 @@ async def import_questionnaire_settings_api(
         raw_templates if isinstance(raw_templates, list) else []
     )
     payload_data["templates"] = normalized_templates
+    payload_data["app_settings"] = _sanitize_app_settings_payload(payload_data.get("app_settings"))
     images_payload = payload_data.pop("images", {}) or {}
     restored_images = _restore_images(images_payload, mode_value)
+    logo_payload = payload_data.pop("logo_files", {}) or {}
+    restored_logos = _restore_logo_files(logo_payload, mode_value)
     try:
         stats = import_questionnaire_settings(payload_data, mode=mode_value)
     except ValueError:
@@ -1307,10 +1438,19 @@ async def import_questionnaire_settings_api(
         else:
             logger.exception("import_questionnaire_settings failed")
             raise
+    try:
+        stored_llm = load_llm_settings()
+        if stored_llm:
+            llm_gateway.update_settings(LLMSettings(**stored_llm))
+            llm_gateway.settings.sync_from_active_profile()
+    except Exception:
+        logger.exception("apply_imported_llm_settings_failed")
+
     return {
         "status": "ok",
         "imported": stats,
         "images_restored": restored_images,
+        "logos_restored": restored_logos,
         "mode": mode_value,
     }
 
@@ -2121,6 +2261,13 @@ class LLMStatusResponse(BaseModel):
 @app.get("/system/database-status", response_model=DatabaseStatus)
 def get_database_status() -> DatabaseStatus:
     """データベースの使用状況を返す。"""
+    backend = get_current_persistence_backend()
+    if backend == "firestore":
+        if check_firestore_health():
+            settings = get_settings()
+            status = "firestore_emulator" if settings.firestore.use_emulator else "firestore"
+            return DatabaseStatus(status=status)
+        return DatabaseStatus(status="error")
     if not COUCHDB_URL:
         return DatabaseStatus(status="sqlite")
     try:
@@ -2705,11 +2852,6 @@ class SessionFinalizeEvent(BaseModel):
     finalized_at: str
 
 
-class SessionUpdatesResponse(BaseModel):
-    sessions: list[SessionFinalizeEvent]
-    latest_finalized_at: str | None = None
-
-
 class SessionDetail(BaseModel):
     """管理画面で表示するセッション詳細。"""
 
@@ -2727,6 +2869,27 @@ class SessionDetail(BaseModel):
     started_at: str | None = None
     finalized_at: str | None = None
     interrupted: bool = False
+
+
+def _ensure_isoformat(value: datetime | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
+def _build_finalize_event_from_session(session: Session) -> SessionFinalizeEvent:
+    finalized_at = session.finalized_at or datetime.now(UTC)
+    started_at = session.started_at or finalized_at
+    return SessionFinalizeEvent(
+        id=session.id,
+        patient_name=session.patient_name,
+        dob=session.dob,
+        visit_type=session.visit_type,
+        started_at=_ensure_isoformat(started_at),
+        finalized_at=_ensure_isoformat(finalized_at) or datetime.now(UTC).isoformat(),
+    )
 
 
 class FinalizeRequest(BaseModel):
@@ -2887,7 +3050,7 @@ def get_llm_questions(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/finalize")
-def finalize_session(
+async def finalize_session(
     session_id: str, background: BackgroundTasks, payload: FinalizeRequest | None = None
 ) -> dict:
     """セッションを確定し要約を返す。"""
@@ -2918,6 +3081,11 @@ def finalize_session(
     session.completion_status = "finalized"
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
+    event = _build_finalize_event_from_session(session)
+    try:
+        await session_events.publish(event.dict(), event_id=event.finalized_at)
+    except Exception:
+        logger.exception("session_finalize_event_publish_failed id=%s", session_id)
     # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
     def _bg_summary_task(sid: str) -> None:
         s = sessions.get(sid)
@@ -3017,6 +3185,58 @@ async def import_sessions_api(
     }
 
 
+@app.get("/admin/sessions/stream")
+async def admin_session_stream(
+    request: Request,
+    since: str | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+) -> StreamingResponse:
+    """問診完了イベントを Server-Sent Events で配信する。"""
+
+    last_event_id = request.headers.get("last-event-id")
+    since_candidate = last_event_id or since or None
+    since_dt: datetime | None = None
+    if since_candidate:
+        try:
+            since_dt = datetime.fromisoformat(since_candidate)
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_since")
+
+    backlog_messages: list[bytes] = []
+    if since_dt is not None:
+        events, _ = list_sessions_finalized_after(since_dt, limit=limit)
+        for event in events:
+            finalized = event.get("finalized_at")
+            session_id = event.get("id")
+            if not finalized or not session_id:
+                continue
+            payload = SessionFinalizeEvent(
+                id=str(session_id),
+                patient_name=event.get("patient_name"),
+                dob=event.get("dob"),
+                visit_type=event.get("visit_type"),
+                started_at=_ensure_isoformat(event.get("started_at")),
+                finalized_at=str(finalized),
+            )
+            backlog_messages.append(
+                session_events.serialize(payload.dict(), event_id=payload.finalized_at)
+            )
+
+    async def event_generator() -> Iterable[bytes]:
+        for message in backlog_messages:
+            yield message
+        stream = session_events.stream()
+        try:
+            async for message in stream:
+                if await request.is_disconnected():
+                    break
+                yield message
+        finally:
+            await stream.aclose()
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
 @app.get("/admin/sessions", response_model=list[SessionSummary])
 def admin_list_sessions(
     patient_name: str | None = None,
@@ -3032,40 +3252,6 @@ def admin_list_sessions(
         end_date=end_date,
     )
     return [SessionSummary(**s) for s in sessions]
-
-
-@app.get("/admin/sessions/updates", response_model=SessionUpdatesResponse)
-def admin_session_updates(
-    since: str | None = Query(None), limit: int = Query(50, ge=1, le=200)
-) -> SessionUpdatesResponse:
-    """指定時刻以降に確定したセッションを通知用に取得する。"""
-
-    since_dt: datetime | None = None
-    if since:
-        try:
-            since_dt = datetime.fromisoformat(since)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_since")
-
-    events, latest_dt = list_sessions_finalized_after(since_dt, limit=limit)
-    event_models: list[SessionFinalizeEvent] = []
-    for event in events:
-        finalized = event.get("finalized_at")
-        session_id = event.get("id")
-        if not finalized or not session_id:
-            continue
-        event_models.append(
-            SessionFinalizeEvent(
-                id=str(session_id),
-                patient_name=event.get("patient_name"),
-                dob=event.get("dob"),
-                visit_type=event.get("visit_type"),
-                started_at=event.get("started_at"),
-                finalized_at=str(finalized),
-            )
-        )
-    latest_value = latest_dt.isoformat() if latest_dt else None
-    return SessionUpdatesResponse(sessions=event_models, latest_finalized_at=latest_value)
 
 
 @app.get("/admin/sessions/{session_id}", response_model=SessionDetail)

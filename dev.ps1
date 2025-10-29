@@ -57,11 +57,10 @@ try {
     & "$VenvDir/Scripts/python.exe" -m pip install -e .
     Pop-Location
 
-    # Load backend/.env to export environment variables (for emergency reset, CouchDB, etc.)
-    $BackendDir = Join-Path $RootDir 'backend'
-    $DotenvPath = Join-Path $BackendDir '.env'
+    # Load repository root .env to export environment variables for backend/frontend
+    $DotenvPath = Join-Path $RootDir '.env'
     if (Test-Path $DotenvPath) {
-        Write-Host "[setup] Loading backend/.env"
+        Write-Host "[setup] Loading .env"
         Get-Content $DotenvPath | ForEach-Object {
             $line = $_.Trim()
             if (-not $line -or $line.StartsWith('#')) { return }
@@ -75,6 +74,41 @@ try {
                 }
                 Set-Item -Path Env:$k -Value $v -ErrorAction SilentlyContinue
             }
+        }
+    }
+
+    $requiresFirestore = $false
+    if ($env:PERSISTENCE_BACKEND) {
+        $requiresFirestore = $env:PERSISTENCE_BACKEND.ToLowerInvariant() -eq 'firestore'
+    }
+    if (-not $requiresFirestore -and $env:MONSHINMATE_FIRESTORE_ADAPTER) {
+        $requiresFirestore = $true
+    }
+
+    if ($requiresFirestore) {
+        $pipExe = Join-Path $VenvDir 'Scripts\pip.exe'
+        if (-not (Test-Path -LiteralPath $pipExe)) {
+            $pipExe = Join-Path $VenvDir 'Scripts\pip'
+        }
+        $firestorePackages = @(
+            "google-cloud-firestore",
+            "google-cloud-secret-manager",
+            "google-cloud-storage",
+            "firebase-admin"
+        )
+        $missingPackages = @()
+        foreach ($pkg in $firestorePackages) {
+            & $pipExe 'show' $pkg *> $null
+            if ($LASTEXITCODE -ne 0) {
+                $missingPackages += $pkg
+            }
+        }
+        if ($missingPackages.Count -gt 0) {
+            Write-Host "[setup] Installing Firestore dependencies: $($missingPackages -join ', ')"
+            $pipArgs = @('install') + $missingPackages
+            & $pipExe @pipArgs
+        } else {
+            Write-Host "[setup] Firestore dependencies already installed."
         }
     }
 

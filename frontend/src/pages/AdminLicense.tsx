@@ -273,12 +273,49 @@ function buildLicenseSummary(text: string): LicenseSummary {
   }
 
   const normalized = text.toLowerCase();
+  if (normalized.includes('gnu affero general public license') && normalized.includes('version 3')) {
+    return {
+      name: 'GNU Affero General Public License v3.0',
+      tone: 'strong-copyleft',
+      description:
+        'MonshinMate は AGPLv3 で公開されています。配布物や派生物を提供する場合は、ネットワーク経由の提供を含め、利用者にソースコードへアクセスできる手段を必ず用意してください。',
+      highlights: [
+        { label: '再配布', value: 'AGPLv3／互換ライセンスでの公開が必須' },
+        { label: '商用利用', value: '可能（AGPLv3順守が条件）' },
+        { label: 'ネットワーク提供', value: 'SaaS などでもソース公開が必須' },
+      ],
+      obligations: [
+        {
+          title: 'ソースコード開示',
+          detail:
+            'バイナリ配布や SaaS などのリモート提供を含む全形態で、利用者が完全なソースコードへアクセスできる仕組みを提供してください。',
+          severity: 'must',
+        },
+        {
+          title: 'ライセンス全文・著作権表示の同梱',
+          detail: '配布物には AGPLv3 の全文と著作権表記（コピーライト・免責事項）をそのまま同梱する必要があります。',
+          severity: 'must',
+        },
+        {
+          title: '派生物の AGPLv3 継承',
+          detail: 'MonshinMate を基にした派生モジュール・プラグインも AGPLv3 互換ライセンスで公開してください。',
+          severity: 'must',
+        },
+        {
+          title: '第三者ライブラリのライセンス遵守',
+          detail: '依存パッケージのライセンス条項（特に MIT/BSD/Apache などの著作権表示）を配布物に残す必要があります。',
+          severity: 'should',
+        },
+      ],
+    };
+  }
+
   if (normalized.includes('gnu general public license') && normalized.includes('version 3')) {
     return {
       name: 'GNU General Public License v3.0',
       tone: 'strong-copyleft',
       description:
-        'MonshinMate は GPLv3 で公開されています。配布物や派生物を提供する場合は、ソースコードの開示と同一ライセンスでの再配布が必要です。',
+        'GPLv3 が検出されました。配布物や派生物を提供する場合は、ソースコードの開示と同一ライセンスでの再配布が必要です。',
       highlights: [
         { label: '再配布', value: 'GPLv3／互換ライセンスでの公開が必須' },
         { label: '商用利用', value: '可能（GPLv3順守が条件）' },
@@ -297,7 +334,7 @@ function buildLicenseSummary(text: string): LicenseSummary {
         },
         {
           title: '派生物の GPLv3 継承',
-          detail: 'MonshinMate を基にした派生モジュール・プラグインも GPLv3 互換ライセンスで公開してください。',
+          detail: '派生モジュールやプラグインも GPLv3 互換ライセンスで公開してください。',
           severity: 'must',
         },
         {

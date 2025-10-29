@@ -255,7 +255,7 @@ def test_create_session() -> None:
     q_res = client.post(f"/sessions/{session_id}/llm-questions")
     assert q_res.status_code == 200
     q_data = q_res.json()
-    assert q_data["questions"]
+    assert q_data["questions"] == []
 
 
 def test_initial_session_marks_personal_info_complete() -> None:
@@ -394,17 +394,9 @@ def test_llm_question_loop() -> None:
     res = client.post("/sessions", json=create_payload)
     session_id = res.json()["id"]
     q_list = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"]
-    assert len(q_list) >= 2
-    assert q_list[0]["id"] == "llm_1"
-    assert q_list[1]["id"] == "llm_2"
-    client.post(
-        f"/sessions/{session_id}/llm-answers",
-        json={"item_id": q_list[0]["id"], "answer": "昨日から"},
-    )
-    client.post(
-        f"/sessions/{session_id}/llm-answers",
-        json={"item_id": q_list[1]["id"], "answer": "咳"},
-    )
+    assert q_list == []
+    fin = client.post(f"/sessions/{session_id}/finalize")
+    assert fin.status_code == 200
 
 
 def test_followup_session_flow() -> None:
@@ -422,12 +414,7 @@ def test_followup_session_flow() -> None:
     session_id = res.json()["id"]
     q_res = client.post(f"/sessions/{session_id}/llm-questions")
     assert q_res.status_code == 200
-    q = q_res.json()["questions"][0]
-    assert q["id"] == "llm_1"
-    client.post(
-        f"/sessions/{session_id}/llm-answers",
-        json={"item_id": q["id"], "answer": "昨日から"},
-    )
+    assert q_res.json()["questions"] == []
     fin = client.post(f"/sessions/{session_id}/finalize")
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
@@ -1082,7 +1069,7 @@ def test_llm_followup_max_questions() -> None:
     )
     session_id = res.json()["id"]
     q1 = client.post(f"/sessions/{session_id}/llm-questions").json()
-    assert len(q1["questions"]) == 2
+    assert q1["questions"] == []
     q2 = client.post(f"/sessions/{session_id}/llm-questions").json()
     assert q2["questions"] == []
     client.delete("/questionnaires/maxq?visit_type=initial")

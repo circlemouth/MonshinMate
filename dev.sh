@@ -25,6 +25,12 @@ if [[ ! -d "$VENV_DIR" ]]; then
   python3 -m venv "$VENV_DIR"
 fi
 source "$VENV_DIR/bin/activate"
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  set -a
+  # shellcheck source=/dev/null
+  . "$ROOT_DIR/.env"
+  set +a
+fi
 
 # 依存関係のインストール
 echo "[setup] backend の依存関係をインストールします"
@@ -33,16 +39,43 @@ echo "[setup] backend の依存関係をインストールします"
   cd "$ROOT_DIR/backend"
   "$VENV_DIR/bin/python" -m pip install -e . --break-system-packages
 )
+requires_firestore=false
+if [[ "${PERSISTENCE_BACKEND:-}" == "firestore" ]]; then
+  requires_firestore=true
+fi
+if [[ -n "${MONSHINMATE_FIRESTORE_ADAPTER:-}" ]]; then
+  requires_firestore=true
+fi
+if [[ "$requires_firestore" == true ]]; then
+  packages=(
+    "google-cloud-firestore"
+    "google-cloud-secret-manager"
+    "google-cloud-storage"
+    "firebase-admin"
+  )
+  missing=()
+  for pkg in "${packages[@]}"; do
+    if ! "$VENV_DIR/bin/python" -m pip show "$pkg" >/dev/null 2>&1; then
+      missing+=("$pkg")
+    fi
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "[setup] Firestore 関連依存をインストールします: ${missing[*]}"
+    "$VENV_DIR/bin/python" -m pip install "${missing[@]}" --break-system-packages
+  else
+    echo "[setup] Firestore 関連依存は既にインストール済みです。"
+  fi
+fi
 
 echo "[start] backend: http://localhost:8001"
 (
   cd "$ROOT_DIR/backend"
-  # backend/.env があれば読み込んで環境変数をエクスポート
+  # ルート/.env があれば読み込んで環境変数をエクスポート
   # 開発時の非常用リセットパスワードなどを反映させるため
   set -a
-  if [[ -f .env ]]; then
+  if [[ -f "$ROOT_DIR/.env" ]]; then
     # shellcheck source=/dev/null
-    . ./.env
+    . "$ROOT_DIR/.env"
   fi
   # CouchDB の設定が存在する場合、疎通できないときはローカル開発向けに SQLite へフォールバック
   if [[ -n "${COUCHDB_URL:-}" ]]; then

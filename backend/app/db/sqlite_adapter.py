@@ -23,8 +23,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+_MODULE_DIR = Path(__file__).resolve().parent
+_APP_DIR = _MODULE_DIR.parent
+
 DEFAULT_DB_PATH = os.environ.get(
-    "MONSHINMATE_DB", str(Path(__file__).resolve().parent / "app.sqlite3")
+    "MONSHINMATE_DB", str(_APP_DIR / "app.sqlite3")
 )
 
 # TOTPシークレット暗号化用のキー
@@ -1306,12 +1309,15 @@ def export_questionnaire_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, A
 
     settings = load_app_settings(db_path) or {}
     default_qid = settings.get("default_questionnaire_id")
+    llm_settings = load_llm_settings(db_path) or {}
 
     return {
         "templates": templates,
         "summary_prompts": summary_prompts,
         "followup_prompts": followup_prompts,
         "default_questionnaire_id": default_qid,
+        "app_settings": settings,
+        "llm_settings": llm_settings,
     }
 
 
@@ -1393,6 +1399,8 @@ def import_questionnaire_settings(
     summary_prompts = data.get("summary_prompts") or []
     followup_prompts = data.get("followup_prompts") or []
     default_qid = data.get("default_questionnaire_id")
+    app_settings_payload = data.get("app_settings")
+    llm_settings_payload = data.get("llm_settings")
 
     def _normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(item)
@@ -1476,15 +1484,44 @@ def import_questionnaire_settings(
     finally:
         conn.close()
 
-    if default_qid is not None:
+    app_settings_saved = False
+    default_applied = False
+    if isinstance(app_settings_payload, dict):
+        base_settings = {} if mode == "replace" else (load_app_settings(db_path) or {})
+        merged_settings = dict(base_settings)
+        merged_settings.update(app_settings_payload)
+        if default_qid is not None:
+            merged_settings["default_questionnaire_id"] = default_qid
+            default_applied = True
+        elif "default_questionnaire_id" in app_settings_payload:
+            default_applied = True
+        save_app_settings(merged_settings, db_path)
+        app_settings_saved = True
+
+    if default_qid is not None and not default_applied:
         current_settings = load_app_settings(db_path) or {}
         current_settings["default_questionnaire_id"] = default_qid
         save_app_settings(current_settings, db_path)
+        app_settings_saved = True
+        default_applied = True
+
+    llm_settings_saved = False
+    if isinstance(llm_settings_payload, dict):
+        if mode == "merge":
+            current_llm = load_llm_settings(db_path) or {}
+            merged_llm = dict(current_llm)
+            merged_llm.update(llm_settings_payload)
+        else:
+            merged_llm = dict(llm_settings_payload)
+        save_llm_settings(merged_llm, db_path)
+        llm_settings_saved = True
 
     return {
         "templates": len(templates),
         "summary_prompts": len(summary_prompts),
         "followup_prompts": len(followup_prompts),
+        "app_settings": 1 if app_settings_saved else 0,
+        "llm_settings": 1 if llm_settings_saved else 0,
     }
 
 
@@ -1922,3 +1959,133 @@ def set_totp_mode(username: str, mode: str, db_path: str = DEFAULT_DB_PATH) -> N
         )
     finally:
         conn.close()
+
+
+class SQLiteAdapter:
+    """既存 SQLite/CouchDB 実装をラップする永続化アダプタ。"""
+
+    name = "sqlite"
+
+    def __init__(self, db_path: str | None = None) -> None:
+        self.default_db_path = db_path or DEFAULT_DB_PATH
+
+    @property
+    def couch_db(self) -> Any | None:
+        return couch_db
+
+    @property
+    def couchdb_url(self) -> str | None:
+        return COUCHDB_URL
+
+    def init(self, db_path: str | None = None) -> None:
+        if db_path:
+            self.default_db_path = db_path
+        init_db(self.default_db_path)
+
+    def _call_with_db_path(self, func, *args, **kwargs):
+        if "db_path" not in kwargs:
+            kwargs["db_path"] = self.default_db_path
+        return func(*args, **kwargs)
+
+    def upsert_template(self, *args, **kwargs):
+        return self._call_with_db_path(upsert_template, *args, **kwargs)
+
+    def get_template(self, *args, **kwargs):
+        return self._call_with_db_path(get_template, *args, **kwargs)
+
+    def list_templates(self, *args, **kwargs):
+        return self._call_with_db_path(list_templates, *args, **kwargs)
+
+    def delete_template(self, *args, **kwargs):
+        return self._call_with_db_path(delete_template, *args, **kwargs)
+
+    def rename_template(self, *args, **kwargs):
+        return self._call_with_db_path(rename_template, *args, **kwargs)
+
+    def save_session(self, *args, **kwargs):
+        return self._call_with_db_path(save_session, *args, **kwargs)
+
+    def list_sessions(self, *args, **kwargs):
+        return self._call_with_db_path(list_sessions, *args, **kwargs)
+
+    def list_sessions_finalized_after(self, *args, **kwargs):
+        return self._call_with_db_path(list_sessions_finalized_after, *args, **kwargs)
+
+    def get_session(self, *args, **kwargs):
+        return self._call_with_db_path(get_session, *args, **kwargs)
+
+    def delete_session(self, *args, **kwargs):
+        return self._call_with_db_path(delete_session, *args, **kwargs)
+
+    def delete_sessions(self, ids: Iterable[str], *args, **kwargs):
+        return self._call_with_db_path(delete_sessions, ids, *args, **kwargs)
+
+    def upsert_summary_prompt(self, *args, **kwargs):
+        return self._call_with_db_path(upsert_summary_prompt, *args, **kwargs)
+
+    def get_summary_prompt(self, *args, **kwargs):
+        return self._call_with_db_path(get_summary_prompt, *args, **kwargs)
+
+    def get_summary_config(self, *args, **kwargs):
+        return self._call_with_db_path(get_summary_config, *args, **kwargs)
+
+    def upsert_followup_prompt(self, *args, **kwargs):
+        return self._call_with_db_path(upsert_followup_prompt, *args, **kwargs)
+
+    def get_followup_prompt(self, *args, **kwargs):
+        return self._call_with_db_path(get_followup_prompt, *args, **kwargs)
+
+    def get_followup_config(self, *args, **kwargs):
+        return self._call_with_db_path(get_followup_config, *args, **kwargs)
+
+    def save_llm_settings(self, *args, **kwargs):
+        return self._call_with_db_path(save_llm_settings, *args, **kwargs)
+
+    def load_llm_settings(self, *args, **kwargs):
+        return self._call_with_db_path(load_llm_settings, *args, **kwargs)
+
+    def save_app_settings(self, *args, **kwargs):
+        return self._call_with_db_path(save_app_settings, *args, **kwargs)
+
+    def load_app_settings(self, *args, **kwargs):
+        return self._call_with_db_path(load_app_settings, *args, **kwargs)
+
+    def export_questionnaire_settings(self, *args, **kwargs):
+        return self._call_with_db_path(export_questionnaire_settings, *args, **kwargs)
+
+    def import_questionnaire_settings(self, *args, **kwargs):
+        return self._call_with_db_path(import_questionnaire_settings, *args, **kwargs)
+
+    def export_sessions_data(self, *args, **kwargs):
+        return self._call_with_db_path(export_sessions_data, *args, **kwargs)
+
+    def import_sessions_data(self, *args, **kwargs):
+        return self._call_with_db_path(import_sessions_data, *args, **kwargs)
+
+    def list_audit_logs(self, *args, **kwargs):
+        return self._call_with_db_path(list_audit_logs, *args, **kwargs)
+
+    def get_user_by_username(self, *args, **kwargs):
+        return self._call_with_db_path(get_user_by_username, *args, **kwargs)
+
+    def update_password(self, *args, **kwargs):
+        return self._call_with_db_path(update_password, *args, **kwargs)
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        return verify_password(plain_password, hashed_password)
+
+    def update_totp_secret(self, *args, **kwargs):
+        return self._call_with_db_path(update_totp_secret, *args, **kwargs)
+
+    def set_totp_status(self, *args, **kwargs):
+        return self._call_with_db_path(set_totp_status, *args, **kwargs)
+
+    def get_totp_mode(self, *args, **kwargs):
+        return self._call_with_db_path(get_totp_mode, *args, **kwargs)
+
+    def set_totp_mode(self, *args, **kwargs):
+        return self._call_with_db_path(set_totp_mode, *args, **kwargs)
+
+    def shutdown(self) -> None:
+        """SQLite 実装では特別な終了処理は不要。"""
+        return None

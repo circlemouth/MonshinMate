@@ -84,11 +84,21 @@ interface LlmSettingsResponse {
   base_url?: string | null;
 }
 
-type DatabaseStatus = 'couchdb' | 'sqlite' | 'error';
+const DATABASE_STATUSES = ['sqlite', 'couchdb', 'firestore', 'firestore_emulator', 'error'] as const;
+type DatabaseStatus = (typeof DATABASE_STATUSES)[number];
+
+const isDatabaseStatus = (value: string): value is DatabaseStatus =>
+  DATABASE_STATUSES.includes(value as DatabaseStatus);
 
 const DB_STATUS_MAP: Record<DatabaseStatus, { label: string; color: string; description: string }> = {
   couchdb: { label: 'CouchDB', color: 'green', description: 'CouchDB コンテナに接続しています。' },
   sqlite: { label: 'SQLite', color: 'primary', description: 'ローカルの SQLite を使用しています。' },
+  firestore: { label: 'クラウド', color: 'green', description: 'データは安全に保管されています。' },
+  firestore_emulator: {
+    label: 'クラウド(エミュレータ)',
+    color: 'purple',
+    description: 'Firebase Emulator を利用した検証モードです。',
+  },
   error: { label: '接続エラー', color: 'red', description: 'データベースの状態を取得できませんでした。' },
 };
 
@@ -277,7 +287,8 @@ export default function AdminMain() {
         throw new Error('failed to fetch db status');
       }
       const data = await res.json();
-      setDbStatus((data?.status as DatabaseStatus) ?? 'error');
+      const nextStatus = typeof data?.status === 'string' ? data.status : '';
+      setDbStatus(isDatabaseStatus(nextStatus) ? nextStatus : 'error');
     } catch (err) {
       console.error(err);
       setDbStatus('error');

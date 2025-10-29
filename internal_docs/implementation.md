@@ -171,7 +171,7 @@
 - `POST /sessions/:id/finalize` → `{ summaryText, allAnswers, finalizedAt, status }`
 - 管理系：`GET /questionnaires`, `POST /questionnaires`, `DELETE /questionnaires/{id}`, `POST /questionnaires/{id}/duplicate`, `GET/PUT /admin/llm`, `GET/PUT /system/timezone`, `POST /admin/login`
 - バックアップ系：`POST /admin/questionnaires/export`, `POST /admin/questionnaires/import`, `POST /admin/sessions/export`, `POST /admin/sessions/import`
-- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/updates?since=ISO8601`
+- 管理系結果閲覧：`GET /admin/sessions`, `GET /admin/sessions/{id}`, `GET /admin/sessions/stream`（SSE）
 
 > API 名称は最終的にバックエンド設計に合わせて微調整して良い。
 
@@ -182,6 +182,12 @@
 - **フッター**：`本システムはローカルLLMを使用しており、外部へ情報が送信されることはありません。`
 
 ---
+
+## 付録：実施メモ（2025-10-23）
+
+- [x] README の該当セクション（機能概要〜Cloud Run/Firestore〜ライセンス）を日本語として自然な文面に調整。
+  - 語尾と改行の統一、用語表記の揺れ（「初診/再診」→「初診・再診」など）を整理。
+  - 技術的な記述や手順の意味は変更しない範囲で可読性を向上。
 
 ## 付録：実施メモ（2025-10-06）
 
@@ -205,6 +211,13 @@
   - 初診の固定UIで全項目が必須となっており、保存時に `personal_info` 回答としてセッションへ登録されるため、問診フォーム側で同項目を再入力するケースは発生しないことを 2025-09-24 時点で自動テストにより確認済み。
 - **管理ログイン**：/admin/login でID/メール + パスワード。成功で /admin/main へ。
 - **管理**：テンプレCRUD、LLM接続設定（テストボタン）。
+
+---
+
+## 変更履歴（2025-10-26）
+- [x] 管理画面の問診完了通知を SSE に移行。
+  - `POST /sessions/{id}/finalize` 完了時に `SessionEventBroker` へ publish し、`GET /admin/sessions/stream` で通知。
+  - フロントの `useSessionCompletionWatcher` は `EventSource` を利用して通知を購読し、旧ポーリング `/admin/sessions/updates` は廃止。
 
 ---
 
@@ -245,7 +258,7 @@
 
 ## 付録：ドキュメント整理（非公開化）
 - [x] `docs/` 配下のうち、公開不要な文書を `internal_docs/` に移動（2025-08-31）。
-  - 対象: `AGENTS.md`, `GEMINI.md`, `plannedSystem.md`, `PlannedDesign.md`, `LLMcommunication.md`, `implementation.md`, `admin_system_setup.md`, `docker_setup.md`, `UI_Redesign_Plan.md`, `Accessibility_And_Typography_Verification.md`
+  - 対象: `AGENTS.md`, `plannedSystem.md`, `PlannedDesign.md`, `LLMcommunication.md`, `implementation.md`, `implementation_cloud_run_firebase.md`, `admin_system_setup.md`, `docker_setup.md`
   - `docs/` 側には移動案内のプレースホルダを設置し、既存リンクの断絶を最小化。
   - `docs/` に残す公開想定ドキュメント: `session_api.md`, `admin_user_manual.md`
 2) 管理画面で `llm_settings` と初診/再診テンプレ投入
@@ -281,7 +294,7 @@
 ---
 
 ## 11. UIデザイン改修（医療問診向け）チェックリスト
-> 詳細方針は `docs/UI_Redesign_Plan.md` を参照。plannedSystem.md と整合。
+> 詳細方針は `internal_docs/PlannedDesign.md` を参照。plannedSystem.md と整合。
 
 - [ ] デザイン原則と情報設計の合意（患者/管理フロー）
 - [x] デザイントークン定義（色・タイポ・間隔・ブレークポイント）
@@ -445,8 +458,8 @@
   - 変更: `docs/admin_user_manual.md`
 
 ## 39. GPLライセンス本文の同梱と表示（2025-08-31）
-- [x] GNU GPL v3 のライセンス本文をレポジトリに同梱し、フロント配信に含めた。
-  - 追加: `frontend/public/docs/LICENSE_GPL-3.0.md`
+- [x] GNU GPL v3 のライセンス本文をレポジトリに同梱し、フロント配信に含めた。（2025-10-23 に AGPLv3 へ更新済み）
+  - 追加（現行）: `frontend/public/docs/LICENSE_AGPL-3.0.md`
 - [x] 管理画面にライセンス表示ページを追加し、ナビに「ライセンス」を追加。
   - 追加: `frontend/src/pages/AdminLicense.tsx`
   - 変更: `frontend/src/App.tsx`（ルート追加）, `frontend/src/components/AdminLayout.tsx`（ナビ項目追加）
@@ -1099,3 +1112,110 @@
 - [x] 変更（バックエンド）: `backend/app/personal_info.py` に `format_lines` を追加し、氏名・よみがな等の整形済みリストを再利用できるようにした。
 - [x] テスト追加: `backend/tests/test_api.py::test_markdown_export_formats_personal_info_and_yesno` を新設し、Markdown出力の体裁を検証。
 - [x] ドキュメント更新: `docs/admin_user_manual.md` にMarkdown出力の整形仕様を追記。
+
+## 135. Docker Hub へのコンテナ公開準備（2025-10-22）
+- [x] `Makefile` に `docker-build-backend` / `docker-build-frontend` / `docker-build` / `docker-push-*` ターゲットを追加し、`BACKEND_IMAGE`・`FRONTEND_IMAGE`・`IMAGE_TAG` でビルド／プッシュ先を指定できるようにした。
+- [ ] Docker デーモン起動後に `make docker-build` を実行し、`Backend`/`Frontend` イメージがローカルで生成されることを検証（手元環境の Docker 未起動により未対応）。
+- [x] Docker Hub へのアップロード手順メモ（`docker login` → 環境変数設定 → `make docker-build docker-push`）を依頼者報告・手順書に反映。
+
+## 136. Cloud Run/Firebase 永続化抽象化の導入（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/db.py` をパッケージ化し、`backend/app/db/sqlite_adapter.py` へ既存 SQLite/CouchDB 実装を移動。`SQLiteAdapter` クラスで既存関数をラップし、環境による切替が可能な構造へ変更。
+- [x] 変更（バックエンド）: `backend/app/config.py` を新設し、`PERSISTENCE_BACKEND` / `FILE_STORAGE_BACKEND` / Firestore/GCS 関連環境変数の読み込みを統合。`backend/app/db/__init__.py` で設定に応じたアダプタ選択を行う。
+- [x] 変更（バックエンド）: `backend/app/db/firestore_adapter.py` に Firestore クライアント初期化を含むスケルトン実装を追加。未実装メソッドは `NotImplementedError` を送出する。
+- [x] 変更（バックエンド）: FirestoreAdapter にテンプレート CRUD／セッション CRUD／LLM・アプリ設定保存・問診テンプレート import/export を実装し、`PERSISTENCE_BACKEND=firestore` で基本操作が通るよう調整。
+- [x] 変更（バックエンド）: FirestoreAdapter の `rename_template` を実装し、テンプレート ID 変更時に `sessions` コレクションと既定テンプレート設定を更新するようにした。
+- [x] 変更（バックエンド）: FirestoreAdapter に監査ログ保存 (`auditLogs`) と TOTP/パスワード更新時の監査イベント記録を追加し、`list_audit_logs` が Firestore から取得できるようにした。
+- [x] ドキュメント: `internal_docs/firestore_adapter_design.md` を新設し、Firestore コレクション構成・API 対応表・エミュレータ手順を整理。
+- [x] 依存更新: `backend/pyproject.toml` に `google-cloud-firestore`, `google-cloud-storage`, `google-cloud-secret-manager`, `firebase-admin` を追加。
+- [ ] 動作確認: `couchdb` パッケージ未導入環境のため `PYTHONPATH=backend python -m pytest` を未実施。ローカル SQLite での既存機能回帰は次回 `couchdb` インストール後に実行予定。
+- [ ] TODO: Firestore アダプタのセッションエクスポート/インポートと Secret Manager 連携を実装し、`internal_docs/implementation_cloud_run_firebase.md` に反映する。
+
+## 137. Cloud Run 対応 Dockerfile / Nginx 改修（2025-10-23）
+- [x] 変更（バックエンド）: `backend/Dockerfile` を Cloud Run 対応に更新し、`PORT` 環境変数でリッスンポートを切替、非 root ユーザーで起動するよう調整。
+- [x] 変更（フロントエンド）: `frontend/Dockerfile` にエントリポイントスクリプトとテンプレート生成 (`frontend/scripts/entrypoint.sh`, `frontend/nginx.conf.template`) を導入し、`BACKEND_ORIGIN`/`PORT` を環境変数で差し替えつつ `config.js` を動的生成。
+- [x] 変更（フロントエンド）: `frontend/public/config.js` と `frontend/src/config/api.ts` を追加し、Cloud Run 環境で `apiBaseUrl` を注入して相対パスの `fetch` を補正。`index.html` で `config.js` を読み込むよう追加。
+- [x] テスト追加: Firestore エミュレータ用の `backend/tests/test_firestore_adapter.py` を作成。`FIRESTORE_EMULATOR_HOST` 設定時にテンプレート/セッション/ユーザー/監査ログ操作を検証。
+- [x] ツール追加: `tools/migrate_to_firestore.py` で SQLite から Firestore へのテンプレート・セッション移行（PoC）を実装。
+- [x] シークレット対応: `backend/app/secret_manager.py` を追加し、Secret Manager から主要シークレットを読み込む仕組みを導入。ローテーション手順と Terraform/CI ドラフト (`internal_docs/infra/terraform_cloud_run.md`)・デプロイ検証手順 (`internal_docs/operations/cloud_run_staging_prod_plan.md`) を文書化。
+
+## 138. Cloud Run 実装のサブモジュール分離（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/db/__init__.py` をプラグインローダー化し、Firestore 実装を `MONSHINMATE_FIRESTORE_ADAPTER` で指定する方式へ変更。既存の Firestore コードは公開リポジトリから削除。
+- [x] 変更（バックエンド）: `backend/app/secret_manager.py` をプラグインローダーに置き換え、`MONSHINMATE_SECRET_MANAGER_ADAPTER` で非公開実装を呼び出す方式に統一。
+- [x] 依存整理: `backend/pyproject.toml` および `backend/monshinmate_backend.egg-info/*` から Google Cloud 系依存（firestore/storage/secret-manager/firebase-admin）を除去。
+- [x] 構成整理: `tools/migrate_to_firestore.py`, `backend/tests/test_firestore_adapter.py`, `firebase.json`, `firestore-debug.log` を削除し、Cloud Run 用の `private/README.md` を追加。
+- [x] ドキュメント: Cloud Run 関連の internal_docs をサブモジュール移管告知に差し替え、`README.md` と `internal_docs/system_overview.md` にプラグイン導入手順を追記。
+- [x] テスト: `cd backend && pytest -q`（Firestore 実装削除後の回帰確認）。
+
+## 139. ライセンスを AGPLv3 へ更新（2025-10-23）
+- [x] ライセンス本文: ルート `LICENSE` と `frontend/public/LICENSE`、`frontend/public/docs/LICENSE_AGPL-3.0.md`、`frontend/dist/LICENSE` を AGPLv3 へ差し替え。
+- [x] UI 反映: `frontend/src/pages/AdminLicense.tsx` のライセンス判別ロジックと説明文を AGPLv3 向けに更新。
+- [x] ドキュメント: `README.md` に AGPLv3 への変更を明記し、`internal_docs/implementation.md` の既存記録を補足更新。
+- [x] ビルド: `cd frontend && npm run build`（AGPL 表記に合わせた dist 再生成）。
+
+## 140. LLM 追加質問フォールバックの無効化（2025-10-23）
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py` のフォールバック処理を更新し、リモート問い合わせ失敗時は追加質問を提示しないようにした。
+- [x] テスト更新: `backend/tests/test_api.py` の LLM 関連テストを、フォールバックが空配列を返す前提に合わせて更新。
+- [x] サブモジュール整備: `private/cloud-run-adapter` サブモジュールを追加し、Firestore アダプタと Secret Manager 連携をプライベートリポジトリで提供するよう分離。
+- [x] テスト: `cd backend && pytest -q`。
+
+## 141. 環境変数サンプルの分離（2025-10-23）
+- [x] 変更（ルート）: `.env.example` をローカル開発用に整理し、Cloud Run 用の設定例を削除。
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/.env.cloudrun.example` を追加し、Cloud Run 向け環境変数サンプルを非公開リポジトリで管理。
+- [x] ドキュメント: `README.md` と `internal_docs/system_overview.md` に Cloud Run 版 `.env` の参照先を追記。
+
+## 142. Firestore エミュレータ設定の補完（2025-10-24）
+- [x] 変更（ルート）: `.env` の `FIRESTORE_EMULATOR_HOST` を `127.0.0.1:8081` に修正し、Firebase Emulator Suite の既定ポートに合わせた。
+- [ ] 動作確認: Firestore エミュレータ接続での `pytest backend/tests/test_firestore_adapter.py` は次回のバックエンド検証タスクで実行予定。
+
+## 143. Firestore テンプレート初期化のトランザクション修正（2025-10-24）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/monshinmate_cloud/firestore_adapter.py` の `upsert_template` でトランザクション内の read/write 順序を調整し、先に `template_ref` と `variant_ref` を取得してから書き込みを行うようにして `ReadAfterWriteError` を回避。
+- [x] 変更（サブモジュール）: Firestore `init` 時に `admin` ユーザーが存在しない場合は `ADMIN_PASSWORD`（未設定時は `admin`）でシードし、初回ログインできなくなる問題を解消。
+- [ ] 動作確認: Firebase エミュレータで `dev.sh` 起動確認を再実施予定。
+
+## 144. Secret Manager 登録メモの追記（2025-10-24）
+- [x] ドキュメント（サブモジュール）: `private/cloud-run-adapter/README.md` に「Secrets」節を追加し、GSM で管理するシークレットの一覧（ID のみ）と運用ルール（値はコミットしない、権限、確認手順、ローテーション方針、複数テナント時のプレフィックス運用）を明記。
+- [x] 登録済み ID を記録（値は非掲載）: `monshinmate-ADMIN_PASSWORD` / `monshinmate-LLM_API_KEY` / `monshinmate-SECRET_KEY` / `monshinmate-TOTP_ENC_KEY`。
+- [x] 既存方針と整合: `internal_docs/admin_system_setup.md` の TOTP 暗号化手順と `backend/app/config.py` の Secret Manager 設定項目にリンクを合わせた。
+- [x] 追加（ビルド/デプロイ自動化 2025-10-25）
+  - 変更: `backend/Dockerfile` に `ARG ENABLE_GCP` を導入し、GCP 依存の `pip install` を条件分岐（既定 0）。サブモジュール依存のコピーは削除。
+  - 移管: GCP 関連の Cloud Build 設定とデプロイスクリプトをサブモジュール側へ移動。
+    - `private/cloud-run-adapter/cloudbuild.yaml`
+    - `private/cloud-run-adapter/tools/gcp/*.sh`
+  - ルートから削除: `cloudbuild.yaml`, `.gcloudignore`, `tools/gcp/*`。`Makefile` の GCP ターゲットは廃止（サブモジュールのスクリプトを直接利用）。
+  - 実行方法: ルートで `gcloud builds submit --config private/cloud-run-adapter/cloudbuild.yaml ...` を使用。
+
+## 145. Cloud Run 向け CORS 許可の実装（2025-10-26）
+- [x] 変更（バックエンド）: `backend/app/main.py` に `CORSMiddleware` を追加し、`FRONTEND_ALLOWED_ORIGINS` を読み取って許可リストを構成。未設定で `MONSHINMATE_ENV=local` の場合は `localhost:5173` 系を自動許可するフォールバックを実装。
+- [x] 変更（環境変数サンプル）: `.env.example` に `FRONTEND_ALLOWED_ORIGINS` のサンプル値を追記。Cloud Run 用 `.env` には本番ドメインを設定。
+- [x] ドキュメント: `internal_docs/system_overview.md` に CORS 設定の説明を追加。
+
+## 146. Cloud Run フロントエンドのヘッダバッファ調整（2025-10-26）
+- [x] 変更（フロントエンド Nginx）: `frontend/nginx.conf.template` に `proxy_buffer_size`・`proxy_buffers`・`proxy_busy_buffers_size` を追加し、大きめのレスポンスヘッダ（JWT 等）でも 502 を返さず通過できるようにした。
+- [x] ビルド＆デプロイ: `gcloud builds submit --config private/cloud-run-adapter/cloudbuild.yaml --substitutions _TAG=prod-20251026-buf2` → `ENV_FILE=/tmp/deploy.env TAG=prod-20251026-buf2 private/cloud-run-adapter/tools/gcp/deploy_stack.sh` で Cloud Run (backend/frontend) を再デプロイし、デプロイ後に `gcloud run services update monshinmate-backend --env-vars-file=/tmp/backend_env.yaml` で CORS 許可オリジン（Cloud Run ドメイン + カスタムドメイン）を反映。
+- [x] 動作確認: `curl https://monshinmate-frontend-s42tflqaoq-an.a.run.app/admin/auth/status` と `curl -X POST .../admin/login`（Origin 付き含む）が 200 を返すこと、カスタムドメイン `https://monshinmate.maruguchi-clinic.com` からも同様にログインできることを確認。
+
+## 147. 問診テンプレート設定エクスポートの拡張（2025-10-27）
+- [x] 変更（バックエンド）: `backend/app/db/sqlite_adapter.py` でエクスポート対象に `app_settings` と `llm_settings` を追加し、インポート時に既存設定へマージ/置換できるよう更新。`backend/app/main.py` ではロゴファイルの入出力と LLM 設定の即時反映を実装。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminDataTransfer.tsx` の説明文を更新し、LLM 設定やブランド設定も含む旨を明記。
+- [x] ドキュメント: `docs/admin_user_manual.md` と `internal_docs/system_overview.md` のバックアップ節を更新し、出力対象がテンプレート以外の設定にも拡張されたことを追記。
+- [x] テスト: `backend/tests/test_export_import.py` にロゴ・LLM 設定を含むエクスポート/インポートの往復確認を追加。
+
+=======
+
+## 148. Cloud Run リージョン調整（2025-10-27）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/common.sh` の `latest_tag_for_image` で `--project` を明示し、Artifact Registry のタグ取得がリージョン依存にならないようにした。
+- [x] 変更（ルート／サブモジュール）: デフォルトリージョンを `asia-northeast1`（東京）に戻し、`build_and_push.sh` / `deploy_*` スクリプトおよび Cloud Build 設定が東京リージョンを前提として動作するように修正（環境変数 `REGION` への依存を廃止し、スクリプト内で固定値を使用）。
+- [x] サンプル環境変数: `.env` / `private/cloud-run-adapter/.env.cloudrun.example` に `REGION=asia-northeast1` と `REPO=monshinmate` を設定し、`SECRET_PRUNE_OLD_VERSIONS` / `SECRET_VERSION_RETENTION` で Secret Manager バージョン整理を自動化。
+- [x] CORS 設定: Cloud Run デフォルトドメインからのアクセスを許可するため、`FRONTEND_ALLOWED_ORIGINS` に `run.app` ドメインを追加し、再デプロイ後のプリフライト 400 を解消。
+- [ ] 動作確認: `REGION=asia-northeast1` を指定した `build_and_push.sh` → `deploy_stack.sh` を実行し、Cloud Run (backend/frontend) の最新リビジョンが東京リージョンの Artifact Registry イメージに切り替わったことをログ付きで確認する。
+
+## 149. ロゴアップロード後のエラー解消とプレビュー拡充（2025-10-29）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx` でアップロード完了時に未定義の `setIsCropEditing` を呼び出していた箇所を `openCropModal` へ差し替え、通知に「ロゴのアップロードに失敗しました / setIsCropEditing is not defined」が表示される問題を解消。
+- [x] プレビュー改善: ロゴ表示例を `患者画面ヘッダー（28px 丸型）` と `正方形プレビュー（64px）` の2種類で並列表示し、トリミング結果を円形と四角形の双方で確認できるようにした。
+- [x] ビルド確認: `cd frontend && npm run build`（警告のみ、ビルド成功）。
+
+## 150. Cloud Run デプロイタグの自動連携（2025-10-29）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/common.sh` にタグキャッシュの読み書きを追加し、`build_and_push.sh` で最新タグを `.latest_tag` に保存、`deploy_*` スクリプトで優先的に参照するよう更新。
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/deploy_frontend.sh` / `deploy_backend_firestore.sh` / `deploy_backend_couchdb.sh` がタグ未指定時にキャッシュを使い、フォールバックで Artifact Registry から最新タグを解決するよう調整。
+- [x] 変更（ルート）: `.gitignore` に `private/cloud-run-adapter/.latest_tag` を追加し、タグキャッシュがリポジトリを汚さないようにした。
+- [ ] 動作確認: `TAG` 未指定で `build_and_push.sh` → `deploy_stack.sh` を実行し、キャッシュされたタグで backend/frontend が再デプロイされることをログで確認する。

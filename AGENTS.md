@@ -25,10 +25,20 @@
 - `dev.sh` / `dev.ps1` / `Makefile`: ローカル開発用の起動・テストコマンド集。
 - `docker-compose.yml`: CouchDB + backend + frontend の統合環境。
 
+## GCP 関連コンテンツの配置方針（重要）
+- GCP のコンテナデプロイに関わる記載・スクリプト・Cloud Build 設定は、原則としてサブモジュール `private/cloud-run-adapter` 配下に置くこと。
+  - 例: `private/cloud-run-adapter/cloudbuild.yaml`, `private/cloud-run-adapter/tools/gcp/*.sh`
+  - ルートリポジトリには最小限の参照（README からの案内など）のみを残し、具体的な実行スクリプトや設定ファイルは置かない。
+- ルートの Dockerfile は汎用（SQLite/CouchDB 前提）を維持する。GCP 依存の同梱や手順はサブモジュール側の設定・スクリプトで対応する。
+- Cloud Build を利用する場合は、リポジトリのルートで `--config private/cloud-run-adapter/cloudbuild.yaml` を指定して実行する運用とする。
+
+
 ## 5. 開発環境の準備と起動
 ### 5.1 共通前提
 - 必須バージョン: Python 3.11 以上、Node.js 18 以上、npm または pnpm/yarn。Docker Compose はオプション。
 - Python の依存関係は必ず仮想環境（`python -m venv venv`）にインストールする。共有環境にグローバルインストールしない。
+- Cloud Run / Firestore 対応は `private/cloud-run-adapter` サブモジュール（非公開リポジトリ）で管理し、本リポジトリには含めない。サブモジュールの参照だけを更新すること。
+
 - `.env` は `backend/.env` を基点に作成し、機密情報はコミットしない。
 
 ### 5.2 バックエンド
@@ -91,8 +101,14 @@ docker compose up -d
 
 ## 10. ドキュメント更新
 - `docs/`（公開向け）と `internal_docs/`（社内向け）で内容が二重管理されているため、更新時は両方の整合性を必ず確認する。
-- 公開用に成果物をまとめるときは `make export-public` あるいは `bash tools/export_public.sh public_export` を使用し、内部資料が混入しないようにする。
+- 公開用に成果物をまとめる必要がある場合のみ `make export-public` / `bash tools/export_public.sh <dir>` を使い、一時ディレクトリでスナップショットを作成する（生成後は不要になったら削除する）。
 - UI やワークフローを変更した場合は `docs/admin_user_manual.md` と `docs/session_api.md` の該当箇所を更新する。
+- **内部ドキュメントの役割整理**（重複参照を避けるため必読）
+  - `internal_docs/system_overview.md`: 現行実装の一次情報。エージェントはまずここを参照し、システム構成・LLM 接続・データフローを把握する。
+  - `internal_docs/implementation.md`: 実装履歴と判断メモのログ。進捗更新・未解決事項の記録先として継続利用する。
+  - `internal_docs/plannedSystem.md`, `internal_docs/PlannedDesign.md`: 初期計画・設計のアーカイブ。背景確認が必要な場合のみ参照し、現行仕様の根拠には用いない。
+  - `internal_docs/LLMcommunication.md`: LLM 接続手順の補足資料。最新の通信手順は `system_overview.md` の LLM 節を基にし、本ファイルは具体的なコマンド例を確認したい場合に限定する。
+  - `internal_docs/admin_system_setup.md`: 管理者向け運用手順（パスワード・TOTP・非常用リセット）。セキュリティ関連の作業前に必ず参照する。
 
 ## 11. 納品前チェックリスト
 - [ ] コード・設定の変更内容を説明できるか（Why/How を整理済みか）。

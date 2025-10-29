@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-  <title>足底</title>
-  <rect id="foot_plantar" x="40" y="80" width="120" height="60" stroke="black" fill="none"/>
-  <rect id="toe1_plantar" x="60" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="toe2_plantar" x="80" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="toe3_plantar" x="100" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="toe4_plantar" x="120" y="40" width="20" height="40" stroke="black" fill="none"/>
-  <rect id="toe5_plantar" x="140" y="40" width="20" height="40" stroke="black" fill="none"/>
-</svg>

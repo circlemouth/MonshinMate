@@ -61,6 +61,7 @@ const presetValues = colorPresets.map((preset) => preset.value);
 const defaultCustomColor = '#000000';
 const defaultCropState = { x: 0, y: 0, w: 1, h: 1 } as const;
 const logoDisplaySizePx = 28;
+const logoSquarePreviewSizePx = 64;
 const STORAGE_KEY_NATIVE_NOTIFICATIONS = 'monshin.admin.nativeNotificationsEnabled';
 
 function getContrastingIconColor(hex: string): 'black' | 'white' {
@@ -551,43 +552,58 @@ export default function AdminAppearance() {
 
   const customButtonIconColor = getContrastingIconColor(customColor);
 
-  const iconPreview = useMemo(() => {
-    const baseProps = {
-      w: `${logoDisplaySizePx}px`,
-      h: `${logoDisplaySizePx}px`,
-      borderRadius: 'full',
-      overflow: 'hidden' as const,
-      bg: 'gray.100',
-      _dark: { bg: 'gray.700' },
-      borderWidth: '1px',
-      borderColor: 'gray.200',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    };
-    if (!logoUrl) {
+  const renderLogoPreview = useCallback(
+    (shape: 'circle' | 'square', sizePx: number) => {
+      const dimension = `${sizePx}px`;
+      if (!logoUrl) {
+        return (
+          <Box
+            w={dimension}
+            h={dimension}
+            borderRadius={shape === 'circle' ? 'full' : 'md'}
+            overflow="hidden"
+            bg="gray.100"
+            _dark={{ bg: 'gray.700' }}
+            borderWidth="1px"
+            borderColor="gray.200"
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+          >
+            <Text fontSize="xs" color="fg.muted">
+              N/A
+            </Text>
+          </Box>
+        );
+      }
+      const x = crop.x ?? 0;
+      const y = crop.y ?? 0;
+      const w = crop.w || 1;
+      const transform = `translate(${-x * 100}%, ${-y * 100}%) scale(${1 / (w || 1)})`;
       return (
-        <Box {...baseProps}>
-          <Text fontSize="xs" color="fg.muted">
-            N/A
-          </Text>
+        <Box
+          w={dimension}
+          h={dimension}
+          borderRadius={shape === 'circle' ? 'full' : 'md'}
+          overflow="hidden"
+          bg="gray.100"
+          _dark={{ bg: 'gray.700' }}
+          borderWidth="1px"
+          borderColor="gray.200"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+        >
+          <img
+            src={logoUrl}
+            alt="logo preview"
+            style={{ width: '100%', height: 'auto', transform, transformOrigin: 'top left', display: 'block' }}
+          />
         </Box>
       );
-    }
-    const x = crop.x ?? 0;
-    const y = crop.y ?? 0;
-    const w = crop.w || 1;
-    const transform = `translate(${-x * 100}%, ${-y * 100}%) scale(${1 / (w || 1)})`;
-    return (
-      <Box {...baseProps}>
-        <img
-          src={logoUrl}
-          alt="logo preview"
-          style={{ width: '100%', height: 'auto', transform, transformOrigin: 'top left', display: 'block' }}
-        />
-      </Box>
-    );
-  }, [logoUrl, crop]);
+    },
+    [logoUrl, crop]
+  );
 
   const uploadLogo = async (file: File) => {
     const fd = new FormData();
@@ -609,7 +625,7 @@ export default function AdminAppearance() {
       const url = d.url as string;
       setLogoUrl(url);
       setCrop(defaultCrop);
-      setIsCropEditing(true);
+      openCropModal();
       const res = await fetch('/system/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -806,11 +822,24 @@ export default function AdminAppearance() {
             </Text>
             <AutoSaveStatusText status={logoStatus} message={logoError} />
             <HStack align="flex-start" spacing={6} flexWrap="wrap">
-              <VStack spacing={2} align="center" minW="120px">
+              <VStack spacing={3} align="center" minW="200px">
                 <Text fontSize="sm" color="fg.muted" textAlign="center">
-                  ヘッダー表示例（{logoDisplaySizePx}px）
+                  プレビュー
                 </Text>
-                {iconPreview}
+                <Stack direction={{ base: 'column', sm: 'row' }} spacing={4} align="center">
+                  <VStack spacing={1} align="center">
+                    <Text fontSize="xs" color="fg.muted">
+                      患者画面ヘッダー（{logoDisplaySizePx}px）
+                    </Text>
+                    {renderLogoPreview('circle', logoDisplaySizePx)}
+                  </VStack>
+                  <VStack spacing={1} align="center">
+                    <Text fontSize="xs" color="fg.muted">
+                      正方形プレビュー（{logoSquarePreviewSizePx}px）
+                    </Text>
+                    {renderLogoPreview('square', logoSquarePreviewSizePx)}
+                  </VStack>
+                </Stack>
                 {logoUrl ? (
                   <Button size="sm" variant="solid" colorScheme="primary" onClick={openCropModal}>
                     表示範囲を調整

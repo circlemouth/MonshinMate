@@ -18,7 +18,7 @@ def _reset_database() -> None:
 
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from app.main import app, IMAGE_DIR  # noqa: E402
+from app.main import app, IMAGE_DIR, LOGO_DIR  # noqa: E402
 from app.db import init_db, get_session as db_get_session, get_template as db_get_template  # noqa: E402
 
 
@@ -28,6 +28,13 @@ client = TestClient(app)
 def _clean_images() -> None:
     IMAGE_DIR.mkdir(parents=True, exist_ok=True)
     for child in IMAGE_DIR.glob("*"):
+        if child.is_file():
+            child.unlink()
+
+
+def _clean_logos() -> None:
+    LOGO_DIR.mkdir(parents=True, exist_ok=True)
+    for child in LOGO_DIR.glob("*"):
         if child.is_file():
             child.unlink()
 
@@ -61,7 +68,40 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     _reset_database()
     init_db()
     _clean_images()
+    _clean_logos()
     _prepare_sample_template()
+
+    initial_llm = client.get("/llm/settings")
+    assert initial_llm.status_code == 200
+    original_llm_settings = initial_llm.json()
+
+    display_name_res = client.put("/system/display-name", json={"display_name": "テスト医院"})
+    assert display_name_res.status_code == 200
+    theme_res = client.put("/system/theme-color", json={"color": "#123abc"})
+    assert theme_res.status_code == 200
+    logo_upload = client.post(
+        "/system-logo",
+        files={"file": ("clinic-logo.png", b"logo-data", "image/png")},
+    )
+    assert logo_upload.status_code == 200
+    logo_url = logo_upload.json()["url"]
+    logo_set = client.put(
+        "/system/logo",
+        json={"url": logo_url, "crop": {"x": 0, "y": 0, "w": 1, "h": 1}},
+    )
+    assert logo_set.status_code == 200
+    llm_payload = {
+        "provider": "openai",
+        "model": "gpt-test",
+        "temperature": 0.2,
+        "system_prompt": "test",
+        "enabled": True,
+        "base_url": "http://localhost",  # pragma: allowlist secret
+        "api_key": "dummy-key",  # pragma: allowlist secret
+        "followup_timeout_seconds": 45,
+    }
+    llm_res = client.put("/llm/settings", json=llm_payload)
+    assert llm_res.status_code == 200
 
     export_res = client.post("/admin/questionnaires/export", json={"password": "secret"})
     assert export_res.status_code == 200
@@ -77,14 +117,25 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     payload = json.loads(cipher.decrypt(base64.b64decode(envelope["payload"])))
     assert any(tpl["id"] == "default" for tpl in payload["templates"])
     assert "export-test.png" in payload["images"]
+    assert payload.get("app_settings", {}).get("display_name") == "テスト医院"
+    assert payload.get("llm_settings", {}).get("model") == "gpt-test"
+    logo_files = payload.get("logo_files", {})
+    assert logo_files
+    logo_filename = next(iter(logo_files.keys()))
+    assert logo_filename.endswith("clinic-logo.png")
+    first_logo_data = logo_files[logo_filename]
+    assert isinstance(first_logo_data, str) and first_logo_data
 
     # インポート前にテンプレートと画像を削除して差分を確認する
     if (IMAGE_DIR / "export-test.png").exists():
         (IMAGE_DIR / "export-test.png").unlink()
+    _clean_logos()
     conn = sqlite3.connect(DB_PATH)
     conn.execute("DELETE FROM questionnaire_templates")
     conn.execute("DELETE FROM summary_prompts")
     conn.execute("DELETE FROM followup_prompts")
+    conn.execute("DELETE FROM app_settings")
+    conn.execute("DELETE FROM llm_settings")
     conn.commit()
     conn.close()
 
@@ -102,17 +153,34 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
         files={"file": ("settings.json", export_res.content, "application/json")},
     )
     assert good_import.status_code == 200
+    body = good_import.json()
+    assert body["logos_restored"] == 1
 
     tpl = db_get_template("default", "initial")
     assert tpl is not None
     assert any(it.get("image", "").endswith("export-test.png") for it in tpl["items"])
     assert (IMAGE_DIR / "export-test.png").exists()
+    assert (LOGO_DIR / logo_filename).exists()
+
+    display_after = client.get("/system/display-name")
+    assert display_after.status_code == 200
+    assert display_after.json()["display_name"] == "テスト医院"
+    logo_after = client.get("/system/logo")
+    assert logo_after.status_code == 200
+    assert logo_after.json()["url"].endswith(logo_filename)
+    llm_after = client.get("/llm/settings")
+    assert llm_after.status_code == 200
+    assert llm_after.json()["model"] == "gpt-test"
+
+    # 後続テストに影響しないよう LLM 設定を初期値へ戻す
+    client.put("/llm/settings", json=original_llm_settings)
 
 
 def test_questionnaire_export_normalizes_absolute_image_url() -> None:
     _reset_database()
     init_db()
     _clean_images()
+    _clean_logos()
     image_path = IMAGE_DIR / "export-abs.png"
     image_path.write_bytes(b"abs-image")
 
@@ -170,6 +238,7 @@ def test_session_export_import_roundtrip() -> None:
     _reset_database()
     init_db()
     _clean_images()
+    _clean_logos()
     payload = {
         "patient_name": "輸出太郎",
         "dob": "1990-01-01",
