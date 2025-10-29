@@ -51,6 +51,7 @@ backend/dist/
 **/.env.*
 !**/.env.example
 !**/.env.*.example
+private/cloud-run-adapter/.latest_tag
 
 # ランタイムデータ・ログ
 data/

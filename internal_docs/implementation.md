@@ -1209,3 +1209,13 @@
 - [x] CORS 設定: Cloud Run デフォルトドメインからのアクセスを許可するため、`FRONTEND_ALLOWED_ORIGINS` に `run.app` ドメインを追加し、再デプロイ後のプリフライト 400 を解消。
 - [ ] 動作確認: `REGION=asia-northeast1` を指定した `build_and_push.sh` → `deploy_stack.sh` を実行し、Cloud Run (backend/frontend) の最新リビジョンが東京リージョンの Artifact Registry イメージに切り替わったことをログ付きで確認する。
 
+## 149. ロゴアップロード後のエラー解消とプレビュー拡充（2025-10-29）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminAppearance.tsx` でアップロード完了時に未定義の `setIsCropEditing` を呼び出していた箇所を `openCropModal` へ差し替え、通知に「ロゴのアップロードに失敗しました / setIsCropEditing is not defined」が表示される問題を解消。
+- [x] プレビュー改善: ロゴ表示例を `患者画面ヘッダー（28px 丸型）` と `正方形プレビュー（64px）` の2種類で並列表示し、トリミング結果を円形と四角形の双方で確認できるようにした。
+- [x] ビルド確認: `cd frontend && npm run build`（警告のみ、ビルド成功）。
+
+## 150. Cloud Run デプロイタグの自動連携（2025-10-29）
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/common.sh` にタグキャッシュの読み書きを追加し、`build_and_push.sh` で最新タグを `.latest_tag` に保存、`deploy_*` スクリプトで優先的に参照するよう更新。
+- [x] 変更（サブモジュール）: `private/cloud-run-adapter/tools/gcp/deploy_frontend.sh` / `deploy_backend_firestore.sh` / `deploy_backend_couchdb.sh` がタグ未指定時にキャッシュを使い、フォールバックで Artifact Registry から最新タグを解決するよう調整。
+- [x] 変更（ルート）: `.gitignore` に `private/cloud-run-adapter/.latest_tag` を追加し、タグキャッシュがリポジトリを汚さないようにした。
+- [ ] 動作確認: `TAG` 未指定で `build_and_push.sh` → `deploy_stack.sh` を実行し、キャッシュされたタグで backend/frontend が再デプロイされることをログで確認する。
