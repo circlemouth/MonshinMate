@@ -1,4 +1,4 @@
-"""FastAPI バックエンドのエントリポイント。
+﻿"""FastAPI バックエンドのエントリポイント。
 
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
@@ -17,6 +17,7 @@ import json
 import base64
 import hashlib
 import secrets
+import mimetypes
 from urllib.parse import urlparse
 from pathlib import Path
 try:
@@ -33,8 +34,6 @@ load_dotenv(_PROJECT_ROOT / ".env")
 from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from fastapi.staticfiles import StaticFiles
-import shutil
 import sqlite3
 from pydantic import BaseModel, Field
 import pyotp
@@ -90,6 +89,10 @@ from .db import (
     import_sessions_data,
     delete_session as db_delete_session,
     delete_sessions as db_delete_sessions,
+    save_binary_asset,
+    load_binary_asset,
+    delete_binary_asset,
+    list_binary_assets,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -142,21 +145,12 @@ if _allowed_origins:
 
 # 問診項目画像の保存先を初期化し、静的配信を行う
 IMAGE_DIR = Path(__file__).resolve().parent / "questionnaire_item_images"
-IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-app.mount(
-    "/questionnaire-item-images/files",
-    StaticFiles(directory=str(IMAGE_DIR)),
-    name="questionnaire-item-images",
-)
-
 # System logo/icon storage
 LOGO_DIR = Path(__file__).resolve().parent / "system_logo"
-LOGO_DIR.mkdir(parents=True, exist_ok=True)
-app.mount(
-    "/system-logo/files",
-    StaticFiles(directory=str(LOGO_DIR)),
-    name="system-logo",
-)
+
+# カテゴリ識別子（DB 永続化用）
+QUESTIONNAIRE_IMAGE_CATEGORY = "questionnaire_item_image"
+SYSTEM_LOGO_CATEGORY = "system_logo_image"
 
 logger = logging.getLogger("api")
 
@@ -357,10 +351,13 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
             sanitized = _sanitize_image_filename(name)
         except ValueError:
             continue
-        path = IMAGE_DIR / sanitized
-        if not path.exists() or not path.is_file():
+        asset = load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, sanitized)
+        if not asset:
             continue
-        payloads[sanitized] = base64.b64encode(path.read_bytes()).decode("ascii")
+        content = asset.get("content")
+        if not isinstance(content, (bytes, bytearray)):
+            continue
+        payloads[sanitized] = base64.b64encode(bytes(content)).decode("ascii")
     return payloads
 
 
@@ -377,10 +374,13 @@ def _canonicalize_logo_url(raw_url: Any) -> tuple[str | None, dict[str, str]]:
         sanitized = _sanitize_image_filename(filename)
     except ValueError:
         return trimmed, {}
-    path = LOGO_DIR / sanitized
-    if not path.exists() or not path.is_file():
+    asset = load_binary_asset(SYSTEM_LOGO_CATEGORY, sanitized)
+    if not asset:
         return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {}
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    content = asset.get("content")
+    if not isinstance(content, (bytes, bytearray)):
+        return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {}
+    encoded = base64.b64encode(bytes(content)).decode("ascii")
     return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {sanitized: encoded}
 
 
@@ -414,21 +414,17 @@ def _sanitize_app_settings_payload(settings: Any) -> dict[str, Any]:
     return sanitized
 
 
+
 def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
+    if mode == "replace":
+        for asset in list_binary_assets(SYSTEM_LOGO_CATEGORY):
+            asset_id = asset.get("id")
+            if asset_id:
+                delete_binary_asset(SYSTEM_LOGO_CATEGORY, str(asset_id))
     if not logo_payloads:
-        if mode == "replace":
-            # replace 指定時は既存ロゴを削除
-            for child in LOGO_DIR.glob("*"):
-                if child.is_file():
-                    child.unlink()
         return 0
     if not isinstance(logo_payloads, dict):
         raise HTTPException(status_code=400, detail="invalid_logo_payload")
-    LOGO_DIR.mkdir(parents=True, exist_ok=True)
-    if mode == "replace":
-        for child in LOGO_DIR.glob("*"):
-            if child.is_file():
-                child.unlink()
     restored = 0
     for name, encoded in logo_payloads.items():
         if not isinstance(name, str) or not isinstance(encoded, str):
@@ -439,25 +435,31 @@ def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
             continue
         try:
             data = base64.b64decode(encoded)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_logo_payload")
-        target = LOGO_DIR / sanitized
-        target.write_bytes(data)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="invalid_logo_payload") from exc
+        media_type = mimetypes.guess_type(sanitized)[0]
+        save_binary_asset(
+            SYSTEM_LOGO_CATEGORY,
+            data,
+            sanitized,
+            content_type=media_type,
+            asset_id=sanitized,
+        )
         restored += 1
     return restored
 
 
 def _restore_images(image_payloads: Any, mode: str) -> int:
+    if mode == "replace":
+        for asset in list_binary_assets(QUESTIONNAIRE_IMAGE_CATEGORY):
+            asset_id = asset.get("id")
+            if asset_id:
+                delete_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, str(asset_id))
     if not image_payloads:
         return 0
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    if mode == "replace":
-        for child in IMAGE_DIR.glob("*"):
-            if child.is_file():
-                child.unlink()
-    restored = 0
     if not isinstance(image_payloads, dict):
         raise HTTPException(status_code=400, detail="invalid_image_payload")
+    restored = 0
     for name, encoded in image_payloads.items():
         if not isinstance(name, str) or not isinstance(encoded, str):
             continue
@@ -467,12 +469,53 @@ def _restore_images(image_payloads: Any, mode: str) -> int:
             continue
         try:
             data = base64.b64decode(encoded)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_image_payload")
-        with (IMAGE_DIR / sanitized).open("wb") as fp:
-            fp.write(data)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="invalid_image_payload") from exc
+        media_type = mimetypes.guess_type(sanitized)[0]
+        save_binary_asset(
+            QUESTIONNAIRE_IMAGE_CATEGORY,
+            data,
+            sanitized,
+            content_type=media_type,
+            asset_id=sanitized,
+        )
         restored += 1
     return restored
+
+
+
+def _build_binary_asset_response(asset: dict[str, Any], fallback_name: str) -> Response:
+    content = asset.get("content")
+    if not isinstance(content, (bytes, bytearray)):
+        raise HTTPException(status_code=404, detail="asset_not_found")
+    filename = asset.get("filename") or fallback_name
+    media_type = asset.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+    headers = {"Cache-Control": "public, max-age=86400"}
+    if filename:
+        headers["Content-Disposition"] = f"inline; filename={filename}"
+    return Response(content=bytes(content), media_type=media_type, headers=headers)
+
+
+@app.get("/questionnaire-item-images/files/{filename}")
+def fetch_questionnaire_item_image(filename: str) -> Response:
+    """問診項目画像を DB から取得して返す。"""
+    if not IMAGE_FILENAME_PATTERN.fullmatch(filename):
+        raise HTTPException(status_code=404, detail="image_not_found")
+    asset = load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, filename)
+    if not asset:
+        raise HTTPException(status_code=404, detail="image_not_found")
+    return _build_binary_asset_response(asset, filename)
+
+
+@app.get("/system-logo/files/{filename}")
+def fetch_system_logo(filename: str) -> Response:
+    """システムロゴ画像を DB から取得して返す。"""
+    if not IMAGE_FILENAME_PATTERN.fullmatch(filename):
+        raise HTTPException(status_code=404, detail="logo_not_found")
+    asset = load_binary_asset(SYSTEM_LOGO_CATEGORY, filename)
+    if not asset:
+        raise HTTPException(status_code=404, detail="logo_not_found")
+    return _build_binary_asset_response(asset, filename)
 
 
 @app.middleware("http")
@@ -879,6 +922,7 @@ def make_default_followup_items() -> list[dict[str, Any]]:
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
+    _migrate_legacy_assets()
     # 監査ログ（security）をファイルにも出力
     try:
         log_dir = Path(__file__).resolve().parent / "logs"
@@ -1455,25 +1499,92 @@ async def import_questionnaire_settings_api(
     }
 
 
+
+def _migrate_legacy_assets() -> None:
+    """ファイルシステムに残っている旧画像を DB へ移行する。"""
+    migrated = 0
+    try:
+        if IMAGE_DIR.exists():
+            for path in IMAGE_DIR.glob("*"):
+                if not path.is_file():
+                    continue
+                try:
+                    asset_id = _sanitize_image_filename(path.name)
+                except ValueError:
+                    continue
+                if load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, asset_id):
+                    continue
+                data = path.read_bytes()
+                if not data:
+                    continue
+                media_type = mimetypes.guess_type(asset_id)[0]
+                save_binary_asset(
+                    QUESTIONNAIRE_IMAGE_CATEGORY,
+                    data,
+                    asset_id,
+                    content_type=media_type,
+                    asset_id=asset_id,
+                )
+                migrated += 1
+        if LOGO_DIR.exists():
+            for path in LOGO_DIR.glob("*"):
+                if not path.is_file():
+                    continue
+                try:
+                    asset_id = _sanitize_image_filename(path.name)
+                except ValueError:
+                    continue
+                if load_binary_asset(SYSTEM_LOGO_CATEGORY, asset_id):
+                    continue
+                data = path.read_bytes()
+                if not data:
+                    continue
+                media_type = mimetypes.guess_type(asset_id)[0]
+                save_binary_asset(
+                    SYSTEM_LOGO_CATEGORY,
+                    data,
+                    asset_id,
+                    content_type=media_type,
+                    asset_id=asset_id,
+                )
+                migrated += 1
+        if migrated:
+            logger.info("legacy_asset_migration_completed count=%d", migrated)
+    except Exception:
+        logger.exception("legacy_asset_migration_failed")
 @app.post("/questionnaire-item-images")
 def upload_questionnaire_item_image(file: UploadFile = File(...)) -> dict:
-    """問診項目に添付する画像をアップロードし、URLを返す。"""
-    suffix = Path(file.filename).suffix
-    filename = f"{uuid4().hex}{suffix}"
-    dest = IMAGE_DIR / filename
-    with dest.open("wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    return {"url": f"/questionnaire-item-images/files/{filename}"}
+    """問診項目に添付する画像をアップロードし、URL を返す。"""
+    suffix = Path(file.filename or "").suffix or ".png"
+    raw_name = f"{uuid4().hex}{suffix}"
+    try:
+        sanitized = _sanitize_image_filename(raw_name)
+    except ValueError:
+        sanitized = _sanitize_image_filename(f"{uuid4().hex}.png")
+    try:
+        data = file.file.read()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="failed_to_read_image") from exc
+    if not data:
+        raise HTTPException(status_code=400, detail="empty_image_payload")
+    media_type = file.content_type or mimetypes.guess_type(sanitized)[0]
+    save_binary_asset(
+        QUESTIONNAIRE_IMAGE_CATEGORY,
+        data,
+        sanitized,
+        content_type=media_type,
+        asset_id=sanitized,
+    )
+    return {"url": f"/{IMAGE_STORAGE_SEGMENT}{sanitized}"}
 
 
 @app.delete("/questionnaire-item-images/{filename}")
 def delete_questionnaire_item_image(filename: str) -> dict:
     """アップロード済みの問診項目画像を削除する。"""
-    target = IMAGE_DIR / filename
-    if target.exists():
-        target.unlink()
+    if not filename or not IMAGE_FILENAME_PATTERN.fullmatch(filename):
+        return {"status": "ok"}
+    delete_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, filename)
     return {"status": "ok"}
-
 
 @app.get("/questionnaires/{questionnaire_id}/summary-prompt")
 def get_summary_prompt_api(questionnaire_id: str, visit_type: str) -> dict:
@@ -2174,21 +2285,27 @@ def set_system_logo(payload: LogoSettings) -> LogoSettings:
 
 @app.post("/system-logo")
 def upload_system_logo(file: UploadFile = File(...)) -> dict:
-    """システムロゴ画像をアップロードし、参照URLを返す。"""
-    # reuse questionnaire image filename sanitizer
-    filename = Path(file.filename or "").name
+    """システムロゴ画像をアップロードし、参照 URL を返す。"""
+    filename = Path(file.filename or "").name or f"logo_{uuid4().hex}.png"
     try:
         sanitized = _sanitize_image_filename(filename)
     except ValueError:
-        raise HTTPException(status_code=400, detail="invalid filename")
-    dest = LOGO_DIR / sanitized
+        sanitized = _sanitize_image_filename(f"logo_{uuid4().hex}.png")
     try:
-        with dest.open("wb") as fp:
-            fp.write(file.file.read())
-    except Exception:
-        raise HTTPException(status_code=500, detail="failed to save logo")
-    return {"url": f"/system-logo/files/{sanitized}"}
-
+        data = file.file.read()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="failed_to_read_logo") from exc
+    if not data:
+        raise HTTPException(status_code=400, detail="empty_logo_payload")
+    media_type = file.content_type or mimetypes.guess_type(sanitized)[0]
+    save_binary_asset(
+        SYSTEM_LOGO_CATEGORY,
+        data,
+        sanitized,
+        content_type=media_type,
+        asset_id=sanitized,
+    )
+    return {"url": f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}"}
 
 @app.get("/system/pdf-layout", response_model=PDFLayoutSettings)
 def get_pdf_layout() -> PDFLayoutSettings:
@@ -3480,3 +3597,27 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

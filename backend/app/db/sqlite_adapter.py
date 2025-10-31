@@ -1,4 +1,4 @@
-"""永続化レイヤー。
+﻿"""永続化レイヤー。
 
 テンプレート・セッション・回答を管理する。既定では SQLite を使用するが、
 環境変数で CouchDB を指定した場合はセッション情報のみ CouchDB に保存する。
@@ -14,6 +14,7 @@ from datetime import datetime, UTC
 from typing import Any, Iterable
 import base64
 import unicodedata
+from uuid import uuid4
 
 from passlib.context import CryptContext
 from cryptography.fernet import Fernet, InvalidToken
@@ -302,6 +303,27 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
                 id TEXT PRIMARY KEY,
                 json TEXT NOT NULL
             )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS binary_assets (
+                id TEXT PRIMARY KEY,
+                category TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                content_type TEXT,
+                data BLOB NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_binary_assets_category
+            ON binary_assets (category)
             """
         )
 
@@ -738,6 +760,160 @@ def load_app_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
             return None
     finally:
         conn.close()
+
+def save_binary_asset(
+    category: str,
+    data: bytes,
+    filename: str,
+    *,
+    content_type: str | None = None,
+    asset_id: str | None = None,
+    db_path: str = DEFAULT_DB_PATH,
+) -> str:
+    """バイナリアセットを保存する。asset_id を省略すると自動生成する。"""
+    if not category:
+        raise ValueError("category is required")
+    resolved_id = (asset_id or uuid4().hex).strip()
+    if not resolved_id:
+        resolved_id = uuid4().hex
+    payload = bytes(data)
+    now = datetime.now(UTC).isoformat()
+    conn = get_conn(db_path)
+    try:
+        conn.execute(
+            """
+            INSERT INTO binary_assets (id, category, filename, content_type, data, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                category=excluded.category,
+                filename=excluded.filename,
+                content_type=excluded.content_type,
+                data=excluded.data,
+                updated_at=excluded.updated_at
+            """,
+            (
+                resolved_id,
+                category,
+                filename,
+                content_type,
+                sqlite3.Binary(payload),
+                now,
+                now,
+            ),
+        )
+        conn.commit()
+        return resolved_id
+    finally:
+        conn.close()
+
+
+def load_binary_asset(
+    category: str | None,
+    asset_id: str,
+    db_path: str = DEFAULT_DB_PATH,
+) -> dict[str, Any] | None:
+    """保存済みバイナリアセットを取得する。"""
+    if not asset_id:
+        return None
+    conn = get_conn(db_path)
+    try:
+        row = conn.execute(
+            """
+            SELECT id, category, filename, content_type, data, created_at, updated_at
+            FROM binary_assets
+            WHERE id=?
+            """,
+            (asset_id,),
+        ).fetchone()
+        if not row:
+            return None
+        stored_category = row.get("category")
+        if category and stored_category and stored_category != category:
+            return None
+        raw_data = row.get("data")
+        content = bytes(raw_data or b"")
+        return {
+            "id": row["id"],
+            "category": stored_category,
+            "filename": row.get("filename"),
+            "content_type": row.get("content_type"),
+            "content": content,
+            "size": len(content),
+            "created_at": row.get("created_at"),
+            "updated_at": row.get("updated_at"),
+        }
+    finally:
+        conn.close()
+
+
+def delete_binary_asset(
+    category: str | None,
+    asset_id: str,
+    db_path: str = DEFAULT_DB_PATH,
+) -> bool:
+    """バイナリアセットを削除し、削除された場合に True を返す。"""
+    if not asset_id:
+        return False
+    conn = get_conn(db_path)
+    try:
+        if category:
+            cur = conn.execute(
+                "DELETE FROM binary_assets WHERE id=? AND category=?",
+                (asset_id, category),
+            )
+        else:
+            cur = conn.execute(
+                "DELETE FROM binary_assets WHERE id=?",
+                (asset_id,),
+            )
+        conn.commit()
+        return bool(cur.rowcount)
+    finally:
+        conn.close()
+
+
+def list_binary_assets(
+    category: str | None = None,
+    db_path: str = DEFAULT_DB_PATH,
+) -> list[dict[str, Any]]:
+    """カテゴリでフィルタしたバイナリアセットのメタデータ一覧を返す。"""
+    conn = get_conn(db_path)
+    try:
+        if category:
+            rows = conn.execute(
+                """
+                SELECT id, category, filename, content_type, LENGTH(data) AS size, created_at, updated_at
+                FROM binary_assets
+                WHERE category=?
+                ORDER BY updated_at DESC, id
+                """,
+                (category,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, category, filename, content_type, LENGTH(data) AS size, created_at, updated_at
+                FROM binary_assets
+                ORDER BY updated_at DESC, id
+                """
+            ).fetchall()
+        assets: list[dict[str, Any]] = []
+        for row in rows:
+            assets.append(
+                {
+                    "id": row["id"],
+                    "category": row.get("category"),
+                    "filename": row.get("filename"),
+                    "content_type": row.get("content_type"),
+                    "size": row.get("size"),
+                    "created_at": row.get("created_at"),
+                    "updated_at": row.get("updated_at"),
+                }
+            )
+        return assets
+    finally:
+        conn.close()
+
 
 
 def delete_template(template_id: str, visit_type: str, db_path: str = DEFAULT_DB_PATH) -> None:
@@ -2050,6 +2226,18 @@ class SQLiteAdapter:
     def load_app_settings(self, *args, **kwargs):
         return self._call_with_db_path(load_app_settings, *args, **kwargs)
 
+    def save_binary_asset(self, *args, **kwargs):
+        return self._call_with_db_path(save_binary_asset, *args, **kwargs)
+
+    def load_binary_asset(self, *args, **kwargs):
+        return self._call_with_db_path(load_binary_asset, *args, **kwargs)
+
+    def delete_binary_asset(self, *args, **kwargs):
+        return self._call_with_db_path(delete_binary_asset, *args, **kwargs)
+
+    def list_binary_assets(self, *args, **kwargs):
+        return self._call_with_db_path(list_binary_assets, *args, **kwargs)
+
     def export_questionnaire_settings(self, *args, **kwargs):
         return self._call_with_db_path(export_questionnaire_settings, *args, **kwargs)
 
@@ -2089,3 +2277,8 @@ class SQLiteAdapter:
     def shutdown(self) -> None:
         """SQLite 実装では特別な終了処理は不要。"""
         return None
+
+
+
+
+

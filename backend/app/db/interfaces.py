@@ -1,4 +1,4 @@
-"""永続化レイヤーのインターフェース定義。
+﻿"""永続化レイヤーのインターフェース定義。
 
 Cloud Run + Firebase への移行では、SQLite/CouchDB ベースの
 ローカル実装と Firestore 実装を並行して運用する必要がある。
@@ -120,8 +120,22 @@ class PersistenceAdapter(Protocol):
     def set_totp_mode(self, *args: Any, **kwargs: Any) -> None:
         ...
 
+    def save_binary_asset(self, *args: Any, **kwargs: Any) -> str:
+        ...
+
+    def load_binary_asset(self, *args: Any, **kwargs: Any) -> dict[str, Any] | None:
+        ...
+
+    def delete_binary_asset(self, *args: Any, **kwargs: Any) -> bool:
+        ...
+
+    def list_binary_assets(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
+        ...
+
     def shutdown(self) -> None:
         """終了処理を実行する（必要な場合のみ）。"""
 
 
 __all__ = ["PersistenceAdapter"]
+
+

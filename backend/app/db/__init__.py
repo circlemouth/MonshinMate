@@ -1,4 +1,4 @@
-"""永続化アダプタの切替ハブ。"""
+﻿"""永続化アダプタの切替ハブ。"""
 from __future__ import annotations
 
 import os
@@ -189,6 +189,10 @@ _METHOD_NAMES = [
     "update_totp_secret",
     "set_totp_status",
     "get_totp_mode",
+    "save_binary_asset",
+    "load_binary_asset",
+    "delete_binary_asset",
+    "list_binary_assets",
     "set_totp_mode",
 ]
 
@@ -211,3 +215,4 @@ __all__ = [
     "get_couch_db",
     "init_db",
 ] + _METHOD_NAMES
+

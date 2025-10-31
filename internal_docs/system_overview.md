@@ -1,4 +1,4 @@
-# MonshinMate システム概要（エージェント向け）
+﻿# MonshinMate システム概要（エージェント向け）
 
 ## 1. 文書の目的と対象
 - 本書は MonshinMate（問診メイト）の**現行実装**を俯瞰し、エージェントが安全に運用・拡張判断できるようにするための概要資料である。
@@ -28,7 +28,7 @@
 - **ローカル開発**: Python 3.11+ と Node.js 18+ が前提。`make dev` / `./dev.sh` でバックエンドと Vite 開発サーバを同時起動。CouchDB を使う場合は別途起動し `.env` に接続設定を記載。
 - **環境変数**: `backend/.env` とリポジトリ直下 `.env`（Docker 用）を読み込む。`MONSHINMATE_DB` を未設定の場合、`backend/app/app.sqlite3` を使用。
 - **CORS 設定**: Cloud Run 等でフロントとバックエンドを別ドメイン運用する場合は `FRONTEND_ALLOWED_ORIGINS` に許可ドメインをカンマ区切りで指定する。未設定かつ `MONSHINMATE_ENV=local` では `http://localhost:5173` 系を自動許可する。
-- **静的アセット**: 問診項目画像は `backend/app/questionnaire_item_images/`、ロゴは `backend/app/system_logo/` に保存し、FastAPI で静的配信。
+- **静的アセット**: 問診項目画像とロゴ画像はデータベースに保存し、`/questionnaire-item-images/files/*` と `/system-logo/files/*` の API から配信する（旧ディレクトリ内のファイルは起動時に自動移行）。
 
 ### 3.5 Cloud Run / Firestore 拡張
 - Cloud Run + Firestore 向けの永続化アダプタおよび Secret Manager 連携は、`private/` 配下に配置する非公開サブモジュールで提供する。
@@ -172,3 +172,4 @@
 
 ---
 本書に記載の挙動は `main` ブランチの最新コードと一致するよう随時更新すること。差異を発見した場合は、本ファイルと `internal_docs/implementation.md` 双方に記録する。
+
