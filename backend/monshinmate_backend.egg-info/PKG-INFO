@@ -16,3 +16,5 @@ Requires-Dist: python-dotenv
 Requires-Dist: couchdb
 Requires-Dist: python-multipart
 Requires-Dist: bcrypt<4
+Requires-Dist: google-auth
+Requires-Dist: requests

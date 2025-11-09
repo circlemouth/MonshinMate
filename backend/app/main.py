@@ -44,9 +44,11 @@ import httpx
 from .llm_gateway import (
     LLMGateway,
     LLMSettings,
+    ProviderProfile,
     DEFAULT_FOLLOWUP_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
 )
+from .llm_provider_registry import get_provider_meta_list, ProviderMetaSchema
 from cryptography.fernet import Fernet, InvalidToken
 
 from .config import get_settings
@@ -161,6 +163,16 @@ DEFAULT_SUMMARY_PROMPT = (
     "主訴と発症時期などの重要事項を冒頭に記載し、その後に関連情報を読みやすく整理してください。"
     "推測や不要な前置きは避け、医療従事者がすぐ理解できる表現を用いてください。"
 )
+
+
+def _ensure_default_prompts() -> None:
+    """デフォルトテンプレートのプロンプトを欠損時のみ初期化する。"""
+
+    for visit_type in ("initial", "followup"):
+        if get_summary_config("default", visit_type) is None:
+            upsert_summary_prompt("default", visit_type, DEFAULT_SUMMARY_PROMPT, False)
+        if get_followup_config("default", visit_type) is None:
+            upsert_followup_prompt("default", visit_type, DEFAULT_FOLLOWUP_PROMPT, False)
 
 
 EXPORT_PBKDF_ITERATIONS = 390_000
@@ -352,10 +364,14 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
         except ValueError:
             continue
         asset = load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, sanitized)
-        if not asset:
-            continue
-        content = asset.get("content")
-        if not isinstance(content, (bytes, bytearray)):
+        content: bytes | bytearray | None
+        if asset:
+            raw_content = asset.get("content")
+            content = bytes(raw_content) if isinstance(raw_content, (bytes, bytearray)) else None
+        else:
+            legacy_path = IMAGE_DIR / sanitized
+            content = legacy_path.read_bytes() if legacy_path.exists() else None
+        if not content:
             continue
         payloads[sanitized] = base64.b64encode(bytes(content)).decode("ascii")
     return payloads
@@ -445,6 +461,11 @@ def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
             content_type=media_type,
             asset_id=sanitized,
         )
+        try:
+            LOGO_DIR.mkdir(parents=True, exist_ok=True)
+            (LOGO_DIR / sanitized).write_bytes(bytes(data))
+        except Exception:
+            logger.exception("failed_to_restore_logo_file filename=%s", sanitized)
         restored += 1
     return restored
 
@@ -479,6 +500,11 @@ def _restore_images(image_payloads: Any, mode: str) -> int:
             content_type=media_type,
             asset_id=sanitized,
         )
+        try:
+            IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+            (IMAGE_DIR / sanitized).write_bytes(bytes(data))
+        except Exception:
+            logger.exception("failed_to_restore_image_file filename=%s", sanitized)
         restored += 1
     return restored
 
@@ -957,10 +983,7 @@ def on_startup() -> None:
         llm_followup_enabled=True,
         llm_followup_max_questions=5,
     )
-    upsert_summary_prompt("default", "initial", DEFAULT_SUMMARY_PROMPT, False)
-    upsert_summary_prompt("default", "followup", DEFAULT_SUMMARY_PROMPT, False)
-    upsert_followup_prompt("default", "initial", DEFAULT_FOLLOWUP_PROMPT, False)
-    upsert_followup_prompt("default", "followup", DEFAULT_FOLLOWUP_PROMPT, False)
+    _ensure_default_prompts()
     # 保存済みの LLM 設定があれば読み込む
     try:
         stored = load_llm_settings()
@@ -1654,6 +1677,13 @@ def llm_chat(req: ChatRequest) -> ChatResponse:
     return ChatResponse(reply=llm_gateway.chat(req.message))
 
 
+@app.get("/llm/providers", response_model=list[ProviderMetaSchema])
+def list_llm_providers() -> list[ProviderMetaSchema]:
+    """利用可能な LLM プロバイダの一覧を返す。"""
+
+    return get_provider_meta_list()
+
+
 @app.get("/llm/settings", response_model=LLMSettings)
 def get_llm_settings() -> LLMSettings:
     """現在の LLM 設定を取得する。
@@ -2001,6 +2031,42 @@ def _resolve_pdf_render_config() -> tuple[PDFLayoutMode, str]:
     return layout_mode, facility
 
 
+def _apply_provider_profile_payload(
+    settings: LLMSettings, payload: dict[str, Any] | None
+) -> None:
+    """一時設定にプロバイダ単位の入力値を反映する。"""
+
+    if not payload:
+        return
+    existing: dict[str, ProviderProfile] = dict(settings.provider_profiles or {})
+    changed = False
+    for key, raw in payload.items():
+        if isinstance(raw, ProviderProfile):
+            existing[key] = raw
+            changed = True
+            continue
+        if not isinstance(raw, dict):
+            logger.warning("llm_temp_settings_invalid_profile key=%s", key)
+            continue
+        try:
+            existing[key] = ProviderProfile(**raw)
+        except Exception as exc:  # noqa: BLE001 - バリデーション失敗のみ
+            logger.warning("llm_temp_settings_profile_parse_failed key=%s error=%s", key, exc)
+            continue
+        changed = True
+    if not changed:
+        return
+    settings.provider_profiles = existing
+    try:
+        settings.sync_from_active_profile()
+    except Exception as exc:  # noqa: BLE001 - 一時設定の同期は警告に留める
+        logger.warning(
+            "llm_temp_settings_sync_failed provider=%s error=%s",
+            settings.provider,
+            exc,
+        )
+
+
 class LLMTestRequest(BaseModel):
     """LLM疎通テスト用の一時設定。"""
 
@@ -2009,6 +2075,7 @@ class LLMTestRequest(BaseModel):
     base_url: str | None = None
     api_key: str | None = None
     enabled: bool | None = None
+    provider_profiles: dict[str, dict[str, Any]] | None = None
 
 
 @app.post("/llm/settings/test")
@@ -2027,6 +2094,13 @@ def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
             api_key=req.api_key or current.api_key,
             followup_timeout_seconds=current.followup_timeout_seconds,
         )
+        current_profiles = getattr(current, "provider_profiles", None) or {}
+        if current_profiles:
+            temp.provider_profiles = {
+                key: (profile.copy(deep=True) if isinstance(profile, ProviderProfile) else ProviderProfile(**profile))
+                for key, profile in current_profiles.items()
+            }
+        _apply_provider_profile_payload(temp, req.provider_profiles)
         gateway = LLMGateway(temp)
         return gateway.test_connection()
     return llm_gateway.test_connection(source="manual_test")
@@ -2037,6 +2111,7 @@ class ListModelsRequest(BaseModel):
     provider: str
     base_url: str | None = None
     api_key: str | None = None
+    provider_profiles: dict[str, dict[str, Any]] | None = None
 
 
 @app.post("/llm/list-models")
@@ -2052,6 +2127,7 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
         temperature=0,
         enabled=True,  # 有効化しないと空リストが返る
     )
+    _apply_provider_profile_payload(temp_settings, req.provider_profiles)
     gateway = LLMGateway(temp_settings)
     return gateway.list_models()
 
@@ -3228,12 +3304,7 @@ async def finalize_session(
             s.summary = new_summary
             save_session(s)
 
-    if (
-        summary_enabled
-        and getattr(llm_gateway.settings, "enabled", True)
-        and getattr(llm_gateway.settings, "base_url", None)
-        and not (payload and payload.llm_error)
-    ):
+    if summary_enabled and llm_gateway.has_remote_backend() and not (payload and payload.llm_error):
         background.add_task(_bg_summary_task, session.id)
 
     return {
@@ -3597,11 +3668,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
-
-
-
-
 
 
 

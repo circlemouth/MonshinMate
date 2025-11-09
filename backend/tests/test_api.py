@@ -360,6 +360,41 @@ def test_finalize_with_summary_enabled() -> None:
     data = fin.json()
     assert data["summary"].startswith("要約")
 
+
+def test_startup_preserves_custom_summary_prompt() -> None:
+    """起動時初期化でカスタムプロンプトがリセットされないことを確認する。"""
+    on_startup()
+    custom_summary = "カスタムサマリー"
+    custom_followup = "カスタム追質問"
+    res = client.post(
+        "/questionnaires/default/summary-prompt",
+        json={"visit_type": "initial", "prompt": custom_summary, "enabled": True},
+    )
+    assert res.status_code == 200
+    res = client.post(
+        "/questionnaires/default/followup-prompt",
+        json={"visit_type": "initial", "prompt": custom_followup, "enabled": True},
+    )
+    assert res.status_code == 200
+
+    # on_startup を再実行（=アプリ再起動相当）しても上書きされないことを検証
+    on_startup()
+
+    summary_cfg = client.get(
+        "/questionnaires/default/summary-prompt?visit_type=initial"
+    )
+    followup_cfg = client.get(
+        "/questionnaires/default/followup-prompt?visit_type=initial"
+    )
+    assert summary_cfg.status_code == 200
+    assert followup_cfg.status_code == 200
+
+    assert summary_cfg.json()["prompt"] == custom_summary
+    assert summary_cfg.json()["enabled"] is True
+    assert followup_cfg.json()["prompt"] == custom_followup
+    assert followup_cfg.json()["enabled"] is True
+
+
 def test_blank_answer_saved_as_not_applicable() -> None:
     """空欄回答が「該当なし」として保存されることを確認する。"""
     on_startup()

@@ -51,7 +51,8 @@
 - **ヘルスチェック**: `/health`, `/healthz`, `/readyz`。
 - **テンプレート管理**: `GET/POST/DELETE /questionnaires`, `/questionnaires/{id}/duplicate|rename|reset`, `/questionnaires/{id}/summary-prompt`, `/questionnaires/{id}/followup-prompt`。
 - **テンプレート入出力**: `/admin/questionnaires/export|import`。テンプレート・LLM設定・システム設定をまとめて転送でき、エクスポート時に PBKDF2+Fernet で暗号化可。
-- **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。
+- **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UI で未保存の `project_id` やアップロード済みの `service_account_json`（サービスアカウント JSON キー）といった入力値を一時的に反映して疎通確認できる（ただし Vertex AI は Google 側の制約でモデル一覧 UI を表示せず、手入力＋疎通テストのみ提供）。
+- **LLM プロバイダメタ情報**: `/llm/providers` で利用可能なプロバイダ一覧と UI 向けメタデータを返す。`ollama` / `lm_studio` / `openai` に加えて、Vertex AI を利用する `gcp_vertex` プロバイダが常に含まれる。メタデータには追加設定項目や既定値を含め、管理画面での入力欄が自動的に構成される。
 - **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
 - **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers`、`/sessions/{id}/finalize`。
@@ -69,8 +70,9 @@
 - **デフォルトプロンプト**: 追加質問用 `DEFAULT_SYSTEM_PROMPT` / `DEFAULT_FOLLOWUP_PROMPT`、サマリー用 `DEFAULT_SUMMARY_PROMPT` を `llm_gateway.py` / `main.py` に定義。管理画面の「LLM 設定」「テンプレート詳細」からテンプレート単位で上書きでき、プレースホルダ `{max_questions}` を埋め込む。
 - **設定保持**: `LLMSettings` はプロバイダごとのプロファイルを `provider_profiles` に保持し、UI 保存時に `sync_from_active_profile`/`sync_to_active_profile` でトップレベル値と同期。`followup_timeout_seconds` は 5〜120 秒にクランプ。
 - **追加質問生成**: `SessionFSM.next_questions()` → `LLMGateway.generate_followups()` を呼び出し、セッション ID 単位でロック。  
-  - `provider="ollama"`: `POST {base_url}/api/chat` に `format` で JSON Schema（配列）を渡し、`message.content` または `response` の文字列を `json.loads`。  
-  - `provider="lm_studio"`（OpenAI 互換）: `POST {base_url}/v1/chat/completions` に `response_format.json_schema` を指定し、`choices[0].message.content` の文字列 JSON をパース。  
+  - `provider="ollama"`: `POST {base_url}/api/chat` に `format` で JSON Schema（配列）を渡し、`message.content` または `response` の文字列を `json.loads`。
+  - `provider="lm_studio"`（OpenAI 互換）: `POST {base_url}/v1/chat/completions` に `response_format.json_schema` を指定し、`choices[0].message.content` の文字列 JSON をパース。
+  - `provider="gcp_vertex"`: `POST https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` で Gemini モデルを呼び出す。サービスアカウント JSON キーファイルをアップロードするか、ADC を利用して Bearer トークンを取得する。レスポンスは `candidates[0].content.parts[].text` を優先して抽出し、JSON 解析に失敗した場合は行分割でフォールバック。
   - パース失敗・HTTP エラー時は警告ログとともにスタブへフォールバックし、追加質問フェーズを即終了（空配列）。成功時は `llm_question_texts` に記録し `llm_1..n` の ID を採番。
 - **単一項目用フォールバック質問**: `generate_question()` は未回答項目向けに個別問い合わせを行う実装で、同様に Ollama / LM Studio のチャット API を呼び分ける。失敗時・ローカルモードではスタブの汎用質問を返す（現行フローでは未使用だが残置）。
 - **サマリー生成**: `summarize_with_prompt()` がリモート LLM に同様のチャットリクエストを送信。失敗時は `summarize()` の簡易結合文にフォールバック。バックエンドで `summary_prompts` に保存されたプロンプトを使用し、UI から有効化フラグを制御。
@@ -172,4 +174,3 @@
 
 ---
 本書に記載の挙動は `main` ブランチの最新コードと一致するよう随時更新すること。差異を発見した場合は、本ファイルと `internal_docs/implementation.md` 双方に記録する。
-

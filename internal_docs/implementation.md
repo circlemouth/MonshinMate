@@ -718,6 +718,11 @@
 - [x] 質問を消費した際は `pending_llm_questions` を更新し、空になった場合のみ `/llm-questions` を再呼び出すよう変更。
 - [x] ドキュメント更新: `docs/session_api.md`。
 
+## 73. サマリー自動作成設定の起動時リセット防止（2025-11-09）
+- [x] `on_startup()` が `default` テンプレートのサマリー/追質問プロンプトを毎回初期値に上書きしてしまう問題を修正し、欠損時のみ投入する `_ensure_default_prompts()` を追加。
+- [x] `backend/app/main.py` で初期化ロジックを `_ensure_default_prompts()` に差し替え、ユーザーが保存したプロンプトと有効フラグが再起動後も保持されるようにした。
+- [x] テスト追加: `backend/tests/test_api.py::test_startup_preserves_custom_summary_prompt` で再起動後にカスタム設定が維持されることを確認。
+
 ## 73. 複数選択項目の自由記述チェックボックス追加（2025-12-06）
 - [x] 複数選択肢で自由入力を行う際、専用チェックボックスを新設し、チェック時のみテキスト入力欄が有効化されるよう変更。
 - [x] 変更（フロントエンド）: `frontend/src/pages/QuestionnaireForm.tsx`
@@ -1118,4 +1123,41 @@
 - [x] マイグレーション: `_migrate_legacy_assets` で `backend/app/questionnaire_item_images/` と `backend/app/system_logo/` に残っている既存ファイルを起動時に自動移行し、Cloud Run 環境でも画像が欠落しないようにした。
 - [x] エンドポイント: `/questionnaire-item-images/files/*` と `/system-logo/files/*` を FastAPI で配信し、Firestore/SQLite/CouchDB のいずれでも同一 URL でアクセスできるようにした。
 
+## 136. GCP LLM プロバイダの動的登録とUI拡張（2025-10-XX）
+- [x] 変更（バックエンド）: `backend/app/llm_provider_registry.py` を新設し、`MONSHINMATE_ENABLE_GCP_LLM` または `ENABLE_GCP=1` の環境下でプライベートサブモジュールが提供する LLM アダプタを自動検出できるようにした。`MONSHINMATE_LLM_PROVIDER_ADAPTER` で指定された実装が `meta` 情報を返すと、GCP（Vertex AI 等）向けのプロバイダが追加される。`/llm/providers` エンドポイントを追加し、管理画面が利用するメタデータ（表示名・説明・追加フィールド定義）を返却する。
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py` をプラグイン対応へ改修。プロバイダごとに追加フィールドを保持できるよう `ProviderProfile` の拡張を許容し、adapter が実装されている場合は `list_models` / `test_connection` / `generate_followups` / `summarize_with_prompt` / `chat` を委譲する。アダプタが返すメタ情報に基づき既定値を補完し、UI から送信された追加パラメータも保存するようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` を刷新し、`/llm/providers` の応答からプロバイダ一覧と追加入力欄を動的に構成する。既定の Ollama / LM Studio / OpenAI に加えて、環境変数とサブモジュールが揃った場合のみ GCP プロバイダが表示される。プロバイダごとの追加フィールドは Chakra UI の既存コンポーネント（Input / Textarea / NumberInput / Select など）を再利用して描画する。
+- [x] ドキュメント更新: `internal_docs/system_overview.md`、`docs/admin_user_manual.md` に GCP プロバイダの表示条件と `/llm/providers` エンドポイントの概要を追記。
+- [x] バックエンド自動テスト: `cd backend && pytest -q` を実行し、既存テストが全て成功することを確認。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build` を実行し、既存 UI 差分を含めビルドが成功することを確認（chunk size warning のみ）。
+- [x] 互換性対応: エクスポート／インポート時に DB へ保存した画像・ロゴを従来どおり `backend/app/questionnaire_item_images/` および `backend/app/system_logo/` にも書き戻すよう調整し、旧バージョンのテストやスクリプトが期待するファイルシステム構成を維持。
 
+## 137. GCP LLM プロバイダ常時有効化（2025-11-XX）
+- [x] 変更（バックエンド）: `backend/app/llm_provider_registry.py` の `_build_registry` から環境変数による表示制御を撤廃し、GCP アダプタがリポジトリから検出できれば常にプロバイダ登録されるようにした。既存の `MONSHINMATE_LLM_PROVIDER_ADAPTER` 検出ロジックはそのまま維持し、アダプタが無い環境では従来どおり表示されない。
+- [x] 仕様更新: `docs/admin_user_manual.md` と `internal_docs/system_overview.md` の記述を更新し、環境変数設定が不要になったことと、追加フィールドが自動表示される点を明記した。
+- [x] 運用影響: これまで環境変数で非表示にしていた環境でも、GCP アダプタが配置されていれば管理画面に選択肢が常時表示される。従来の設定は維持されるため追加の移行作業は不要だが、利用を望まない場合はサブモジュール側でアダプタを無効化または除外する運用に切り替える。
+
+
+
+## 138. Vertex AI ビルトインアダプタ統合（2025-11-XX）
+- [x] 変更（バックエンド）: `backend/app/llm_providers/gcp_vertex.py` を追加し、Vertex AI Gemini モデルへ直接リクエストするアダプタを内蔵。`llm_provider_registry.py` で常時登録し、`gcp_vertex` プロバイダはサブモジュールの有無にかかわらず利用可能とした。`_DEFAULT_PROVIDER_ORDER` に `gcp_vertex` を追加し、ビルトインアダプタを既存レジストリへマージするよう調整。
+- [x] 依存追加: `backend/pyproject.toml` へ `google-auth` を追加し、サービスアカウント JSON または ADC でアクセストークンを取得できるようにした。`pip install -e .` を再実行して依存を更新すること。
+- [x] 仕様更新: `docs/admin_user_manual.md` と `internal_docs/system_overview.md` に Vertex AI プロバイダが常に表示される点、要求される入力項目、API 呼び出しフローを追記。
+- [x] 運用影響: 既存の GCP 設定は DB 上で `gcp_vertex` プロファイルに保持されるため追加移行は不要。新規利用時はプロジェクトIDとロケーション、サービスアカウント JSON（または ADC 設定）を管理画面から登録する。Private サブモジュールで独自アダプタを提供している場合は、同一キーを返すことで上書き可能。
+
+## 139. LLM モデル一覧 API の provider_profiles 伝播（2025-11-09）
+- [x] 変更（バックエンド）: `backend/app/main.py` に `_apply_provider_profile_payload` を追加し、`/llm/list-models` と `/llm/settings/test` が `provider_profiles` を受け取り一時的な `LLMSettings` に統合するよう更新。`LLMTestRequest`・`ListModelsRequest` に `provider_profiles` フィールドを追加し、未保存の入力値も疎通確認に利用できるようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` のモデル一覧取得・疎通テスト呼び出しで `buildPayload()` の結果（サービスアカウントJSON等を含む）を POST するよう修正し、UI の最新入力が即座に API へ渡るようにした。
+- [x] ドキュメント更新: `internal_docs/admin_system_setup.md`, `docs/admin_user_manual.md`, `frontend/public/docs/admin_system_setup.md`, `frontend/public/docs/admin_user_manual.md`, `internal_docs/system_overview.md`。
+- [ ] テスト: GCP 実環境が必要なため自動テストは未実施。Vertex プロファイルでの手動疎通確認を推奨。
+
+## 140. Vertex AI モデル一覧 UI の撤廃（2025-11-09）
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` で `gcp_vertex` 選択時に「使用可能なモデル一覧を取得」ボタンとプルダウンを非表示にし、モデル名を直接入力して疎通テストのみ実行するフローへ変更。非表示時はヘルパーテキストで手入力を案内。
+- [x] ドキュメント更新: `internal_docs/admin_system_setup.md`, `docs/admin_user_manual.md`, `frontend/public/docs/admin_system_setup.md`, `frontend/public/docs/admin_user_manual.md`, `internal_docs/system_overview.md` に Vertex AI ではモデル一覧が利用できない旨を追記。
+- [ ] テスト: GCP Vertex 実環境が無いため未実施。OpenAI 等の非 GCP プロバイダで従来どおりモデル一覧が取得できることを手動確認予定。
+
+## 141. Vertex AI サービスアカウントJSONファイルアップロード対応（2025-11-09）
+- [x] 変更（バックエンド）: `backend/app/llm_providers/gcp_vertex.py` の `extra_fields` で `service_account_json` をファイル入力型に変更し、`accept` 属性とアップロード前提のヘルパーテキストを追加。`backend/app/llm_provider_registry.py` の `ProviderFieldSchema` に `accept` プロパティを追加し、メタ情報から許可するファイル種別を受け渡せるようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` にファイル入力用 UI を追加。サービスアカウント JSON を `FileReader` で読み込んでプロファイルへ保存し、アップロード済み文字数の表示とクリアボタンを提供。`ProviderFieldMeta` に `file` タイプと `accept` プロパティを追加して他プロバイダでも再利用できるようにした。
+- [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`, `internal_docs/system_overview.md`, `internal_docs/implementation.md` で JSON キー貼り付けからファイルアップロード方式へ変更したことを記載。
+- [ ] テスト: GCP 実環境がないため `/llm/settings` の疎通までは未確認。フロントエンドはローカルで `npm run build` を実行していないため、必要に応じて実施すること。

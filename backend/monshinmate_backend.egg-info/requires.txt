@@ -11,3 +11,5 @@ python-dotenv
 couchdb
 python-multipart
 bcrypt<4
+google-auth
+requests

@@ -17,6 +17,8 @@ dependencies = [
     "couchdb",
     "python-multipart",
     "bcrypt<4",
+    "google-auth",
+    "requests",
 ]
 
 [build-system]

@@ -12,6 +12,14 @@ from pydantic import BaseModel, Field
 import httpx
 
 
+from .llm_provider_registry import (
+    LLMProviderAdapter,
+    ProviderRegistration,
+    get_ordered_provider_keys,
+    get_provider_registry,
+)
+
+
 DEFAULT_SYSTEM_PROMPT = (
     "あなたは日本語で応答する熟練した医療問診支援AIです。"
     "患者の入力を理解し、医学的に適切で簡潔な回答や質問を行ってください。"
@@ -40,7 +48,7 @@ class ProviderProfile(BaseModel):
     followup_timeout_seconds: float = DEFAULT_FOLLOWUP_TIMEOUT
 
     class Config:
-        extra = "ignore"
+        extra = "allow"
 
 
 class LLMSettings(BaseModel):
@@ -64,17 +72,47 @@ class LLMSettings(BaseModel):
         profiles = self.provider_profiles or {}
         profile = profiles.get(key)
         if profile is None:
-            profile = ProviderProfile()
-            # 現在のアクティブプロバイダの場合はトップレベル値を反映
+            defaults: dict[str, Any] = {}
+            try:
+                registration = get_provider_registry().get(key)
+            except Exception:
+                registration = None
+            if registration is not None:
+                defaults.update(registration.meta.default_profile or {})
             if key == self.provider:
-                profile = ProviderProfile(
-                    model=self.model,
-                    temperature=self.temperature,
-                    system_prompt=self.system_prompt,
-                    base_url=self.base_url,
-                    api_key=self.api_key,
-                    followup_timeout_seconds=self.followup_timeout_seconds,
+                safe_timeout = max(
+                    5.0,
+                    min(
+                        120.0,
+                        float(
+                            self.followup_timeout_seconds
+                            if self.followup_timeout_seconds is not None
+                            else DEFAULT_FOLLOWUP_TIMEOUT
+                        ),
+                    ),
                 )
+                safe_temp = max(
+                    0.0,
+                    min(
+                        2.0,
+                        float(
+                            self.temperature
+                            if self.temperature is not None
+                            else 0.2
+                        ),
+                    ),
+                )
+                defaults.update(
+                    {
+                        "model": self.model or "",
+                        "temperature": safe_temp,
+                        "system_prompt": self.system_prompt or "",
+                        "base_url": self.base_url,
+                        "api_key": self.api_key,
+                        "followup_timeout_seconds": safe_timeout,
+                    }
+                )
+            profile = ProviderProfile(**defaults)
             profiles = dict(profiles)
             profiles[key] = profile
             self.provider_profiles = profiles
@@ -113,16 +151,33 @@ class LLMSettings(BaseModel):
             ),
         )
         self.followup_timeout_seconds = safe_timeout
-        profile = ProviderProfile(
-            model=self.model or "",
-            temperature=max(0.0, min(2.0, float(self.temperature if self.temperature is not None else 0.2))),
-            system_prompt=self.system_prompt or "",
-            base_url=self.base_url,
-            api_key=self.api_key,
-            followup_timeout_seconds=safe_timeout,
+        temp_value = max(
+            0.0,
+            min(
+                2.0,
+                float(self.temperature if self.temperature is not None else 0.2),
+            ),
         )
         profiles = dict(self.provider_profiles or {})
-        profiles[self.provider] = profile
+        existing = profiles.get(self.provider)
+        base_data: dict[str, Any]
+        if isinstance(existing, ProviderProfile):
+            base_data = existing.model_dump()
+        elif isinstance(existing, dict):
+            base_data = dict(existing)
+        else:
+            base_data = {}
+        base_data.update(
+            {
+                "model": self.model or "",
+                "temperature": temp_value,
+                "system_prompt": self.system_prompt or "",
+                "base_url": self.base_url,
+                "api_key": self.api_key,
+                "followup_timeout_seconds": safe_timeout,
+            }
+        )
+        profiles[self.provider] = ProviderProfile(**base_data)
         self.provider_profiles = profiles
 
 
@@ -136,6 +191,7 @@ class LLMGateway:
         # 受け取った設定を正規化して保持
         settings.sync_from_active_profile()
         settings.sync_to_active_profile()
+        self._ensure_provider_integrity(settings)
         self.settings = settings
         # セッション単位での直列化用ロック
         self._locks: dict[str, threading.RLock] = {}
@@ -148,6 +204,79 @@ class LLMGateway:
             "checked_at": None,
         }
         self._sync_status_for_settings(reason="init")
+
+    def _ensure_provider_integrity(self, settings: LLMSettings) -> None:
+        registry = get_provider_registry()
+        ordered = get_ordered_provider_keys()
+        if settings.provider not in registry:
+            fallback = next((key for key in ordered if key in registry), None)
+            if fallback is None and registry:
+                fallback = next(iter(registry.keys()))
+            if fallback:
+                settings.provider = fallback
+        # 必要なプロファイルを生成し、プラグイン経由で補完
+        for key in ordered:
+            settings.get_profile(key)
+        for key in list(settings.provider_profiles.keys()):
+            registration = registry.get(key)
+            if registration:
+                self._apply_defaults_with_adapter(settings, key, registration)
+
+    def _apply_defaults_with_adapter(
+        self,
+        settings: LLMSettings,
+        provider: str,
+        registration: ProviderRegistration,
+    ) -> None:
+        profile = settings.get_profile(provider)
+        data = profile.model_dump()
+        changed = False
+        defaults = registration.meta.default_profile or {}
+        for key, value in defaults.items():
+            if key not in data:
+                data[key] = value
+                changed = True
+        adapter = registration.adapter
+        if adapter is not None:
+            try:
+                normalized = adapter.normalize_profile(dict(data))
+            except Exception as exc:  # noqa: BLE001
+                logging.getLogger("llm").warning("normalize_profile_failed: %s", exc)
+            else:
+                if isinstance(normalized, dict):
+                    for key, value in normalized.items():
+                        if data.get(key) != value:
+                            data[key] = value
+                            changed = True
+        if changed:
+            profiles = dict(settings.provider_profiles or {})
+            profiles[provider] = ProviderProfile(**data)
+            settings.provider_profiles = profiles
+            if provider == settings.provider:
+                settings.sync_from_active_profile()
+
+    def _get_registration(self, provider: str | None = None) -> ProviderRegistration | None:
+        key = provider or self.settings.provider
+        return get_provider_registry().get(key)
+
+    def _get_adapter(self, provider: str | None = None) -> LLMProviderAdapter | None:
+        registration = self._get_registration(provider)
+        return registration.adapter if registration else None
+
+    def has_remote_backend(self) -> bool:
+        """現在の設定でリモート LLM を呼び出せるかを判定する。"""
+
+        if not self.settings.enabled:
+            return False
+        if self._get_adapter() is not None:
+            return True
+        return bool(self.settings.base_url)
+
+    def _provider_uses_base_url(self, provider: str | None = None) -> bool:
+        registration = self._get_registration(provider)
+        if registration is None:
+            return True
+        return registration.meta.use_base_url
 
     def _get_lock(self, key: str | None) -> threading.RLock | None:
         if not key:
@@ -195,7 +324,8 @@ class LLMGateway:
         if not s.enabled:
             self._set_status("disabled", "llm disabled", reason, mark_time=False)
             return
-        if not s.base_url or not s.model:
+        requires_base_url = self._provider_uses_base_url()
+        if (requires_base_url and not s.base_url) or not s.model:
             self._set_status(
                 "disabled",
                 "connection settings incomplete",
@@ -224,6 +354,7 @@ class LLMGateway:
 
         settings.sync_from_active_profile()
         settings.sync_to_active_profile()
+        self._ensure_provider_integrity(settings)
         self.settings = settings
         self._sync_status_for_settings(reason="settings_update")
 
@@ -238,8 +369,26 @@ class LLMGateway:
             # 無効時は疎通NGを返す
             self._set_status("disabled", "llm disabled", source, mark_time=True)
             return {"status": "ng", "detail": "llm is disabled"}
-        if not s.base_url or not s.model:
-            # ベースURLやモデル未指定での自動OKは行わない
+        adapter = self._get_adapter()
+        profile_data = self.settings.get_profile(s.provider).model_dump()
+        if adapter is not None:
+            try:
+                result = adapter.test_connection(self.settings, profile_data, source=source)
+            except Exception as exc:  # noqa: BLE001
+                detail = str(exc)
+                self._record_status("ng", source, detail)
+                return {"status": "ng", "detail": detail}
+            status = (result or {}).get("status") if isinstance(result, dict) else None
+            detail = (result or {}).get("detail") if isinstance(result, dict) else None
+            if status == "ok":
+                self._record_status("ok", source, detail or "connection ok")
+                return {"status": "ok"}
+            detail = detail or "connection failed"
+            self._record_status("ng", source, detail)
+            return {"status": "ng", "detail": detail}
+
+        requires_base = self._provider_uses_base_url()
+        if (requires_base and not s.base_url) or not s.model:
             self._set_status(
                 "disabled",
                 "connection settings incomplete",
@@ -273,10 +422,28 @@ class LLMGateway:
             list[str]: モデル名のリスト。
         """
         s = self.settings
-        if not s.enabled or not s.base_url:
+        if not s.enabled:
             if source:
-                detail = "llm disabled" if not s.enabled else "base_url missing"
-                self._set_status("disabled", detail, source, mark_time=True)
+                self._set_status("disabled", "llm disabled", source, mark_time=True)
+            return []
+
+        adapter = self._get_adapter()
+        profile_data = self.settings.get_profile(s.provider).model_dump()
+        if adapter is not None:
+            try:
+                models = adapter.list_models(self.settings, profile_data, source=source)
+            except Exception as exc:  # noqa: BLE001
+                logging.getLogger("llm").error("adapter_list_models_failed: %s", exc)
+                if source:
+                    self._record_status("ng", source, str(exc))
+                return []
+            if source:
+                self._record_status("ok", source, "model list fetched")
+            return models
+
+        if self._provider_uses_base_url() and not s.base_url:
+            if source:
+                self._set_status("disabled", "base_url missing", source, mark_time=True)
             return []
 
         try:
@@ -286,7 +453,6 @@ class LLMGateway:
                 r = httpx.get(url, timeout=timeout)
                 r.raise_for_status()
                 data = r.json()
-                # "models" キーの中の "name" を抽出
                 models = sorted(
                     [m.get("name") for m in data.get("models", []) if m.get("name")]
                 )
@@ -301,7 +467,6 @@ class LLMGateway:
                 r = httpx.get(url, headers=headers, timeout=timeout)
                 r.raise_for_status()
                 data = r.json()
-                # "data" キーの中の "id" を抽出
                 models = sorted(
                     [m.get("id") for m in data.get("data", []) if m.get("id")]
                 )
@@ -312,7 +477,7 @@ class LLMGateway:
             logging.getLogger("llm").error(f"Failed to list models: {e}")
             if source:
                 self._record_status("ng", source, str(e))
-            return []
+        return []
 
     def generate_question(
         self,
@@ -335,6 +500,34 @@ class LLMGateway:
         """
         start = time.perf_counter()
         s = self.settings
+        adapter = self._get_adapter()
+        if adapter is not None:
+            profile_data = self.settings.get_profile(s.provider).model_dump()
+            try:
+                question = adapter.generate_question(
+                    self.settings,
+                    profile_data,
+                    missing_item_id,
+                    missing_item_label,
+                    context,
+                )
+            except Exception as exc:  # noqa: BLE001
+                self._record_status("ng", "generate_question", str(exc))
+                logging.getLogger("llm").exception(
+                    "external_generate_question_failed: %s", exc
+                )
+            else:
+                if question:
+                    duration = (time.perf_counter() - start) * 1000
+                    logging.getLogger("llm").info(
+                        "generate_question(external) item=%s took_ms=%.1f",
+                        missing_item_id,
+                        duration,
+                    )
+                    self._record_status(
+                        "ok", "generate_question", "external question generated"
+                    )
+                    return question
         if s.enabled and s.base_url:
             try:
                 timeout = httpx.Timeout(15.0)
@@ -450,6 +643,35 @@ class LLMGateway:
         user_prompt = (prompt or DEFAULT_FOLLOWUP_PROMPT).replace(
             "{max_questions}", str(max_questions)
         )
+        adapter = self._get_adapter()
+        if adapter is not None:
+            profile_data = self.settings.get_profile(s.provider).model_dump()
+            lock = self._get_lock(lock_key)
+
+            def _call_adapter() -> list[str]:
+                return adapter.generate_followups(
+                    self.settings,
+                    profile_data,
+                    context,
+                    max_questions,
+                    prompt=user_prompt,
+                )
+
+            try:
+                if lock:
+                    with lock:
+                        result = _call_adapter()
+                else:
+                    result = _call_adapter()
+                self._record_status(
+                    "ok", "generate_followups", "external followups generated"
+                )
+                return result or []
+            except Exception as exc:  # noqa: BLE001
+                self._record_status("ng", "generate_followups", str(exc))
+                logging.getLogger("llm").warning(
+                    "external_generate_followups_failed: %s", exc
+                )
         if s.base_url:
             # セッション単位の直列化
             lock = self._get_lock(lock_key)
@@ -569,8 +791,26 @@ class LLMGateway:
         """チャット形式での応答を模擬的に返す。"""
         start = time.perf_counter()
         s = self.settings
+        adapter = self._get_adapter()
+        if adapter is not None:
+            profile_data = self.settings.get_profile(s.provider).model_dump()
+            try:
+                reply = adapter.chat(self.settings, profile_data, message)
+            except Exception as exc:  # noqa: BLE001
+                self._record_status("ng", "chat", str(exc))
+                logging.getLogger("llm").exception(
+                    "external_chat_failed; falling back to stub"
+                )
+            else:
+                duration = (time.perf_counter() - start) * 1000
+                logging.getLogger("llm").info(
+                    "chat(external) took_ms=%.1f", duration
+                )
+                self._record_status("ok", "chat", "external chat succeeded")
+                return reply
         # リモート設定が有効な場合は HTTP 経由で実行し、失敗時はスタブへフォールバック
-        if s.enabled and s.base_url:
+        requires_base = self._provider_uses_base_url()
+        if s.enabled and ((not requires_base) or s.base_url):
             try:
                 reply = self._chat_remote(message)
                 duration = (time.perf_counter() - start) * 1000
@@ -694,6 +934,41 @@ class LLMGateway:
                 label = labels.get(k) if labels else k
                 lines.append(f"- {label}: {v}")
             pairs_text = "\n".join(lines)
+
+            adapter = self._get_adapter()
+            if adapter is not None:
+                lock = self._get_lock(lock_key)
+
+                def _call_external() -> str:
+                    profile_data = self.settings.get_profile(s.provider).model_dump()
+                    return adapter.summarize_with_prompt(
+                        self.settings,
+                        profile_data,
+                        system_prompt,
+                        answers,
+                        labels,
+                    )
+
+                try:
+                    if lock:
+                        with lock:
+                            external = _call_external()
+                    else:
+                        external = _call_external()
+                    if external:
+                        logging.getLogger("llm").info(
+                            "summarize_with_prompt(external) success"
+                        )
+                        self._record_status(
+                            "ok", "summarize", "external summary generated"
+                        )
+                        return external
+                except Exception as exc:  # noqa: BLE001
+                    last_error = exc
+                    self._record_status("ng", "summarize", str(exc))
+                    logging.getLogger("llm").warning(
+                        "external_summary_failed: %s", exc
+                    )
 
             # リモート可能なら OpenAI/Ollama 互換のチャットで生成
             if s.enabled and s.base_url:
