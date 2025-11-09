@@ -1161,3 +1161,8 @@
 - [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` にファイル入力用 UI を追加。サービスアカウント JSON を `FileReader` で読み込んでプロファイルへ保存し、アップロード済み文字数の表示とクリアボタンを提供。`ProviderFieldMeta` に `file` タイプと `accept` プロパティを追加して他プロバイダでも再利用できるようにした。
 - [x] ドキュメント更新: `docs/admin_user_manual.md`, `frontend/public/docs/admin_user_manual.md`, `internal_docs/system_overview.md`, `internal_docs/implementation.md` で JSON キー貼り付けからファイルアップロード方式へ変更したことを記載。
 - [ ] テスト: GCP 実環境がないため `/llm/settings` の疎通までは未確認。フロントエンドはローカルで `npm run build` を実行していないため、必要に応じて実施すること。
+
+## 142. Cloud Run Firestore 起動失敗の調査と回避（2025-11-09）
+- [x] `private/cloud-run-adapter/tools/gcp/deploy_stack.sh` 実行後に `monshinmate-backend-00005-9ch` が `HealthCheckContainerError` で失敗したため、`gcloud run revisions describe monshinmate-backend-00005-9ch --region asia-northeast1` と `gcloud beta run revisions logs read monshinmate-backend-00005-9ch --region asia-northeast1` で原因を確認。起動直後に `RuntimeError: Firestore バックエンドが選択されていますが、利用可能な実装が見つかりません。` が発生していた。
+- [x] 原因: `monshinmate_cloud/__init__.py` がトップレベルで `FirestoreAdapter` を import しており、`app.llm_provider_registry` からの `import monshinmate_cloud` が `app.db` 初期化前に走ると循環参照となり、`_load_firestore_adapter_class()` が未初期化モジュールを参照した結果 `None` を返していた。
+- [x] 対応: `monshinmate_cloud/__init__.py` を遅延ロード方式へ変更し、`__getattr__` 内で必要なタイミングだけ `firestore_adapter` / `secret_manager` を import するよう修正。`PYTHONPATH=private/cloud-run-adapter python -c 'import monshinmate_cloud'` でモジュール単体 import が成功することを確認済み。
