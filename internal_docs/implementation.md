@@ -1118,4 +1118,13 @@
 - [x] マイグレーション: `_migrate_legacy_assets` で `backend/app/questionnaire_item_images/` と `backend/app/system_logo/` に残っている既存ファイルを起動時に自動移行し、Cloud Run 環境でも画像が欠落しないようにした。
 - [x] エンドポイント: `/questionnaire-item-images/files/*` と `/system-logo/files/*` を FastAPI で配信し、Firestore/SQLite/CouchDB のいずれでも同一 URL でアクセスできるようにした。
 
+## 136. GCP LLM プロバイダの動的登録とUI拡張（2025-10-XX）
+- [x] 変更（バックエンド）: `backend/app/llm_provider_registry.py` を新設し、`MONSHINMATE_ENABLE_GCP_LLM` または `ENABLE_GCP=1` の環境下でプライベートサブモジュールが提供する LLM アダプタを自動検出できるようにした。`MONSHINMATE_LLM_PROVIDER_ADAPTER` で指定された実装が `meta` 情報を返すと、GCP（Vertex AI 等）向けのプロバイダが追加される。`/llm/providers` エンドポイントを追加し、管理画面が利用するメタデータ（表示名・説明・追加フィールド定義）を返却する。
+- [x] 変更（バックエンド）: `backend/app/llm_gateway.py` をプラグイン対応へ改修。プロバイダごとに追加フィールドを保持できるよう `ProviderProfile` の拡張を許容し、adapter が実装されている場合は `list_models` / `test_connection` / `generate_followups` / `summarize_with_prompt` / `chat` を委譲する。アダプタが返すメタ情報に基づき既定値を補完し、UI から送信された追加パラメータも保存するようにした。
+- [x] 変更（フロントエンド）: `frontend/src/pages/AdminLlm.tsx` を刷新し、`/llm/providers` の応答からプロバイダ一覧と追加入力欄を動的に構成する。既定の Ollama / LM Studio / OpenAI に加えて、環境変数とサブモジュールが揃った場合のみ GCP プロバイダが表示される。プロバイダごとの追加フィールドは Chakra UI の既存コンポーネント（Input / Textarea / NumberInput / Select など）を再利用して描画する。
+- [x] ドキュメント更新: `internal_docs/system_overview.md`、`docs/admin_user_manual.md` に GCP プロバイダの表示条件と `/llm/providers` エンドポイントの概要を追記。
+- [x] バックエンド自動テスト: `cd backend && pytest -q` を実行し、既存テストが全て成功することを確認。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build` を実行し、既存 UI 差分を含めビルドが成功することを確認（chunk size warning のみ）。
+- [x] 互換性対応: エクスポート／インポート時に DB へ保存した画像・ロゴを従来どおり `backend/app/questionnaire_item_images/` および `backend/app/system_logo/` にも書き戻すよう調整し、旧バージョンのテストやスクリプトが期待するファイルシステム構成を維持。
+
 

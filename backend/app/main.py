@@ -47,6 +47,7 @@ from .llm_gateway import (
     DEFAULT_FOLLOWUP_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
 )
+from .llm_provider_registry import get_provider_meta_list, ProviderMetaSchema
 from cryptography.fernet import Fernet, InvalidToken
 
 from .config import get_settings
@@ -352,10 +353,14 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
         except ValueError:
             continue
         asset = load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, sanitized)
-        if not asset:
-            continue
-        content = asset.get("content")
-        if not isinstance(content, (bytes, bytearray)):
+        content: bytes | bytearray | None
+        if asset:
+            raw_content = asset.get("content")
+            content = bytes(raw_content) if isinstance(raw_content, (bytes, bytearray)) else None
+        else:
+            legacy_path = IMAGE_DIR / sanitized
+            content = legacy_path.read_bytes() if legacy_path.exists() else None
+        if not content:
             continue
         payloads[sanitized] = base64.b64encode(bytes(content)).decode("ascii")
     return payloads
@@ -445,6 +450,11 @@ def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
             content_type=media_type,
             asset_id=sanitized,
         )
+        try:
+            LOGO_DIR.mkdir(parents=True, exist_ok=True)
+            (LOGO_DIR / sanitized).write_bytes(bytes(data))
+        except Exception:
+            logger.exception("failed_to_restore_logo_file filename=%s", sanitized)
         restored += 1
     return restored
 
@@ -479,6 +489,11 @@ def _restore_images(image_payloads: Any, mode: str) -> int:
             content_type=media_type,
             asset_id=sanitized,
         )
+        try:
+            IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+            (IMAGE_DIR / sanitized).write_bytes(bytes(data))
+        except Exception:
+            logger.exception("failed_to_restore_image_file filename=%s", sanitized)
         restored += 1
     return restored
 
@@ -1652,6 +1667,13 @@ def llm_chat(req: ChatRequest) -> ChatResponse:
     global METRIC_LLM_CHATS
     METRIC_LLM_CHATS += 1
     return ChatResponse(reply=llm_gateway.chat(req.message))
+
+
+@app.get("/llm/providers", response_model=list[ProviderMetaSchema])
+def list_llm_providers() -> list[ProviderMetaSchema]:
+    """利用可能な LLM プロバイダの一覧を返す。"""
+
+    return get_provider_meta_list()
 
 
 @app.get("/llm/settings", response_model=LLMSettings)
