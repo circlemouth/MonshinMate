@@ -1190,6 +1190,7 @@ def list_sessions(
     dob: str | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    visit_type: str | None = None,
     db_path: str = DEFAULT_DB_PATH,
 ) -> list[dict[str, Any]]:
     """保存済みセッションの概要一覧を取得する。
@@ -1222,6 +1223,8 @@ def list_sessions(
             if start_date and started_at and started_at < f"{start_date}T00:00:00":
                 continue
             if end_date and started_at and started_at > f"{end_date}T23:59:59":
+                continue
+            if visit_type and d.get("visit_type") != visit_type:
                 continue
             completion_status = d.get("completion_status") or ""
             interrupted = completion_status != "finalized"
@@ -1264,6 +1267,9 @@ def list_sessions(
         elif end_date:
             conditions.append("DATE(COALESCE(started_at, finalized_at)) <= ?")
             params.append(end_date)
+        if visit_type:
+            conditions.append("visit_type = ?")
+            params.append(visit_type)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY COALESCE(started_at, finalized_at, '') DESC"
@@ -1764,6 +1770,9 @@ def export_sessions_data(
         if end_date:
             conditions.append("DATE(COALESCE(started_at, finalized_at)) <= ?")
             params.append(end_date)
+        if visit_type:
+            conditions.append("visit_type = ?")
+            params.append(visit_type)
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         rows = conn.execute(query, params).fetchall()
@@ -2277,8 +2286,6 @@ class SQLiteAdapter:
     def shutdown(self) -> None:
         """SQLite 実装では特別な終了処理は不要。"""
         return None
-
-
 
 
 

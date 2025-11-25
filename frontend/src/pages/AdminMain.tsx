@@ -31,6 +31,12 @@ import {
   ModalBody,
   Spacer,
   useDisclosure,
+  FormControl,
+  FormLabel,
+  Input,
+  Tabs,
+  TabList,
+  Tab,
 } from '@chakra-ui/react';
 import {
   FiChevronLeft,
@@ -71,6 +77,14 @@ interface SessionSummary {
   finalized_at?: string | null;
   interrupted?: boolean;
 }
+
+type VisitTypeFilter = 'initial' | 'followup' | 'both';
+
+const VISIT_TYPE_FILTERS: { value: VisitTypeFilter; label: string }[] = [
+  { value: 'initial', label: '初診のみ' },
+  { value: 'followup', label: '再診のみ' },
+  { value: 'both', label: '両方' },
+];
 
 interface TemplateEntry {
   id: string;
@@ -150,6 +164,11 @@ export default function AdminMain() {
     }[]
   >([]);
   const [previewLoading, setPreviewLoading] = useState<boolean>(false);
+  const [patientName, setPatientName] = useState('');
+  const [dob, setDob] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>('both');
 
   const preview = useDisclosure();
 
@@ -225,31 +244,93 @@ export default function AdminMain() {
     }
   };
 
-  const loadSessions = useCallback(async () => {
-    setSessionsLoading(true);
-    setSessionError(null);
-    try {
-      const res = await fetch('/admin/sessions');
-      if (!res.ok) {
-        throw new Error('failed to load sessions');
+  const loadSessions = useCallback(
+    async (filters?: {
+      patientName?: string;
+      dob?: string;
+      startDate?: string;
+      endDate?: string;
+      visitType?: VisitTypeFilter;
+    }) => {
+      setSessionsLoading(true);
+      setSessionError(null);
+      try {
+        const params = new URLSearchParams();
+        const trimmedPatient = filters?.patientName?.trim();
+        const trimmedDob = filters?.dob?.trim();
+        const trimmedStart = filters?.startDate?.trim();
+        const trimmedEnd = filters?.endDate?.trim();
+        if (trimmedPatient) params.append('patient_name', trimmedPatient);
+        if (trimmedDob) params.append('dob', trimmedDob);
+        if (trimmedStart) params.append('start_date', trimmedStart);
+        if (trimmedEnd) params.append('end_date', trimmedEnd);
+        if (filters?.visitType && filters.visitType !== 'both') {
+          params.append('visit_type', filters.visitType);
+        }
+        const query = params.toString();
+        const res = await fetch(`/admin/sessions${query ? `?${query}` : ''}`);
+        if (!res.ok) {
+          throw new Error('failed to load sessions');
+        }
+        const data: SessionSummary[] = await res.json();
+        const sorted = [...data].sort((a, b) => {
+          const av = a.started_at || a.finalized_at || '';
+          const bv = b.started_at || b.finalized_at || '';
+          if (av === bv) return 0;
+          return av < bv ? 1 : -1;
+        });
+        setSessions(sorted);
+        setPage(0);
+      } catch (err) {
+        console.error(err);
+        setSessions([]);
+        setSessionError('問診データの取得に失敗しました。');
+      } finally {
+        setSessionsLoading(false);
       }
-      const data: SessionSummary[] = await res.json();
-      const sorted = [...data].sort((a, b) => {
-        const av = a.started_at || a.finalized_at || '';
-        const bv = b.started_at || b.finalized_at || '';
-        if (av === bv) return 0;
-        return av < bv ? 1 : -1;
-      });
-      setSessions(sorted);
-      setPage(0);
-    } catch (err) {
-      console.error(err);
-      setSessions([]);
-      setSessionError('問診データの取得に失敗しました。');
-    } finally {
-      setSessionsLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
+
+  const refreshWithCurrentFilters = useCallback(() => {
+    void loadSessions({ patientName, dob, startDate, endDate, visitType: visitTypeFilter });
+  }, [loadSessions, patientName, dob, startDate, endDate, visitTypeFilter]);
+
+  const handleSearch = () => {
+    refreshWithCurrentFilters();
+  };
+
+  const handleReset = () => {
+    setPatientName('');
+    setDob('');
+    setStartDate('');
+    setEndDate('');
+    setVisitTypeFilter('both');
+    void loadSessions({ visitType: 'both' });
+  };
+
+  const handleVisitTypeFilterChange = useCallback(
+    (value: VisitTypeFilter) => {
+      setVisitTypeFilter(value);
+      void loadSessions({ patientName, dob, startDate, endDate, visitType: value });
+    },
+    [loadSessions, patientName, dob, startDate, endDate]
+  );
+
+  const visitTypeTabIndex = Math.max(
+    0,
+    VISIT_TYPE_FILTERS.findIndex((filter) => filter.value === visitTypeFilter)
+  );
+
+  const filterSummaryParts = [
+    patientName ? `氏名:${patientName}` : null,
+    dob ? `生年月日:${dob}` : null,
+    startDate ? `開始:${startDate}` : null,
+    endDate ? `終了:${endDate}` : null,
+    visitTypeFilter !== 'both'
+      ? `受診種別:${visitTypeFilter === 'initial' ? '初診' : '再診'}`
+      : null,
+  ].filter((part): part is string => Boolean(part));
 
   const loadTemplates = useCallback(async () => {
     setTemplatesLoading(true);
@@ -346,7 +427,7 @@ export default function AdminMain() {
   }, []);
 
   useEffect(() => {
-    void loadSessions();
+    void loadSessions({ visitType: 'both' });
     void loadTemplates();
     void loadDatabaseStatus();
     void loadLlmInfo();
@@ -572,21 +653,96 @@ export default function AdminMain() {
         boxShadow="sm"
         p={4}
       >
-        <Heading size="lg" mb={2}>
-          問診結果
-        </Heading>
-        <Button
-          size="sm"
-          leftIcon={<FiRefreshCcw />}
-          onClick={() => {
-            void loadSessions();
-          }}
-          isLoading={sessionsLoading}
-          variant="outline"
-          mb={4}
-        >
-          最新の状態に更新
-        </Button>
+        <Flex align="center" justify="space-between" mb={4}>
+          <Heading size="lg">問診結果</Heading>
+          <Button
+            size="sm"
+            leftIcon={<FiRefreshCcw />}
+            onClick={refreshWithCurrentFilters}
+            isLoading={sessionsLoading}
+            variant="outline"
+          >
+            最新の状態に更新
+          </Button>
+        </Flex>
+
+        <VStack align="stretch" spacing={4} mb={4}>
+          <Box w="full">
+            <Tabs
+              index={visitTypeTabIndex}
+              onChange={(index) => {
+                const next = VISIT_TYPE_FILTERS[index];
+                if (next) {
+                  handleVisitTypeFilterChange(next.value);
+                }
+              }}
+              size="sm"
+              variant="soft-rounded"
+              colorScheme="primary"
+              aria-label="問診区分フィルタ"
+            >
+              <TabList>
+                {VISIT_TYPE_FILTERS.map((option) => (
+                  <Tab key={option.value}>{option.label}</Tab>
+                ))}
+              </TabList>
+            </Tabs>
+          </Box>
+          <SimpleGrid columns={{ base: 1, md: 4 }} spacing={4}>
+            <FormControl>
+              <FormLabel>患者名</FormLabel>
+              <Input
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={patientName}
+                onChange={(e) => setPatientName(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>生年月日</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={dob}
+                onChange={(e) => setDob(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(開始)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            </FormControl>
+            <FormControl>
+              <FormLabel>問診日(終了)</FormLabel>
+              <Input
+                type="date"
+                bg="white"
+                _dark={{ bg: 'gray.800' }}
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+              />
+            </FormControl>
+          </SimpleGrid>
+          <Flex justify="flex-end" gap={3} w="full">
+            <Button size="md" onClick={handleSearch} isLoading={sessionsLoading}>
+              検索
+            </Button>
+            <Button size="md" onClick={handleReset} variant="outline">
+              リセット
+            </Button>
+          </Flex>
+          {filterSummaryParts.length > 0 && (
+            <Text fontSize="sm" color="fg.muted" textAlign="left">
+              フィルタ: {filterSummaryParts.join(' ')}
+            </Text>
+          )}
+        </VStack>
         {sessionsLoading ? (
           <HStack spacing={3} align="center">
             <Spinner size="sm" color="accent.solid" />

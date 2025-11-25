@@ -3,7 +3,7 @@
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
 from __future__ import annotations
-from typing import Any, Iterable
+from typing import Any, Iterable, Literal
 from uuid import uuid4
 import time
 from datetime import datetime, timedelta, UTC
@@ -3431,6 +3431,7 @@ def admin_list_sessions(
     dob: str | None = None,
     start_date: str | None = Query(None, alias="start_date"),
     end_date: str | None = Query(None, alias="end_date"),
+    visit_type: Literal["initial", "followup"] | None = Query(None, alias="visit_type"),
 ) -> list[SessionSummary]:
     """保存済みセッションの一覧を返す。"""
     sessions = db_list_sessions(
@@ -3438,6 +3439,7 @@ def admin_list_sessions(
         dob=dob,
         start_date=start_date,
         end_date=end_date,
+        visit_type=visit_type,
     )
     return [SessionSummary(**s) for s in sessions]
 
@@ -3668,7 +3670,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
 
 
 

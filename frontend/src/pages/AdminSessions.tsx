@@ -39,6 +39,9 @@ import {
   AlertDialogHeader,
   AlertDialogBody,
   AlertDialogFooter,
+  Tabs,
+  TabList,
+  Tab,
   SimpleGrid,
 } from '@chakra-ui/react';
 import {
@@ -77,6 +80,14 @@ interface SessionSummary {
   interrupted?: boolean;
 }
 
+type VisitTypeFilter = 'initial' | 'followup' | 'both';
+
+const VISIT_TYPE_FILTERS: { value: VisitTypeFilter; label: string }[] = [
+  { value: 'initial', label: '初診のみ' },
+  { value: 'followup', label: '再診のみ' },
+  { value: 'both', label: '両方' },
+];
+
 /** 管理画面: セッション一覧。 */
 export default function AdminSessions() {
   const PAGE_SIZE = 50;
@@ -102,6 +113,7 @@ export default function AdminSessions() {
   const [dob, setDob] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>('both');
   const [page, setPage] = useState(0);
   const [confirmState, setConfirmState] = useState<{ type: 'bulk-selected' | 'bulk-displayed' | 'row'; id?: string } | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
@@ -112,6 +124,7 @@ export default function AdminSessions() {
       dob?: string;
       startDate?: string;
       endDate?: string;
+      visitType?: VisitTypeFilter;
     }) => {
       setListLoading(true);
       try {
@@ -124,6 +137,9 @@ export default function AdminSessions() {
         if (trimmedDob) params.append('dob', trimmedDob);
         if (trimmedStart) params.append('start_date', trimmedStart);
         if (trimmedEnd) params.append('end_date', trimmedEnd);
+        if (filters.visitType && filters.visitType !== 'both') {
+          params.append('visit_type', filters.visitType);
+        }
         const query = params.toString();
         const response = await fetch(`/admin/sessions${query ? `?${query}` : ''}`);
         if (!response.ok) {
@@ -154,8 +170,8 @@ export default function AdminSessions() {
   );
 
   const refreshWithCurrentFilters = useCallback(() => {
-    void loadSessions({ patientName, dob, startDate, endDate });
-  }, [loadSessions, patientName, dob, startDate, endDate]);
+    void loadSessions({ patientName, dob, startDate, endDate, visitType: visitTypeFilter });
+  }, [loadSessions, patientName, dob, startDate, endDate, visitTypeFilter]);
 
   const handleSearch = () => {
     refreshWithCurrentFilters();
@@ -166,11 +182,20 @@ export default function AdminSessions() {
     setDob('');
     setStartDate('');
     setEndDate('');
-    void loadSessions({});
+    setVisitTypeFilter('both');
+    void loadSessions({ visitType: 'both' });
   };
 
+  const handleVisitTypeFilterChange = useCallback(
+    (value: VisitTypeFilter) => {
+      setVisitTypeFilter(value);
+      void loadSessions({ patientName, dob, startDate, endDate, visitType: value });
+    },
+    [loadSessions, patientName, dob, startDate, endDate]
+  );
+
   useEffect(() => {
-    void loadSessions({});
+    void loadSessions({ visitType: 'both' });
   }, [loadSessions]);
 
   useEffect(() => {
@@ -191,6 +216,11 @@ export default function AdminSessions() {
   }, [sessions.length]);
 
   const visitTypeLabel = (type: string) => (type === 'initial' ? '初診' : type === 'followup' ? '再診' : type);
+
+  const visitTypeTabIndex = Math.max(
+    0,
+    VISIT_TYPE_FILTERS.findIndex((filter) => filter.value === visitTypeFilter)
+  );
 
   const genderLabel = (value: string | null | undefined) => {
     switch (value) {
@@ -471,7 +501,7 @@ export default function AdminSessions() {
   };
 
   const reloadWithCurrentFilters = () => {
-    loadSessions({ patientName, dob, startDate, endDate });
+    loadSessions({ patientName, dob, startDate, endDate, visitType: visitTypeFilter });
   };
 
   // row deletion handled via AlertDialog -> deleteSessionNoConfirm
@@ -596,25 +626,40 @@ export default function AdminSessions() {
                   {endDate && ` 終了:${endDate}`}
                 </Text>
               )}
-              <Button size="md" onClick={handleSearch} isLoading={listLoading}>
-                検索
-              </Button>
-              <Button size="md" onClick={handleReset}>
-                リセット
+              <Button
+                size="md"
+                leftIcon={<FiRefreshCcw />}
+                onClick={refreshWithCurrentFilters}
+                isLoading={listLoading}
+                variant="outline"
+              >
+                最新の状態に更新
               </Button>
             </Flex>
           </Flex>
 
-          <Button
-            size="sm"
-            leftIcon={<FiRefreshCcw />}
-            onClick={refreshWithCurrentFilters}
-            isLoading={listLoading}
-            alignSelf={{ base: 'stretch', sm: 'flex-start' }}
-            variant="outline"
-          >
-            最新の状態に更新
-          </Button>
+          <Box w="full">
+            <Tabs
+              index={visitTypeTabIndex}
+              onChange={(index) => {
+                const next = VISIT_TYPE_FILTERS[index];
+                if (next) {
+                  handleVisitTypeFilterChange(next.value);
+                }
+              }}
+              size="sm"
+              variant="soft-rounded"
+              colorScheme="primary"
+              aria-label="問診区分フィルタ"
+            >
+              <TabList>
+                {VISIT_TYPE_FILTERS.map((option) => (
+                  <Tab key={option.value}>{option.label}</Tab>
+                ))}
+              </TabList>
+            </Tabs>
+          </Box>
+
           <HStack spacing={4} align="flex-end">
             <FormControl>
               <FormLabel>患者名</FormLabel>
@@ -656,6 +701,14 @@ export default function AdminSessions() {
               />
             </FormControl>
           </HStack>
+          <Flex justify="flex-end" gap={3} w="full" mt={2}>
+            <Button size="md" onClick={handleSearch} isLoading={listLoading}>
+              検索
+            </Button>
+            <Button size="md" onClick={handleReset} variant="outline">
+              リセット
+            </Button>
+          </Flex>
         </VStack>
       </Box>
       <Box
