@@ -15,6 +15,9 @@ const nameInput = document.getElementById('nameXPath');
 const dobInput = document.getElementById('dobXPath');
 const saveButton = document.getElementById('saveButton');
 const fetchButton = document.getElementById('fetchButton');
+if (fetchButton) {
+  fetchButton.textContent = '設定を保存してテスト実行';
+}
 let isWorking = false;
 
 const setStatus = (text, type = 'info') => {
@@ -39,12 +42,16 @@ const isValidDate = (year, month, day) => {
 };
 
 const normalizeStandardDate = (value) => {
-  const cleaned = value
+  // まず末尾の「生」などを除去し、括弧内の和暦を除去
+  let cleaned = value
+    .replace(/[\s　]+生.*$/g, '') // 「生」以降を除去
+    .replace(/\(.*?\)/g, '') // 括弧内（和暦）を除去
     .replace(/年|月/g, '-')
     .replace(/日/g, '')
     .replace(/[./\\]/g, '-')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+
   const standardMatch = cleaned.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (standardMatch) {
     const [, year, month, day] = standardMatch;
@@ -198,8 +205,8 @@ const getActiveTabId = () =>
   });
 
 const resolvePatientInfo = async (tabId, nameXPath, dobXPath) => {
-  const [result] = await chrome.scripting.executeScript({
-    target: { tabId },
+  const results = await chrome.scripting.executeScript({
+    target: { tabId, allFrames: true },
     func: (nameExpr, dobExpr) => {
       const evalXPath = (xpath) => {
         if (!xpath) return null;
@@ -218,10 +225,23 @@ const resolvePatientInfo = async (tabId, nameXPath, dobXPath) => {
     },
     args: [nameXPath, dobXPath],
   });
-  if (!result || !result.result) {
+
+  // 全フレームから有効な結果を探す
+  let name = null;
+  let dob = null;
+
+  for (const frameResult of results) {
+    const info = frameResult.result;
+    if (info && info.name) name = info.name;
+    if (info && info.dob) dob = info.dob;
+    if (name && dob) break; // 両方見つかったら終了
+  }
+
+  if (!name || !dob) {
     throw new Error('XPathから値を取得できませんでした');
   }
-  return result.result;
+
+  return { name, dob };
 };
 
 const fetchMarkdown = async (endpoint, key, name, dob) => {
@@ -298,6 +318,82 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error(error);
     setStatus('設定の取得に失敗しました。', 'error');
   });
+  const updatePreview = async (inputId, previewId) => {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    const xpath = input.value.trim();
+
+    if (!xpath) {
+      preview.textContent = '';
+      return;
+    }
+
+    preview.textContent = '確認中...';
+    preview.style.color = '#64748b';
+
+    try {
+      const tabId = await getActiveTabId();
+      const results = await chrome.scripting.executeScript({
+        target: { tabId, allFrames: true },
+        func: (xpathExpr) => {
+          try {
+            const result = document.evaluate(xpathExpr, document, null, XPathResult.STRING_TYPE, null);
+            return result.stringValue ? result.stringValue.trim() : null;
+          } catch (e) {
+            return { error: '無効なXPathです' };
+          }
+        },
+        args: [xpath],
+      });
+
+      // 全フレームの結果から有効な値を探す
+      let foundValue = null;
+      let errorMsg = null;
+
+      for (const frameResult of results) {
+        const val = frameResult.result;
+        if (val && typeof val === 'object' && val.error) {
+          errorMsg = val.error;
+        } else if (val) {
+          foundValue = val;
+          break; // 見つかったら終了
+        }
+      }
+
+      if (foundValue) {
+        preview.textContent = `取得結果: ${foundValue}`;
+        preview.style.color = '#059669';
+      } else if (errorMsg) {
+        preview.textContent = errorMsg;
+        preview.style.color = '#ef4444';
+      } else {
+        preview.textContent = '要素が見つかりません';
+        preview.style.color = '#f59e0b';
+      }
+    } catch (err) {
+      console.error(err);
+      preview.textContent = '取得エラー';
+      preview.style.color = '#ef4444';
+    }
+  };
+
+  nameInput.addEventListener('blur', () => updatePreview('nameXPath', 'namePreview'));
+  dobInput.addEventListener('blur', () => updatePreview('dobXPath', 'dobPreview'));
+
+  // 設定読み込み
+  initialize().catch((error) => {
+    console.error(error);
+    setStatus('設定の取得に失敗しました。', 'error');
+  });
+
+  const shortcutLink = document.getElementById('shortcutLink');
+  if (shortcutLink) {
+    shortcutLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+    });
+  }
+
   saveButton.addEventListener('click', async () => {
     const payload = {
       apiUrl: apiUrlInput.value.trim(),

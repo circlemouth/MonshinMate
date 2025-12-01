@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Center,
+  Checkbox,
   Code,
   FormControl,
   FormHelperText,
@@ -53,6 +54,7 @@ export default function AdminApi() {
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [saving, setSaving] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
   const { notify } = useNotify();
   const toast = useToast();
 
@@ -94,7 +96,7 @@ export default function AdminApi() {
         const data: PatientSummaryApiInfo = await res.json();
         setInfo(data);
         notify({ title: 'APIキーを保存しました', status: 'success', channel: 'admin' });
-        setApiKey('');
+        setApiKey(value ?? '');
       } catch (err: any) {
         console.error(err);
         notify({ title: err?.message || '保存に失敗しました', status: 'error', channel: 'admin' });
@@ -132,6 +134,17 @@ export default function AdminApi() {
     toast({ title: 'エンドポイントをコピーしました', status: 'success', duration: 2000 });
   };
 
+  const handleCopyKey = useCallback(async () => {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      toast({ title: 'APIキーをコピーしました', status: 'success', duration: 2000 });
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'APIキーのコピーに失敗しました', status: 'error', duration: 2000 });
+    }
+  }, [apiKey, toast]);
+
   const statusLabel = useMemo(() => {
     if (!info) return '不明';
     return info.is_enabled ? 'APIキー設定済み' : 'APIキー未設定';
@@ -152,7 +165,7 @@ export default function AdminApi() {
           患者問診データAPI
         </Heading>
         <Text>
-          患者名と生年月日をもとに最新の問診をMarkdown形式で取得できるAPIです。Chrome拡張機能はこのAPIを利用してClipboardにコピーします。
+          患者名と生年月日をもとに最新の問診をマークダウン形式で取得できるAPIです。Chrome拡張機能からも利用できます。
         </Text>
         <HStack mt={2} spacing={2} align="center">
           <Badge colorScheme={info?.is_enabled ? 'green' : 'orange'}>{statusLabel}</Badge>
@@ -165,12 +178,25 @@ export default function AdminApi() {
       <Stack spacing={4} bg="bg.surface" borderWidth="1px" borderRadius="lg" p={4}>
         <FormControl>
           <FormLabel>APIキー</FormLabel>
-          <Input
-            type="password"
-            value={apiKey}
-            placeholder="16文字以上のランダムな文字列"
-            onChange={(event) => setApiKey(event.target.value)}
-          />
+          <HStack spacing={2} align="stretch">
+            <Input
+              type={showApiKey ? 'text' : 'password'}
+              value={apiKey}
+              placeholder="16文字以上のランダムな文字列"
+              onChange={(event) => setApiKey(event.target.value)}
+            />
+            <Button size="sm" onClick={handleCopyKey} isDisabled={!apiKey}>
+              キーをコピー
+            </Button>
+          </HStack>
+          <HStack mt={2} justify="space-between">
+            <Checkbox
+              isChecked={showApiKey}
+              onChange={(event) => setShowApiKey(event.target.checked)}
+            >
+              APIキーを表示
+            </Checkbox>
+          </HStack>
           <FormHelperText>このAPIキーをChrome拡張機能の設定画面に登録してください。</FormHelperText>
         </FormControl>
         <HStack spacing={3} flexWrap="wrap">

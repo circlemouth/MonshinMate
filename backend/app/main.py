@@ -2628,7 +2628,7 @@ def get_patient_summary_api_info(request: Request) -> PatientSummaryApiInfo:
     stored = load_app_settings() or {}
     enabled = bool(stored.get("patient_summary_api_key_hash"))
     return PatientSummaryApiInfo(
-        endpoint=request.url_for("patient_summary"),
+        endpoint=str(request.url_for("patient_summary")),
         header_name=PATIENT_SUMMARY_API_HEADER,
         is_enabled=enabled,
         last_updated_at=stored.get("patient_summary_api_key_updated_at"),
@@ -2650,7 +2650,7 @@ def set_patient_summary_api_key(payload: PatientSummaryApiKeyPayload, request: R
     save_app_settings(current)
     enabled = bool(current.get("patient_summary_api_key_hash"))
     return PatientSummaryApiInfo(
-        endpoint=request.url_for("patient_summary"),
+        endpoint=str(request.url_for("patient_summary")),
         header_name=PATIENT_SUMMARY_API_HEADER,
         is_enabled=enabled,
         last_updated_at=current.get("patient_summary_api_key_updated_at"),
@@ -3931,7 +3931,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
 
 
 
