@@ -1,3 +1,4 @@
 [submodule "private/cloud-run-adapter"]
 	path = private/cloud-run-adapter
 	url = https://github.com/circlemouth/Monshinmate-cloud-run-adapter.git
+	branch = main
