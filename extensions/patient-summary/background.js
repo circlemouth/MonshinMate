@@ -1,6 +1,21 @@
 'use strict';
 
 const API_KEY_HEADER = 'X-MonshinMate-Api-Key';
+const BACKGROUND_MESSAGES = {
+  missingSettings: '設定が未完了です。アイコンから設定してください。',
+  missingPatientInfo: '患者情報が取得できませんでした。',
+  apiError: (status) => `API通信で${status}エラーが発生しました。`,
+  markdownMissing: '問診結果が届きませんでした。',
+  genericError: '処理に失敗しました。',
+  copyFailed: 'クリップボードへのコピーに失敗しました。',
+};
+
+const friendlyBackgroundMessages = new Set(
+  Object.values(BACKGROUND_MESSAGES).filter((value) => typeof value === 'string')
+);
+
+const isFriendlyBackgroundMessage = (text) =>
+  Boolean(text && (friendlyBackgroundMessages.has(text) || text.startsWith('API通信で')));
 
 // 日付フォーマット等のユーティリティ（options.jsと重複するが、モジュール化されていないため再定義）
 const formatIso = (year, month, day) => {
@@ -172,7 +187,7 @@ const copyAndNotify = (text) => {
         }, 3000);
     }).catch(err => {
         console.error('Clipboard write failed', err);
-        alert('クリップボードへのコピーに失敗しました: ' + err);
+        alert(BACKGROUND_MESSAGES.copyFailed);
     });
 };
 
@@ -215,7 +230,7 @@ chrome.commands.onCommand.addListener(async (command) => {
             chrome.scripting.executeScript({
                 target: { tabId: tab.id },
                 func: showError,
-                args: ['拡張機能の設定が完了していません。アイコンをクリックして設定してください。']
+                args: [BACKGROUND_MESSAGES.missingSettings]
             });
             return;
         }
@@ -239,7 +254,7 @@ chrome.commands.onCommand.addListener(async (command) => {
         }
 
         if (!name || !dob) {
-            throw new Error('患者名または生年月日が見つかりませんでした');
+            throw new Error(BACKGROUND_MESSAGES.missingPatientInfo);
         }
 
         const normalizedDob = normalizeDob(dob);
@@ -256,12 +271,15 @@ chrome.commands.onCommand.addListener(async (command) => {
 
         if (!response.ok) {
             const detail = await response.json().catch(() => ({}));
-            throw new Error(detail?.detail || `APIエラー(${response.status})`);
+            if (detail?.detail) {
+                console.error('API error detail:', detail.detail);
+            }
+            throw new Error(BACKGROUND_MESSAGES.apiError(response.status));
         }
 
         const payload = await response.json();
         if (!payload?.markdown) {
-            throw new Error('Markdownが返却されませんでした');
+            throw new Error(BACKGROUND_MESSAGES.markdownMissing);
         }
 
         // 3. 結果をクリップボードにコピー＆通知
@@ -273,10 +291,13 @@ chrome.commands.onCommand.addListener(async (command) => {
 
     } catch (error) {
         console.error(error);
+        const displayMessage = isFriendlyBackgroundMessage(error?.message)
+            ? error.message
+            : BACKGROUND_MESSAGES.genericError;
         chrome.scripting.executeScript({
             target: { tabId: tab.id },
             func: showError,
-            args: [`エラー: ${error.message}`]
+            args: [displayMessage]
         });
     }
 });

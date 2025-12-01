@@ -8,6 +8,27 @@ const DEFAULT_SETTINGS = {
   dobXPath: '',
 };
 
+const ERROR_MESSAGES = {
+  incompleteSettings: '設定をすべて入力してください。',
+  noActiveTab: 'アクティブタブがありません。',
+  invalidXPath: 'XPathの形式が正しくありません。',
+  missingPatientInfo: '患者情報が取得できませんでした。',
+  missingElement: '要素が見つかりません。',
+  apiError: (status) => `API通信で${status}エラーが発生しました。`,
+  markdownMissing: '問診結果が届きませんでした。',
+  fetchFail: '取得に失敗しました。',
+  previewFail: '要素の確認に失敗しました。',
+  loadFail: '設定の読み込みに失敗しました。',
+  saveFail: '設定の保存に失敗しました。',
+};
+
+const friendlyErrorMessages = new Set(
+  Object.values(ERROR_MESSAGES).filter((value) => typeof value === 'string')
+);
+
+const isFriendlyStatus = (text) =>
+  Boolean(text && (friendlyErrorMessages.has(text) || text.startsWith('API通信で')));
+
 const statusEl = document.getElementById('statusText');
 const apiUrlInput = document.getElementById('apiUrl');
 const apiKeyInput = document.getElementById('apiKey');
@@ -196,8 +217,8 @@ const getActiveTabId = () =>
         return;
       }
       const tab = tabs[0];
-      if (!tab || typeof tab.id !== 'number') {
-        reject(new Error('アクティブなタブが見つかりません'));
+    if (!tab || typeof tab.id !== 'number') {
+      reject(new Error(ERROR_MESSAGES.noActiveTab));
         return;
       }
       resolve(tab.id);
@@ -238,7 +259,7 @@ const resolvePatientInfo = async (tabId, nameXPath, dobXPath) => {
   }
 
   if (!name || !dob) {
-    throw new Error('XPathから値を取得できませんでした');
+    throw new Error(ERROR_MESSAGES.missingPatientInfo);
   }
 
   return { name, dob };
@@ -256,11 +277,14 @@ const fetchMarkdown = async (endpoint, key, name, dob) => {
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail?.detail || `APIエラー(${response.status})`);
+    if (detail?.detail) {
+      console.error('API error detail:', detail.detail);
+    }
+    throw new Error(ERROR_MESSAGES.apiError(response.status));
   }
   const payload = await response.json();
   if (!payload?.markdown) {
-    throw new Error('Markdownが返却されませんでした');
+    throw new Error(ERROR_MESSAGES.markdownMissing);
   }
   return payload.markdown;
 };
@@ -276,7 +300,7 @@ const handleFetch = async () => {
   const nameXPath = nameInput.value.trim();
   const dobXPath = dobInput.value.trim();
   if (!endpoint || !apiKey || !nameXPath || !dobXPath) {
-    setStatus('すべての設定を入力してください。', 'error');
+    setStatus(ERROR_MESSAGES.incompleteSettings, 'error');
     return;
   }
   isWorking = true;
@@ -286,7 +310,7 @@ const handleFetch = async () => {
     const tabId = await getActiveTabId();
     const patientInfo = await resolvePatientInfo(tabId, nameXPath, dobXPath);
     if (!patientInfo?.name || !patientInfo?.dob) {
-      throw new Error('患者名または生年月日が取得できませんでした');
+      throw new Error(ERROR_MESSAGES.missingPatientInfo);
     }
     const normalizedDob = normalizeDob(patientInfo.dob);
     const markdown = await fetchMarkdown(endpoint, apiKey, patientInfo.name, normalizedDob);
@@ -295,7 +319,10 @@ const handleFetch = async () => {
     showDesktopNotification('問診結果をコピーしました。');
   } catch (error) {
     console.error(error);
-    setStatus(error?.message || '取得に失敗しました。', 'error');
+    const friendlyMessage = isFriendlyStatus(error?.message)
+      ? error.message
+      : ERROR_MESSAGES.fetchFail;
+    setStatus(friendlyMessage, 'error');
   } finally {
     isWorking = false;
     fetchButton.disabled = false;
@@ -316,7 +343,7 @@ const initialize = async () => {
 document.addEventListener('DOMContentLoaded', () => {
   initialize().catch((error) => {
     console.error(error);
-    setStatus('設定の取得に失敗しました。', 'error');
+    setStatus(ERROR_MESSAGES.loadFail, 'error');
   });
   const updatePreview = async (inputId, previewId) => {
     const input = document.getElementById(inputId);
@@ -340,7 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const result = document.evaluate(xpathExpr, document, null, XPathResult.STRING_TYPE, null);
             return result.stringValue ? result.stringValue.trim() : null;
           } catch (e) {
-            return { error: '無効なXPathです' };
+            return { error: ERROR_MESSAGES.invalidXPath };
           }
         },
         args: [xpath],
@@ -367,12 +394,12 @@ document.addEventListener('DOMContentLoaded', () => {
         preview.textContent = errorMsg;
         preview.style.color = '#ef4444';
       } else {
-        preview.textContent = '要素が見つかりません';
+        preview.textContent = ERROR_MESSAGES.missingElement;
         preview.style.color = '#f59e0b';
       }
     } catch (err) {
       console.error(err);
-      preview.textContent = '取得エラー';
+      preview.textContent = ERROR_MESSAGES.previewFail;
       preview.style.color = '#ef4444';
     }
   };
@@ -383,7 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 設定読み込み
   initialize().catch((error) => {
     console.error(error);
-    setStatus('設定の取得に失敗しました。', 'error');
+    setStatus(ERROR_MESSAGES.loadFail, 'error');
   });
 
   const shortcutLink = document.getElementById('shortcutLink');
@@ -406,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus('設定を保存しました。', 'success');
     } catch (error) {
       console.error(error);
-      setStatus('設定の保存に失敗しました。', 'error');
+      setStatus(ERROR_MESSAGES.saveFail, 'error');
     }
   });
   fetchButton.addEventListener('click', async () => {
