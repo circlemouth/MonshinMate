@@ -67,3 +67,6 @@ Thumbs.db
 playwright-report/
 test-results/
 .playwright/
+
+# Worktrees
+.worktrees/

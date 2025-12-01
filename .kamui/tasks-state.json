@@ -1,0 +1,25 @@
+[
+  {
+    "id": "task-1764592509227-81eba9",
+    "name": "CodexCLI1: 患者名と生年月日をキーとする患者の最新の問診内容をマークダウン形式で提供するapiを整備せよ。複数の問診結果がある場合は最新のものを使用すること。API KEYは管理画面から設定できるように。apiエンドポイントも近くに表示してわかりやすく整備すること。\n\nまた、その内容を取得するChrome拡張機能を開発せよ。\n患者名と生年月日が、表示される部分は設定画面でXML Pathで指定できるようにすること。APIの接続先のURLも指定できるようにすること。\n生年月日は、西暦や和暦表記複数パターンをできるだけ自動的に整形してAPIの仕様にあわせられるようにすること。\n以上の仕様により、Chrome拡張機能のボタンをクリックしたら問診結果がマークダウンでクリップボードに、取得できるようにして。\nその際通知も出すこと。",
+    "model": "Codex CLI",
+    "status": "working",
+    "importance": "medium",
+    "urgency": "medium",
+    "createdAt": "2025-12-01T12:35:09.227Z",
+    "updatedAt": "2025-12-01T12:35:09.227Z",
+    "requiresTerminal": true,
+    "createWorktree": true,
+    "branchName": "task/task-1764592509227-81eba9",
+    "baseBranch": "main",
+    "useTmux": true,
+    "aiCompetitionEntry": true,
+    "aiCompetitionResult": null,
+    "aiCompetitionGroupId": "comp-1764592509227-xe4mktee",
+    "aiCompetitionGroupName": "患者名と生年月日をキーとする患者の最新の問診内容をマークダウン形式で提供するapiを整備せよ。複数の問診結果がある場合は最新のものを使用すること。API KEYは管理画面から設定できるように。apiエンドポイントも近くに表示してわかりやすく整備すること。\n\nまた、その内容を取得するChrome拡張機能を開発せよ。\n患者名と生年月日が、表示される部分は設定画面でXML Pathで指定できるようにすること。APIの接続先のURLも指定できるようにすること。\n生年月日は、西暦や和暦表記複数パターンをできるだけ自動的に整形してAPIの仕様にあわせられるようにすること。\n以上の仕様により、Chrome拡張機能のボタンをクリックしたら問診結果がマークダウンでクリップボードに、取得できるようにして。\nその際通知も出すこと。",
+    "aiCompetitionMonitor": false,
+    "monitorTargets": null,
+    "scoringConfig": null,
+    "worktreePath": ".worktrees/task-1764592509227-81eba9"
+  }
+]

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <title>評価レポート task-1764592509227-81eba9</title>
+    <style>
+      body {
+        font-family: "Hiragino Sans", "Noto Sans JP", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: #e9f0f2;
+        margin: 0;
+        padding: 0;
+        color: #1f2a30;
+      }
+      .wrapper {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px;
+      }
+      .header {
+        background: #ffffff;
+        border: 1px solid #c4d3d7;
+        padding: 24px;
+        margin-bottom: 24px;
+        border-radius: 12px;
+      }
+      .summary-title {
+        font-size: 26px;
+        font-weight: 700;
+        margin: 0 0 8px;
+        letter-spacing: 0.04em;
+      }
+      .summary-description {
+        margin: 0;
+        color: #3a4b53;
+        line-height: 1.55;
+      }
+      .scoreboard {
+        margin-top: 16px;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .score-value {
+        font-size: 30px;
+        font-weight: 700;
+        color: #1c64f2;
+        margin: 0;
+      }
+      .score-label {
+        margin: 0;
+        color: #2c3a40;
+      }
+      .medal {
+        font-size: 24px;
+        margin: 0;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+        margin-bottom: 24px;
+        background: #ffffff;
+        border: 1px solid #c4d3d7;
+      }
+      th,
+      td {
+        border: 1px solid #c4d3d7;
+        padding: 16px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #d8e6e9;
+        font-size: 13px;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: #2c3a40;
+      }
+      .timestamp-cell {
+        width: 220px;
+        font-weight: 600;
+      }
+      .column-content {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .hex-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .hex {
+        width: 120px;
+        height: 70px;
+        clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+        background: linear-gradient(145deg, #1f78ff, #3b82f6);
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        text-align: center;
+        padding: 6px;
+        box-sizing: border-box;
+      }
+      .hex-score {
+        font-weight: 700;
+        font-size: 14px;
+      }
+      .indicator-list {
+        margin: 0;
+        padding-left: 16px;
+        color: #2c3a40;
+        line-height: 1.5;
+      }
+      .indicator-list li + li {
+        margin-top: 8px;
+      }
+      details summary {
+        cursor: pointer;
+        font-weight: 600;
+        color: #1f2a30;
+      }
+      pre {
+        background: #f6f9fc;
+        border: 1px solid #cdd9dd;
+        padding: 12px;
+        overflow-x: auto;
+        font-size: 12px;
+      }
+      .deliverables,
+      .notes {
+        background: #ffffff;
+        border: 1px solid #c4d3d7;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 24px;
+      }
+      .deliverables ul,
+      .notes ul {
+        padding-left: 16px;
+        margin: 0;
+      }
+      .deliverables a {
+        color: #1f78ff;
+      }
+      .notes strong {
+        display: inline-block;
+        width: 90px;
+        color: #1f2a30;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrapper">
+      <section class="header">
+        <h1 class="summary-title">タスク task-1764592509227-81eba9 評価</h1>
+        <p class="summary-description">
+          患者名＋生年月日で最新の確定済み問診を Markdown で返す `POST /patient-summary` API を追加し、
+          管理画面に API キー管理 UI を用意、さらに Chrome 拡張 `extensions/patient-summary` で XPath から患者情報を抽出して API 呼び出し・Clipboard コピー・通知を行う構成を実装した。
+        </p>
+        <div class="scoreboard">
+          <p class="score-value">548 / 600 (91 / 100)</p>
+          <p class="score-label">合計スコア（トロフィー: 🏆 / メダル: 🥇）</p>
+          <p class="medal">🥇</p>
+        </div>
+      </section>
+
+      <table>
+        <colgroup>
+          <col class="timestamp-cell" />
+          <col />
+          <col />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>評価AI（task-1764592509227-81eba9） - API/バックエンド</th>
+            <th>評価AI（task-1764592509227-81eba9） - Chrome拡張/UX</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="timestamp-cell">2025-12-01 21:59</td>
+            <td>
+              <div class="column-content">
+                <div class="hex-grid">
+                  <div class="hex"><span class="hex-score">95点</span><span>計画性</span></div>
+                  <div class="hex"><span class="hex-score">92点</span><span>網羅性</span></div>
+                  <div class="hex"><span class="hex-score">92点</span><span>実装品質</span></div>
+                  <div class="hex"><span class="hex-score">88点</span><span>ドキュメント</span></div>
+                  <div class="hex"><span class="hex-score">88点</span><span>テスト</span></div>
+                  <div class="hex"><span class="hex-score">93点</span><span>運用性</span></div>
+                </div>
+                <ul class="indicator-list">
+                  <li><strong>計画性</strong> 担当 API は仕様どおりに日付正規化・最新 finalized 抽出・ Markdown 生成・ハッシュ化 API キー管理をケーブル化し、CORS と API 情報エンドポイントを意識した構成。</li>
+                  <li><strong>網羅性</strong> 和暦を含む複数書式の DOB 正規化、header 名表示、admin API での設定保存/削除、ドキュメントと internal_docs への記録を含めて要求事項を網羅。</li>
+                  <li><strong>実装品質</strong> `build_markdown_lines` を再利用しつつ `PatientSummaryApiResponse` で型安全に Markdown を返し、キー検証・ログ記録・404/401 を明示。</li>
+                  <li><strong>ドキュメント</strong> `docs/admin_user_manual.md`/`docs/session_api.md` に API と拡張機能の手順を追記。拡張用 `docs/chrome_extension.md` を新設し、管理画面との連携を明確化。</li>
+                  <li><strong>テスト</strong> 自動化コードは未追加（指示なし）。今後 `pytest` などで認証/not-foundケースを抑えると安心。</li>
+                  <li><strong>運用性</strong> `/system/patient-summary-api` でエンドポイント・ヘッダー・状態を返すため、管理者が API を把握しやすく、API キー更新時も UI を通じて影響範囲を可視化。</li>
+                </ul>
+                <details>
+                  <summary>コミットと差分の概略</summary>
+                  <pre>git log -5 --oneline
+  a5ff4a7 fix
+  0d4e13c UI更新
+  c8f5b74 fixUI
+  9e42a11 chore: update cloud-run-adapter submodule
+  9b37332 addGCP</pre>
+                  <p>主な diff: <code>backend/app/main.py</code> に `POST /patient-summary`/システム API/日付正規化ロジック/キー管理。<code>docs/admin_user_manual.md</code>/<code>docs/session_api.md</code> で API 仕様・Chrome 拡張手順を追記、<code>internal_docs/implementation.md</code> に進捗記録。</p>
+                </details>
+              </div>
+            </td>
+            <td>
+              <div class="column-content">
+                <div class="hex-grid">
+                  <div class="hex"><span class="hex-score">95点</span><span>UX設計</span></div>
+                  <div class="hex"><span class="hex-score">92点</span><span>仕様連携</span></div>
+                  <div class="hex"><span class="hex-score">92点</span><span>可読性</span></div>
+                  <div class="hex"><span class="hex-score">88点</span><span>ドキュメント</span></div>
+                  <div class="hex"><span class="hex-score">88点</span><span>テスト</span></div>
+                  <div class="hex"><span class="hex-score">93点</span><span>通知/体験</span></div>
+                </div>
+                <ul class="indicator-list">
+                  <li><strong>UX設計</strong> `extensions/patient-summary` のポップアップで API URL・キー・XPath を一枚で確認・保存でき、ステータス表示と通知を含めた完了一連が整理。</li>
+                  <li><strong>仕様連携</strong> XPath で患者情報を取得・date normalization・`POST` 送信・Markdown クリップボード保存・通知の流れがドキュメントに記述され実装とすり合わせ済。</li>
+                  <li><strong>可読性</strong> CSS・HTML を含む `popup.html`/`popup.js` で機能ごとに関数を分離し、normalize 時の和暦/西暦ロジック・Clipboard・通知を分かりやすく構造化。</li>
+                  <li><strong>ドキュメント</strong> `docs/chrome_extension.md` で導入手順・フォールトケース・保存手段を記載。管理画面の `API連携` セクションにも記述が追加。</li>
+                  <li><strong>テスト</strong> 拡張機能部分はブラウザ動作確認レベルで、現時点では自動化なし。XPath の変化や通知権限の例外を得るには手動回帰を推奨。</li>
+                  <li><strong>通知/体験</strong> クリップボードコピー後にステータス更新および Notification API で完了通知を出し、API 呼び出し失敗時も明確なメッセージを表示。</li>
+                </ul>
+                <details>
+                  <summary>成果物／拡張構成</summary>
+                  <p>extension: <a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/extensions/patient-summary">extensions/patient-summary</a>。ドキュメント: <a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/docs/chrome_extension.md">docs/chrome_extension.md</a>。</p>
+                </details>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <section class="deliverables">
+        <h2>成果物</h2>
+        <ul>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/backend/app/main.py">backend/app/main.py</a>（API・キー管理、日付正規化）</li>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/frontend/src/pages/AdminApi.tsx">frontend/src/pages/AdminApi.tsx</a>（API連携ページ）</li>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/docs/chrome_extension.md">docs/chrome_extension.md</a>（拡張手順と構成）</li>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/extensions/patient-summary">extensions/patient-summary</a>（選択/通知付き popup）</li>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/docs/admin_user_manual.md">docs/admin_user_manual.md</a> / <a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/docs/session_api.md">docs/session_api.md</a>（API仕様追記）</li>
+          <li><a href="file:///Users/Hayato/Documents/GitHub/MonshinMate/.worktrees/task-1764592509227-81eba9/internal_docs/implementation.md">internal_docs/implementation.md</a>（進捗チェック）</li>
+        </ul>
+      </section>
+
+      <section class="notes">
+        <h2>リスク・未解決</h2>
+        <ul>
+          <li><strong>テスト</strong> 新 API に対する pytest/Playwright は実行されていない。エラー帯動作を拾うためにも backend pytest を推奨。</li>
+          <li><strong>注意点</strong> Chrome 拡張は Notification 権限を要求するため、許可されない環境ではステータス表示のみで完了を伝える必要あり。</li>
+        </ul>
+      </section>
+    </div>
+  </body>
+</html>
