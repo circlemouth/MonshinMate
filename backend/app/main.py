@@ -136,10 +136,14 @@ init_db()
 app = FastAPI(title="MonshinMate API")
 
 _allowed_origins = _resolve_allowed_origins()
-if _allowed_origins:
+_allowed_origin_regex = os.getenv("FRONTEND_ALLOWED_ORIGIN_REGEX")
+if not _allowed_origin_regex:
+    _allowed_origin_regex = r"^chrome-extension://.*$"
+if _allowed_origins or _allowed_origin_regex:
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=_allowed_origins,
+        allow_origins=_allowed_origins or [],
+        allow_origin_regex=_allowed_origin_regex,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -155,6 +159,8 @@ QUESTIONNAIRE_IMAGE_CATEGORY = "questionnaire_item_image"
 SYSTEM_LOGO_CATEGORY = "system_logo_image"
 
 logger = logging.getLogger("api")
+
+PATIENT_SUMMARY_API_HEADER = "X-MonshinMate-Api-Key"
 
 # サマリー生成用のデフォルトプロンプト
 DEFAULT_SUMMARY_PROMPT = (
@@ -1917,6 +1923,176 @@ def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) ->
     return lines
 
 
+DATE_FORMATS = [
+    "%Y-%m-%d",
+    "%Y/%m/%d",
+    "%Y.%m.%d",
+    "%Y年%m月%d日",
+    "%Y %m %d",
+]
+
+ERA_YEAR_PATTERN = re.compile(
+    r"(令和|reiwa|R|平成|heisei|H|昭和|showa|S|大正|taisho|T|明治|meiji|M)\s*(元|\d{1,2})",
+    re.IGNORECASE,
+)
+ERA_BASE_YEARS: dict[str, int] = {
+    "令和": 2018,
+    "reiwa": 2018,
+    "r": 2018,
+    "平成": 1988,
+    "heisei": 1988,
+    "h": 1988,
+    "昭和": 1925,
+    "showa": 1925,
+    "s": 1925,
+    "大正": 1911,
+    "taisho": 1911,
+    "t": 1911,
+    "明治": 1867,
+    "meiji": 1867,
+    "m": 1867,
+}
+
+
+def _try_parse_iso_date(value: str) -> str | None:
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    normalized_values = [trimmed, trimmed.replace(" ", "")]
+    for candidate in normalized_values:
+        for fmt in DATE_FORMATS:
+            try:
+                dt = datetime.strptime(candidate, fmt)
+                return dt.strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+    digits_only = re.sub(r"\D", "", trimmed)
+    if len(digits_only) == 8:
+        try:
+            year = int(digits_only[0:4])
+            month = int(digits_only[4:6])
+            day = int(digits_only[6:8])
+            dt = datetime(year, month, day)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    era_candidate = _try_parse_japanese_era_date(trimmed)
+    if era_candidate:
+        year, month, day = era_candidate
+        try:
+            dt = datetime(year, month, day)
+            return dt.strftime("%Y-%m-%d")
+        except ValueError:
+            return None
+    return None
+
+
+def _try_parse_japanese_era_date(value: str) -> tuple[int, int, int] | None:
+    match = ERA_YEAR_PATTERN.search(value)
+    if not match:
+        return None
+    era_key = match.group(1)
+    year_token = match.group(2)
+    base = ERA_BASE_YEARS.get(era_key.lower()) or ERA_BASE_YEARS.get(era_key)  # type: ignore[arg-type]
+    if base is None:
+        return None
+    if year_token == "元":
+        year_number = 1
+    else:
+        try:
+            year_number = int(year_token)
+        except ValueError:
+            return None
+    year = base + year_number
+    remainder = value[match.end():]
+    month_day = _extract_month_day_from_text(remainder)
+    if not month_day:
+        return None
+    return year, month_day[0], month_day[1]
+
+
+def _extract_month_day_from_text(text: str) -> tuple[int, int] | None:
+    if not text:
+        return None
+    month_match = re.search(r"(\d{1,2})月", text)
+    day_match = re.search(r"(\d{1,2})日", text)
+    if month_match and day_match:
+        try:
+            month = int(month_match.group(1))
+            day = int(day_match.group(1))
+        except ValueError:
+            return None
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return month, day
+    pair = re.search(r"(\d{1,2})\D+(\d{1,2})", text)
+    if pair:
+        try:
+            month = int(pair.group(1))
+            day = int(pair.group(2))
+        except ValueError:
+            return None
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return month, day
+    digits = re.findall(r"(\d{1,2})", text)
+    if len(digits) >= 2:
+        try:
+            month = int(digits[0])
+            day = int(digits[1])
+        except ValueError:
+            return None
+        if 1 <= month <= 12 and 1 <= day <= 31:
+            return month, day
+    return None
+
+
+def _normalize_dob_variants(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    trimmed = value.strip()
+    if not trimmed:
+        return set()
+    variants: set[str] = {trimmed}
+    iso = _try_parse_iso_date(trimmed)
+    if iso:
+        variants.add(iso)
+    return variants
+
+
+def _hash_patient_summary_api_key(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _is_patient_summary_api_key_valid(provided: str | None) -> bool:
+    if not provided:
+        return False
+    stored = load_app_settings() or {}
+    stored_hash = stored.get("patient_summary_api_key_hash")
+    if not stored_hash:
+        return False
+    candidate = _hash_patient_summary_api_key(provided.strip())
+    return secrets.compare_digest(candidate, stored_hash)
+
+
+def _find_latest_finalized_session(patient_name: str, dob: str) -> dict[str, Any] | None:
+    normalized_dob_variants = _normalize_dob_variants(dob)
+    if not normalized_dob_variants:
+        return None
+    trimmed_name = patient_name.strip()
+    if not trimmed_name:
+        return None
+    summaries = db_list_sessions(patient_name=trimmed_name)
+    for summary in summaries:
+        session = db_get_session(summary.get("id"))
+        if not session:
+            continue
+        if (session.get("completion_status") or "") != "finalized":
+            continue
+        stored_dob_variants = _normalize_dob_variants(session.get("dob"))
+        if normalized_dob_variants & stored_dob_variants:
+            return session
+    return None
+
+
 def _visit_type_label(visit_type: str | None) -> str:
     if visit_type == "initial":
         return "初診"
@@ -2152,6 +2328,17 @@ class CompletionMessageSettings(BaseModel):
 class DefaultQuestionnaireSettings(BaseModel):
     """デフォルト問診テンプレートの設定。"""
     questionnaire_id: str
+
+
+class PatientSummaryApiKeyPayload(BaseModel):
+    api_key: str | None = None
+
+
+class PatientSummaryApiInfo(BaseModel):
+    endpoint: str
+    header_name: str
+    is_enabled: bool
+    last_updated_at: str | None = None
 
 class ThemeColorSettings(BaseModel):
     """UIのテーマカラー設定。"""
@@ -2434,6 +2621,80 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
     except Exception:
         logger.exception("set_default_questionnaire_failed")
         return payload
+
+
+@app.get("/system/patient-summary-api", response_model=PatientSummaryApiInfo)
+def get_patient_summary_api_info(request: Request) -> PatientSummaryApiInfo:
+    stored = load_app_settings() or {}
+    enabled = bool(stored.get("patient_summary_api_key_hash"))
+    return PatientSummaryApiInfo(
+        endpoint=request.url_for("patient_summary"),
+        header_name=PATIENT_SUMMARY_API_HEADER,
+        is_enabled=enabled,
+        last_updated_at=stored.get("patient_summary_api_key_updated_at"),
+    )
+
+
+@app.put("/system/patient-summary-api-key", response_model=PatientSummaryApiInfo)
+def set_patient_summary_api_key(payload: PatientSummaryApiKeyPayload, request: Request) -> PatientSummaryApiInfo:
+    current = load_app_settings() or {}
+    if payload.api_key is not None and payload.api_key.strip():
+        trimmed = payload.api_key.strip()
+        if len(trimmed) < 16:
+            raise HTTPException(status_code=400, detail="api_key_too_short")
+        current["patient_summary_api_key_hash"] = _hash_patient_summary_api_key(trimmed)
+        current["patient_summary_api_key_updated_at"] = datetime.now(UTC).isoformat()
+    else:
+        current.pop("patient_summary_api_key_hash", None)
+        current.pop("patient_summary_api_key_updated_at", None)
+    save_app_settings(current)
+    enabled = bool(current.get("patient_summary_api_key_hash"))
+    return PatientSummaryApiInfo(
+        endpoint=request.url_for("patient_summary"),
+        header_name=PATIENT_SUMMARY_API_HEADER,
+        is_enabled=enabled,
+        last_updated_at=current.get("patient_summary_api_key_updated_at"),
+    )
+
+
+class PatientSummaryApiRequest(BaseModel):
+    patient_name: str
+    dob: str
+
+
+class PatientSummaryApiResponse(BaseModel):
+    session_id: str
+    patient_name: str
+    dob: str
+    visit_type: str | None = None
+    finalized_at: str | None = None
+    questionnaire_id: str | None = None
+    markdown: str
+
+
+@app.post("/patient-summary", name="patient_summary", response_model=PatientSummaryApiResponse)
+def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> PatientSummaryApiResponse:
+    if not _is_patient_summary_api_key_valid(request.headers.get(PATIENT_SUMMARY_API_HEADER)):
+        logger.warning("patient_summary_invalid_api_key patient_name=%s", payload.patient_name)
+        raise HTTPException(status_code=401, detail="invalid_api_key")
+    trimmed_name = payload.patient_name.strip()
+    trimmed_dob = payload.dob.strip()
+    if not trimmed_name or not trimmed_dob:
+        raise HTTPException(status_code=400, detail="patient_name_and_dob_required")
+    session = _find_latest_finalized_session(trimmed_name, trimmed_dob)
+    if not session:
+        raise HTTPException(status_code=404, detail="session_not_found")
+    rows, vt_label, _ = build_session_rows_and_items(session)
+    markdown = "\n".join(build_markdown_lines(session, rows, vt_label))
+    return PatientSummaryApiResponse(
+        session_id=session.get("id"),
+        patient_name=session.get("patient_name") or trimmed_name,
+        dob=session.get("dob") or trimmed_dob,
+        visit_type=session.get("visit_type"),
+        finalized_at=session.get("finalized_at"),
+        questionnaire_id=session.get("questionnaire_id"),
+        markdown=markdown,
+    )
 
 
 class DatabaseStatus(BaseModel):
@@ -3670,14 +3931,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
-
-
-
-
-
-
-
 
 
 

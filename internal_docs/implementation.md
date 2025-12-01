@@ -1166,3 +1166,7 @@
 - [x] `private/cloud-run-adapter/tools/gcp/deploy_stack.sh` 実行後に `monshinmate-backend-00005-9ch` が `HealthCheckContainerError` で失敗したため、`gcloud run revisions describe monshinmate-backend-00005-9ch --region asia-northeast1` と `gcloud beta run revisions logs read monshinmate-backend-00005-9ch --region asia-northeast1` で原因を確認。起動直後に `RuntimeError: Firestore バックエンドが選択されていますが、利用可能な実装が見つかりません。` が発生していた。
 - [x] 原因: `monshinmate_cloud/__init__.py` がトップレベルで `FirestoreAdapter` を import しており、`app.llm_provider_registry` からの `import monshinmate_cloud` が `app.db` 初期化前に走ると循環参照となり、`_load_firestore_adapter_class()` が未初期化モジュールを参照した結果 `None` を返していた。
 - [x] 対応: `monshinmate_cloud/__init__.py` を遅延ロード方式へ変更し、`__getattr__` 内で必要なタイミングだけ `firestore_adapter` / `secret_manager` を import するよう修正。`PYTHONPATH=private/cloud-run-adapter python -c 'import monshinmate_cloud'` でモジュール単体 import が成功することを確認済み。
+## 10. API連携と拡張ツール（2025-12-01）
+- `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
+- 管理画面に「API連携」ページを新設し、エンドポイント/ヘッダー/キー更新 UI を表示したうえで、ドキュメント（`docs/admin_user_manual.md` / `docs/session_api.md` / `docs/chrome_extension.md`） を追記。
+- Chrome 拡張 `extensions/patient-summary` を作成し、XPath ベースの患者抽出・日付正規化・API 呼び出し・Markdown コピー・通知の流れを構築した。
