@@ -2683,7 +2683,7 @@ def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> 
         raise HTTPException(status_code=400, detail="patient_name_and_dob_required")
     session = _find_latest_finalized_session(trimmed_name, trimmed_dob)
     if not session:
-        raise HTTPException(status_code=404, detail="session_not_found")
+        raise HTTPException(status_code=404, detail="問診がありません。")
     rows, vt_label, _ = build_session_rows_and_items(session)
     markdown = "\n".join(build_markdown_lines(session, rows, vt_label))
     return PatientSummaryApiResponse(
