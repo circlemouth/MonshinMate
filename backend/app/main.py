@@ -127,6 +127,19 @@ def _resolve_allowed_origins() -> list[str]:
         ]
     return []
 
+
+def _external_url_for(request: Request, route_name: str) -> str:
+    """Cloud Run などのプロキシ環境でも外向きに合わせたスキームで URL を返す。"""
+
+    url = request.url_for(route_name)
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto and forwarded_proto.lower() in {"http", "https"}:
+        return str(url.replace(scheme=forwarded_proto.lower()))
+    env = os.getenv("MONSHINMATE_ENV", "").lower()
+    if env and env != "local":
+        return str(url.replace(scheme="https"))
+    return str(url)
+
 # JWT settings for password reset
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
 ALGORITHM = "HS256"
@@ -2628,7 +2641,7 @@ def get_patient_summary_api_info(request: Request) -> PatientSummaryApiInfo:
     stored = load_app_settings() or {}
     enabled = bool(stored.get("patient_summary_api_key_hash"))
     return PatientSummaryApiInfo(
-        endpoint=str(request.url_for("patient_summary")),
+        endpoint=_external_url_for(request, "patient_summary"),
         header_name=PATIENT_SUMMARY_API_HEADER,
         is_enabled=enabled,
         last_updated_at=stored.get("patient_summary_api_key_updated_at"),
@@ -2650,7 +2663,7 @@ def set_patient_summary_api_key(payload: PatientSummaryApiKeyPayload, request: R
     save_app_settings(current)
     enabled = bool(current.get("patient_summary_api_key_hash"))
     return PatientSummaryApiInfo(
-        endpoint=str(request.url_for("patient_summary")),
+        endpoint=_external_url_for(request, "patient_summary"),
         header_name=PATIENT_SUMMARY_API_HEADER,
         is_enabled=enabled,
         last_updated_at=current.get("patient_summary_api_key_updated_at"),
@@ -3931,8 +3944,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
-
 
 
 

@@ -749,6 +749,7 @@ export default function AdminLlm() {
           <FormLabel>{label}</FormLabel>
           <Input
             type="password"
+            autoComplete="new-password"
             value={typeof value === 'string' ? value : ''}
             onChange={(e) =>
               updateProfile(activeProvider, (profile) => ({ ...profile, [fieldKey]: e.target.value }))
@@ -895,6 +896,7 @@ export default function AdminLlm() {
                 <FormLabel>APIキー（任意）</FormLabel>
                 <Input
                   type="password"
+                  autoComplete="new-password"
                   value={currentProfile.api_key ?? ''}
                   onChange={(e) =>
                     updateProfile(activeProvider, (profile) => ({ ...profile, api_key: e.target.value }))

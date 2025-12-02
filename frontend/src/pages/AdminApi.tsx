@@ -181,6 +181,7 @@ export default function AdminApi() {
           <HStack spacing={2} align="stretch">
             <Input
               type={showApiKey ? 'text' : 'password'}
+              autoComplete="new-password"
               value={apiKey}
               placeholder="16文字以上のランダムな文字列"
               onChange={(event) => setApiKey(event.target.value)}

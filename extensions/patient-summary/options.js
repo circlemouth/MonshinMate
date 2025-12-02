@@ -217,8 +217,8 @@ const getActiveTabId = () =>
         return;
       }
       const tab = tabs[0];
-    if (!tab || typeof tab.id !== 'number') {
-      reject(new Error(ERROR_MESSAGES.noActiveTab));
+      if (!tab || typeof tab.id !== 'number') {
+        reject(new Error(ERROR_MESSAGES.noActiveTab));
         return;
       }
       resolve(tab.id);
@@ -445,4 +445,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     await handleFetch();
   });
+
+  const showApiKeyCheckbox = document.getElementById('showApiKey');
+  if (showApiKeyCheckbox) {
+    showApiKeyCheckbox.addEventListener('change', (e) => {
+      apiKeyInput.type = e.target.checked ? 'text' : 'password';
+    });
+  }
 });
