@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>問診メイト問診取得</title>
+  <title>問診メイト 連携アシスタント</title>
   <style>
     :root {
       font-family: 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
@@ -53,6 +53,11 @@
       border: 1px solid #cbd5f5;
       border-radius: 6px;
       background-color: #f9fafb;
+    }
+
+    /* マスク用。type="text"のまま視覚的に伏せる */
+    .masked {
+      -webkit-text-security: disc;
     }
 
     .helper {
@@ -126,8 +131,8 @@
 <body>
   <div class="container">
     <header>
-      <h1>問診取得ツール</h1>
-      <p class="helper">問診メイトのAPIとXPathを指定して最新の問診結果を取得します。</p>
+      <h1>問診メイト 連携アシスタント</h1>
+      <p class="helper">問診メイトから最新の問診結果を取得します。</p>
     </header>
     <section>
       <label for="apiUrl">APIエンドポイント</label>
@@ -136,13 +141,25 @@
     </section>
     <section>
       <label for="apiKey">APIキー</label>
-      <input id="apiKey" type="password" placeholder="管理画面で登録したキー" />
+      <input id="apiKey" type="text" class="masked" placeholder="管理画面で登録したキー" autocomplete="off" spellcheck="false" />
       <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
         <input type="checkbox" id="showApiKey" style="width: auto; margin: 0;">
         <label for="showApiKey" style="font-weight: normal; font-size: 12px;">APIキーを表示する</label>
       </div>
       <span class="helper">最低16文字。管理者画面からコピーしてください。</span>
     </section>
+
+    <section style="border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 8px;">
+      <label for="presetSelector">プリセット設定</label>
+      <select id="presetSelector"
+        style="padding: 8px; border: 1px solid #cbd5f5; border-radius: 6px; background-color: #f9fafb; font-size: 14px;">
+        <option value="user1">セット1</option>
+        <option value="user2">セット2</option>
+        <option value="kirin">きりんカルテ</option>
+      </select>
+      <span class="helper">「きりんカルテ」のみ、規定の設定に対応しています。それ以外のカルテでは、Chromeの開発者ツールからXPathを確認してXpathを入力してください。。</span>
+    </section>
+
     <section>
       <label for="nameXPath">患者名のXPath</label>
       <input id="nameXPath" type="text" placeholder="//div[@id='patient-name']" />
@@ -154,17 +171,20 @@
       <div id="dobPreview" class="preview"></div>
       <span class="helper">和暦・西暦・スラッシュなど複数フォーマットを自動的に整形します。</span>
     </section>
+
+    <section>
+      <span class="helper" style="color: #64748b;">XPathはChrome開発者ツールから取得できます。</span>
+    </section>
+
     <section class="actions">
       <button id="saveButton">設定を保存</button>
-      <button id="fetchButton">最新問診を取得</button>
+      <button id="fetchButton">設定を保存してテスト実行</button>
     </section>
     <div id="statusText" class="status">設定を保存してから実行してください。</div>
     <footer>
-      <p>XPathはXML Path（DOMの要素パス）です。開発者ツールで右クリック → Copy XPathで取得できます。</p>
-      <p>
-        <a href="#" id="shortcutLink" style="color: #1f70ff; text-decoration: none;">ショートカットキーの設定はこちら</a>
-      </p>
-      <p>取得時は通知とClipboardコピーを表示します。通知が出るまで少しお待ちください。</p>
+      <p>ショートカットキーで最新の問診内容を取得できます。</p>
+      <button id="shortcutLink" class="secondary"
+        style="width: 100%; margin-top: 8px; font-weight: normal;">ショートカットキーの設定</button>
     </footer>
   </div>
   <script src="options.js"></script>

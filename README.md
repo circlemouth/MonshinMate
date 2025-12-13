@@ -151,6 +151,13 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 
  
 
+## Chrome拡張機能（問診メイト 連携アシスタント）
+電子カルテや予約システム画面に表示されている患者名と生年月日を読み取り、問診メイトから最新の問診結果を取得・コピーできるChrome拡張機能を提供しています。
+- **機能**: 任意のWebカルテ画面からワンクリックで患者の問診情報を取得
+- **ソースコード**: [`extensions/patient-summary/`](extensions/patient-summary/)
+- **特徴**: XPathによる柔軟な読み取り設定、Markdown形式でのクリップボードコピー
+- **インストール**: Chrome Web Storeからインストールするか、ソースコードをデベロッパーモードで読み込んで使用します。
+
 ## ライセンス
 - 本プロジェクトは GNU AFFERO GENERAL PUBLIC LICENSE に基づき公開しています。詳細はリポジトリ直下の `LICENSE` を参照してください。
 

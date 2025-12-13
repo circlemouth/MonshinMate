@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>問診メイト 連携アシスタント</title>
+    <style>
+        :root {
+            font-family: 'Noto Sans JP', 'Segoe UI', system-ui, sans-serif;
+            color: #111;
+            background-color: #f8fafc;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            min-width: 200px;
+            max-width: 320px;
+            padding: 16px;
+            box-sizing: border-box;
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .container.expanded {
+            width: 320px;
+        }
+
+        header {
+            margin-bottom: 4px;
+        }
+
+        header h1 {
+            font-size: 18px;
+            margin: 0;
+        }
+
+        .helper {
+            font-size: 11px;
+            color: #475569;
+        }
+
+        /* ステータス表示画面（コンパクト版） */
+        .status-view {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+        }
+
+        .status-view .icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .status-view .content {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .status-view .message {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .status-view .detail {
+            font-size: 11px;
+            color: #475569;
+        }
+
+        .status-view.loading .icon {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .status-view.success {
+            color: #059669;
+        }
+
+        .status-view.error {
+            color: #dc2626;
+        }
+
+        /* 設定フォーム */
+        .settings-view {
+            display: none;
+        }
+
+        .settings-view.visible {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        section {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        label {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        input,
+        select {
+            font-size: 14px;
+            padding: 8px;
+            border: 1px solid #cbd5f5;
+            border-radius: 6px;
+            background-color: #f9fafb;
+        }
+
+        .actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-height: 40px;
+            border-radius: 6px;
+            border: none;
+            background-color: #1f70ff;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+
+        button.secondary {
+            background-color: #e2e8f0;
+            color: #0f172a;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        footer {
+            font-size: 11px;
+            color: #475569;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+        }
+
+        .preview {
+            font-size: 11px;
+            color: #059669;
+            min-height: 1em;
+            margin-top: -2px;
+        }
+
+        .error-banner {
+            background-color: #fee2e2;
+            color: #991b1b;
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .retry-button {
+            margin-top: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="mainContainer" class="container">
+        <!-- ステータス表示（ローディング/成功/エラー） -->
+        <div id="statusView" class="status-view loading">
+            <div class="icon">⏳</div>
+            <div class="content">
+                <div class="message">取得中...</div>
+            </div>
+        </div>
+
+        <!-- 設定フォーム（初期設定時やエラー時に表示） -->
+        <div id="settingsView" class="settings-view">
+            <header>
+                <h1>問診メイト 連携アシスタント</h1>
+                <p class="helper">問診メイトから最新の問診結果を取得します。</p>
+            </header>
+
+            <div id="errorBanner" class="error-banner" style="display: none;"></div>
+
+            <section>
+                <label for="apiUrl">APIエンドポイント</label>
+                <input id="apiUrl" type="text" placeholder="https://clinic.example.com/patient-summary" />
+                <span class="helper">管理画面のAPI連携で表示されるURLを正確に入力してください。</span>
+            </section>
+            <section>
+                <label for="apiKey">APIキー</label>
+                <input id="apiKey" type="password" placeholder="管理画面で登録したキー" />
+                <div style="display: flex; align-items: center; gap: 4px; margin-top: 4px;">
+                    <input type="checkbox" id="showApiKey" style="width: auto; margin: 0;">
+                    <label for="showApiKey" style="font-weight: normal; font-size: 12px;">APIキーを表示する</label>
+                </div>
+                <span class="helper">最低16文字。管理者画面からコピーしてください。</span>
+            </section>
+
+            <section style="border-top: 1px solid #e2e8f0; padding-top: 12px; margin-top: 8px;">
+                <label for="presetSelector">プリセット設定</label>
+                <select id="presetSelector">
+                    <option value="user1">セット1</option>
+                    <option value="user2">セット2</option>
+                    <option value="kirin">きりんカルテ</option>
+                </select>
+                <span class="helper">「きりんカルテ」のみ、規定の設定に対応しています。</span>
+            </section>
+
+            <section>
+                <label for="nameXPath">患者名のXPath</label>
+                <input id="nameXPath" type="text" placeholder="//div[@id='patient-name']" />
+                <div id="namePreview" class="preview"></div>
+            </section>
+            <section>
+                <label for="dobXPath">生年月日のXPath</label>
+                <input id="dobXPath" type="text" placeholder="//span[@class='dob']" />
+                <div id="dobPreview" class="preview"></div>
+                <span class="helper">和暦・西暦・スラッシュなど複数フォーマットを自動的に整形します。</span>
+            </section>
+
+            <section class="actions">
+                <button id="saveButton">設定を保存</button>
+                <button id="saveAndRetryButton">保存して再実行</button>
+            </section>
+
+            <footer>
+                <p>ショートカットキーで最新の問診内容を取得できます。</p>
+                <button id="shortcutLink" class="secondary"
+                    style="width: 100%; margin-top: 8px; font-weight: normal;">ショートカットキーの設定</button>
+            </footer>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>

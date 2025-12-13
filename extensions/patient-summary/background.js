@@ -2,35 +2,35 @@
 
 const API_KEY_HEADER = 'X-MonshinMate-Api-Key';
 const BACKGROUND_MESSAGES = {
-  missingSettings: '設定が未完了です。アイコンから設定してください。',
-  missingPatientInfo: '患者情報が取得できませんでした。',
-  apiError: (status, detail) => {
-    if (status === 401) return 'APIキーが無効です。管理画面でキーを確認してください。';
-    if (status === 404) return '最新の問診が見つかりませんでした。患者名・生年月日と確定済みかをご確認ください。';
-    return detail ? `APIエラー (${status}): ${detail}` : `API通信で${status}エラーが発生しました。`;
-  },
-  markdownMissing: '問診結果が届きませんでした。',
-  genericError: '処理に失敗しました。',
-  copyFailed: 'クリップボードへのコピーに失敗しました。',
+    missingSettings: '設定が未完了です。アイコンから設定してください。',
+    missingPatientInfo: '患者情報が取得できませんでした。',
+    apiError: (status, detail) => {
+        if (status === 401) return 'APIキーが無効です。管理画面でキーを確認してください。';
+        if (status === 404) return '最新の問診が見つかりませんでした。患者名・生年月日と確定済みかをご確認ください。';
+        return detail ? `APIエラー (${status}): ${detail}` : `API通信で${status}エラーが発生しました。`;
+    },
+    markdownMissing: '問診結果が届きませんでした。',
+    genericError: '処理に失敗しました。',
+    copyFailed: 'クリップボードへのコピーに失敗しました。',
 };
 
 const friendlyBackgroundMessages = new Set(
-  Object.values(BACKGROUND_MESSAGES).filter((value) => typeof value === 'string')
+    Object.values(BACKGROUND_MESSAGES).filter((value) => typeof value === 'string')
 );
 
 const friendlyBackgroundPrefixes = [
-  'APIエラー (',
-  'APIキーが無効です',
-  '最新の問診が見つかりませんでした',
+    'APIエラー (',
+    'APIキーが無効です',
+    '最新の問診が見つかりませんでした',
 ];
 
 const isFriendlyBackgroundMessage = (text) =>
-  Boolean(
-    text &&
-      (friendlyBackgroundMessages.has(text) ||
-        text.startsWith('API通信で') ||
-        friendlyBackgroundPrefixes.some((prefix) => text.startsWith(prefix)))
-  );
+    Boolean(
+        text &&
+        (friendlyBackgroundMessages.has(text) ||
+            text.startsWith('API通信で') ||
+            friendlyBackgroundPrefixes.some((prefix) => text.startsWith(prefix)))
+    );
 
 // 日付フォーマット等のユーティリティ（options.jsと重複するが、モジュール化されていないため再定義）
 const formatIso = (year, month, day) => {

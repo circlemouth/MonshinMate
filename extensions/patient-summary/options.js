@@ -6,6 +6,16 @@ const DEFAULT_SETTINGS = {
   apiKey: '',
   nameXPath: '',
   dobXPath: '',
+  selectedPreset: 'user1',
+  presets: {
+    user1: { nameXPath: '', dobXPath: '' },
+    user2: { nameXPath: '', dobXPath: '' },
+  },
+};
+
+const KIRIN_PRESET = {
+  nameXPath: '//*[@id="FullName"]',
+  dobXPath: '//*[@id="otherDataBox"]/span[2]',
 };
 
 const ERROR_MESSAGES = {
@@ -34,12 +44,12 @@ const apiUrlInput = document.getElementById('apiUrl');
 const apiKeyInput = document.getElementById('apiKey');
 const nameInput = document.getElementById('nameXPath');
 const dobInput = document.getElementById('dobXPath');
+const presetSelector = document.getElementById('presetSelector');
 const saveButton = document.getElementById('saveButton');
 const fetchButton = document.getElementById('fetchButton');
-if (fetchButton) {
-  fetchButton.textContent = '設定を保存してテスト実行';
-}
+
 let isWorking = false;
+let currentSettings = { ...DEFAULT_SETTINGS };
 
 const setStatus = (text, type = 'info') => {
   if (!statusEl) {
@@ -189,12 +199,10 @@ const showDesktopNotification = (message) => {
 const loadSettings = () =>
   new Promise((resolve) => {
     chrome.storage.sync.get(DEFAULT_SETTINGS, (items) => {
-      resolve({
-        apiUrl: items.apiUrl || '',
-        apiKey: items.apiKey || '',
-        nameXPath: items.nameXPath || '',
-        dobXPath: items.dobXPath || '',
-      });
+      // Merge defaults for nested objects (presets) if they are partial or missing
+      const mergedPresets = { ...DEFAULT_SETTINGS.presets, ...items.presets };
+      const settings = { ...items, presets: mergedPresets };
+      resolve(settings);
     });
   });
 
@@ -204,6 +212,7 @@ const saveSettings = (settings) =>
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
+        currentSettings = settings;
         resolve(settings);
       }
     });
@@ -293,27 +302,63 @@ const copyToClipboard = async (text) => {
   await navigator.clipboard.writeText(text);
 };
 
-const handleFetch = async () => {
-  if (isWorking) return;
-  const endpoint = apiUrlInput.value.trim();
+const collectCurrentSettings = () => {
+  const apiUrl = apiUrlInput.value.trim();
   const apiKey = apiKeyInput.value.trim();
+  // Name and DOB are read from inputs.
+  // If inputs are disabled (Kirin), they hold Kirin values.
   const nameXPath = nameInput.value.trim();
   const dobXPath = dobInput.value.trim();
-  if (!endpoint || !apiKey || !nameXPath || !dobXPath) {
+  const selectedPreset = presetSelector.value;
+
+  // Create a copy of presets to update
+  const newPresets = { ...currentSettings.presets };
+
+  // If a user preset is selected, update it with current values
+  if (selectedPreset === 'user1' || selectedPreset === 'user2') {
+    newPresets[selectedPreset] = {
+      nameXPath,
+      dobXPath
+    };
+  }
+
+  return {
+    apiUrl,
+    apiKey,
+    nameXPath,
+    dobXPath,
+    selectedPreset,
+    presets: newPresets
+  };
+};
+
+const handleFetch = async () => {
+  if (isWorking) return;
+  const settings = collectCurrentSettings();
+
+  if (!settings.apiUrl || !settings.apiKey || !settings.nameXPath || !settings.dobXPath) {
     setStatus(ERROR_MESSAGES.incompleteSettings, 'error');
     return;
   }
+
+  // 自動保存
+  try {
+    await saveSettings(settings);
+  } catch (e) {
+    console.error('Auto save failed', e);
+  }
+
   isWorking = true;
   fetchButton.disabled = true;
   setStatus('患者情報を取得しています...');
   try {
     const tabId = await getActiveTabId();
-    const patientInfo = await resolvePatientInfo(tabId, nameXPath, dobXPath);
+    const patientInfo = await resolvePatientInfo(tabId, settings.nameXPath, settings.dobXPath);
     if (!patientInfo?.name || !patientInfo?.dob) {
       throw new Error(ERROR_MESSAGES.missingPatientInfo);
     }
     const normalizedDob = normalizeDob(patientInfo.dob);
-    const markdown = await fetchMarkdown(endpoint, apiKey, patientInfo.name, normalizedDob);
+    const markdown = await fetchMarkdown(settings.apiUrl, settings.apiKey, patientInfo.name, normalizedDob);
     await copyToClipboard(markdown);
     setStatus('Markdownをクリップボードにコピーしました。', 'success');
     showDesktopNotification('問診結果をコピーしました。');
@@ -329,22 +374,46 @@ const handleFetch = async () => {
   }
 };
 
+const updateInputState = () => {
+  const val = presetSelector.value;
+  const isKirin = val === 'kirin';
+  nameInput.disabled = isKirin;
+  dobInput.disabled = isKirin;
+
+  const bg = isKirin ? '#e2e8f0' : '#f9fafb';
+  nameInput.style.backgroundColor = bg;
+  dobInput.style.backgroundColor = bg;
+};
+
 const initialize = async () => {
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
-  const settings = await loadSettings();
-  apiUrlInput.value = settings.apiUrl;
-  apiKeyInput.value = settings.apiKey;
-  nameInput.value = settings.nameXPath;
-  dobInput.value = settings.dobXPath;
+  currentSettings = await loadSettings();
+
+  apiUrlInput.value = currentSettings.apiUrl;
+  apiKeyInput.value = currentSettings.apiKey;
+  nameInput.value = currentSettings.nameXPath;
+  dobInput.value = currentSettings.dobXPath;
+
+  let initialPreset = currentSettings.selectedPreset || 'user1';
+
+  // Legacy fallback: if it was 'custom', switch to 'user1' (which will be populated with current values on save)
+  if (initialPreset === 'custom') {
+    initialPreset = 'user1';
+  }
+
+  presetSelector.value = initialPreset;
+  updateInputState();
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize
   initialize().catch((error) => {
     console.error(error);
     setStatus(ERROR_MESSAGES.loadFail, 'error');
   });
+
   const updatePreview = async (inputId, previewId) => {
     const input = document.getElementById(inputId);
     const preview = document.getElementById(previewId);
@@ -373,7 +442,6 @@ document.addEventListener('DOMContentLoaded', () => {
         args: [xpath],
       });
 
-      // 全フレームの結果から有効な値を探す
       let foundValue = null;
       let errorMsg = null;
 
@@ -383,7 +451,7 @@ document.addEventListener('DOMContentLoaded', () => {
           errorMsg = val.error;
         } else if (val) {
           foundValue = val;
-          break; // 見つかったら終了
+          break;
         }
       }
 
@@ -399,18 +467,39 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (err) {
       console.error(err);
-      preview.textContent = ERROR_MESSAGES.previewFail;
-      preview.style.color = '#ef4444';
+      preview.textContent = '...'; // Silent fail or clear
     }
   };
 
   nameInput.addEventListener('blur', () => updatePreview('nameXPath', 'namePreview'));
   dobInput.addEventListener('blur', () => updatePreview('dobXPath', 'dobPreview'));
 
-  // 設定読み込み
-  initialize().catch((error) => {
-    console.error(error);
-    setStatus(ERROR_MESSAGES.loadFail, 'error');
+  presetSelector.addEventListener('change', () => {
+    const val = presetSelector.value;
+    if (val === 'kirin') {
+      nameInput.value = KIRIN_PRESET.nameXPath;
+      dobInput.value = KIRIN_PRESET.dobXPath;
+    } else if (val === 'user1' && currentSettings.presets.user1) {
+      nameInput.value = currentSettings.presets.user1.nameXPath || '';
+      dobInput.value = currentSettings.presets.user1.dobXPath || '';
+    } else if (val === 'user2' && currentSettings.presets.user2) {
+      nameInput.value = currentSettings.presets.user2.nameXPath || '';
+      dobInput.value = currentSettings.presets.user2.dobXPath || '';
+    } else {
+      // If 'custom' is selected (or any other unrecognized value),
+      // we don't change the input values, allowing the user to edit them.
+      // The values will be saved to the currently selected preset (or 'user1' if 'custom' was selected and then saved).
+    }
+
+    updateInputState();
+
+    // Auto preview on switch
+    // Note: We don't want to spam warnings if fields are empty, so only if not empty?
+    if (nameInput.value) updatePreview('nameXPath', 'namePreview');
+    else document.getElementById('namePreview').textContent = '';
+
+    if (dobInput.value) updatePreview('dobXPath', 'dobPreview');
+    else document.getElementById('dobPreview').textContent = '';
   });
 
   const shortcutLink = document.getElementById('shortcutLink');
@@ -422,34 +511,25 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   saveButton.addEventListener('click', async () => {
-    const payload = {
-      apiUrl: apiUrlInput.value.trim(),
-      apiKey: apiKeyInput.value.trim(),
-      nameXPath: nameInput.value.trim(),
-      dobXPath: dobInput.value.trim(),
-    };
+    const settings = collectCurrentSettings();
     try {
-      await saveSettings(payload);
+      await saveSettings(settings);
       setStatus('設定を保存しました。', 'success');
     } catch (error) {
       console.error(error);
       setStatus(ERROR_MESSAGES.saveFail, 'error');
     }
   });
+
   fetchButton.addEventListener('click', async () => {
-    await saveSettings({
-      apiUrl: apiUrlInput.value.trim(),
-      apiKey: apiKeyInput.value.trim(),
-      nameXPath: nameInput.value.trim(),
-      dobXPath: dobInput.value.trim(),
-    });
     await handleFetch();
   });
 
   const showApiKeyCheckbox = document.getElementById('showApiKey');
   if (showApiKeyCheckbox) {
     showApiKeyCheckbox.addEventListener('change', (e) => {
-      apiKeyInput.type = e.target.checked ? 'text' : 'password';
+      // typeは常にtext。見た目のマスクはclassで制御する。
+      apiKeyInput.classList.toggle('masked', !e.target.checked);
     });
   }
 });

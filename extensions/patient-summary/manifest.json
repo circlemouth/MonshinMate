@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "問診メイト問診取得",
+  "name": "問診メイト 連携アシスタント",
   "description": "患者名と生年月日から最新の問診を取得しマークダウンでクリップボードにコピーします。",
   "version": "1.0.0",
   "icons": {
@@ -10,7 +10,7 @@
   },
   "action": {
     "default_title": "問診結果を取得",
-    "default_popup": "options.html",
+    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
