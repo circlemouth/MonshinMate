@@ -1210,6 +1210,7 @@ class SessionsExportRequest(ExportRequest):
     session_ids: list[str] | None = None
     start_date: str | None = None
     end_date: str | None = None
+    visit_type: Literal["initial", "followup"] | None = None
 
 
 @app.get("/questionnaires/{questionnaire_id}/template", response_model=Questionnaire)
@@ -3653,6 +3654,7 @@ def export_sessions_api(payload: SessionsExportRequest) -> StreamingResponse:
         session_ids=payload.session_ids,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        visit_type=payload.visit_type,
     )
     export_payload = {
         "sessions": sessions_data,
@@ -3661,6 +3663,7 @@ def export_sessions_api(payload: SessionsExportRequest) -> StreamingResponse:
             "session_ids": payload.session_ids or None,
             "start_date": payload.start_date,
             "end_date": payload.end_date,
+            "visit_type": payload.visit_type,
         },
     }
     envelope = _build_export_envelope(export_payload, "session_data", payload.password or None)
@@ -4000,7 +4003,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
 
 
 

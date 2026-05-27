@@ -1711,6 +1711,7 @@ def export_sessions_data(
     session_ids: list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    visit_type: str | None = None,
     db_path: str = DEFAULT_DB_PATH,
 ) -> list[dict[str, Any]]:
     """セッション情報をまとめて取得する。"""
@@ -1731,6 +1732,8 @@ def export_sessions_data(
             if start_date and started_at and started_at < f"{start_date}T00:00:00":
                 continue
             if end_date and started_at and started_at > f"{end_date}T23:59:59":
+                continue
+            if visit_type and doc.get("visit_type") != visit_type:
                 continue
             payload = {
                 "id": sid,
@@ -2286,6 +2289,5 @@ class SQLiteAdapter:
     def shutdown(self) -> None:
         """SQLite 実装では特別な終了処理は不要。"""
         return None
-
 
 

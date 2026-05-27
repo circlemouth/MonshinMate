@@ -1183,6 +1183,21 @@
 - [x] フォールバック: 辞書未登録、検索失敗、通信失敗、該当なしのいずれでも住所欄は通常の手入力で継続可能。
 - [x] テスト追加: `backend/tests/test_postal_code_lookup.py` でCSVインポート、全角郵便番号検索、空CSV拒否を検証。
 
+## 145. Cloud Run 上書きデプロイ前検証（2026-05-27）
+- [x] `private/cloud-run-adapter` は親リポジトリが指す `60239cb...` がリモートに存在せず、通常の `git submodule update --init --recursive --checkout` は失敗した。作業ツリーはサブモジュール `origin/main` (`624d1e7`) の内容で復元した。
+- [x] 現行 Cloud Run は `monshinmate-backend:20251201-2329` / `monshinmate-frontend:20251201-2329` で稼働しており、`/readyz` は backend/frontend とも成功することを確認した。
+- [x] 検証中に `export_sessions_data()` の `visit_type` 未定義参照で pytest が失敗したため、セッションエクスポート要求と DB 関数に任意の `visit_type` フィルタを通すよう修正した。
+- [x] 依存更新: `npm audit --omit=dev` で検出された React Router 系 high 脆弱性を `npm audit fix` で解消し、本番依存 audit が 0 件になることを確認した。残る Vite/esbuild moderate は dev server 由来で本番 nginx 配信イメージには含めない。
+- [x] 検証: `source venv/bin/activate && cd backend && pytest -q` は 72 passed。`cd frontend && npm run build` は chunk size warning のみで成功。
+- [x] 検証: `docker build -f backend/Dockerfile --build-arg ENABLE_GCP=1` と `docker build -f frontend/Dockerfile` は成功。backend イメージ内で Cloud Run アダプタと GCP 依存を import でき、backend/frontend コンテナの `/readyz` もローカルで成功した。
+
+## 146. Cloud Run 本番更新（2026-05-27）
+- [x] 更新前退避: `monshinmate-backend-00009-ml6` / `monshinmate-frontend-00008-q6h` の service export を `/tmp/monshinmate-deploy-20260527-223627/` に保存した。更新前イメージはいずれも `20251201-2329`。
+- [x] Cloud Build: `private/cloud-run-adapter/cloudbuild.yaml` で `20260527-2237` タグの backend/frontend イメージを Artifact Registry へ push した。build ID は `73debcb2-da26-46bc-bb43-32bac0b1f864`。
+- [x] Cloud Run 更新: backend は `monshinmate-backend-00010-r5v`、frontend は `monshinmate-frontend-00009-ff5` が 100% traffic を受ける状態に更新した。`GCS_BUCKET=mm-prod-files-maruguchi-clinic-hp` と既存 `FRONTEND_ALLOWED_ORIGINS` を引き継いだ。
+- [x] 本番疎通: backend/frontend の `/readyz`、`/system/database-status`（Firestore）、独自ドメイン `https://monshinmate.maruguchi-clinic.com/`、`/postal-code/1000001` が成功。郵便番号辞書は `utf_ken_all.csv` 由来で 124,508 件の初期化を確認した。
+- [x] ログ確認: 新リビジョンの直近ログで 500 系・例外・Traceback は検出されなかった。
+
 ## 10. API連携と拡張ツール（2025-12-01）
 - `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
 - 管理画面に「API連携」ページを新設し、エンドポイント/ヘッダー/キー更新 UI を表示したうえで、ドキュメント（`docs/admin_user_manual.md` / `docs/session_api.md` / `docs/chrome_extension.md`） を追記。
