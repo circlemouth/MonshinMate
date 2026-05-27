@@ -1166,6 +1166,23 @@
 - [x] `private/cloud-run-adapter/tools/gcp/deploy_stack.sh` 実行後に `monshinmate-backend-00005-9ch` が `HealthCheckContainerError` で失敗したため、`gcloud run revisions describe monshinmate-backend-00005-9ch --region asia-northeast1` と `gcloud beta run revisions logs read monshinmate-backend-00005-9ch --region asia-northeast1` で原因を確認。起動直後に `RuntimeError: Firestore バックエンドが選択されていますが、利用可能な実装が見つかりません。` が発生していた。
 - [x] 原因: `monshinmate_cloud/__init__.py` がトップレベルで `FirestoreAdapter` を import しており、`app.llm_provider_registry` からの `import monshinmate_cloud` が `app.db` 初期化前に走ると循環参照となり、`_load_firestore_adapter_class()` が未初期化モジュールを参照した結果 `None` を返していた。
 - [x] 対応: `monshinmate_cloud/__init__.py` を遅延ロード方式へ変更し、`__getattr__` 内で必要なタイミングだけ `firestore_adapter` / `secret_manager` を import するよう修正。`PYTHONPATH=private/cloud-run-adapter python -c 'import monshinmate_cloud'` でモジュール単体 import が成功することを確認済み。
+
+## 143. 患者基本情報の生年月日手入力対応（2026-05-27）
+- [x] 原因調査: `/basic-info` の生年月日が年・月・日の `Select` 3個で実装されており、通常のテキスト入力として数字をタイプしても値が入らない状態だった。
+- [x] 変更（フロントエンド）: `frontend/src/pages/BasicInfo.tsx` の生年月日欄を「年」「月」「日」の3つの手入力欄に変更し、半角・全角数字を受け付けて内部では `YYYY-MM-DD` に正規化して保存するようにした。
+- [x] UI調整: 生年月日欄下の入力例ヘルプ文を削除し、画面を簡潔にした。
+- [x] バリデーション: 実在しない日付と未来日を従来どおり拒否し、入力エラー時は生年月日欄へフォーカスするよう更新。
+- [x] フロントエンドビルド確認: `cd frontend && npm run build`（chunk size warning のみ、ビルド成功）。
+
+## 144. 郵便番号辞書による住所自動入力（2026-05-27）
+- [x] 仕様判断: CSVを直接フロントエンドで検索せず、同梱 `backend/app/postal_code_data/utf_ken_all.csv` から初回利用時に SQLite 辞書を生成して検索する方式にした。管理画面からのCSV更新時も同じ辞書DBを更新する。
+- [x] 変更（バックエンド）: `backend/app/postal_code_lookup.py` を追加し、KEN_ALL形式CSVのインポート、全角/半角郵便番号の正規化、住所候補検索、辞書メタ情報（件数・元ファイル名・最終更新日時）を実装。
+- [x] 変更（バックエンドAPI）: `GET /postal-code/{postal_code}`、`GET /system/postal-code-dictionary`、`POST /system/postal-code-dictionary` を追加。
+- [x] 変更（フロントエンド）: `/basic-info` の郵便番号欄で全角/半角数字とハイフン混在を受け付け、7桁入力時に住所欄を自動入力。住所が手入力済みの場合は上書きしない。
+- [x] 変更（管理画面）: `/admin/postal-code` を追加し、郵便番号辞書の登録件数・元ファイル名・最終更新日を表示し、CSVアップロードで更新できるようにした。
+- [x] フォールバック: 辞書未登録、検索失敗、通信失敗、該当なしのいずれでも住所欄は通常の手入力で継続可能。
+- [x] テスト追加: `backend/tests/test_postal_code_lookup.py` でCSVインポート、全角郵便番号検索、空CSV拒否を検証。
+
 ## 10. API連携と拡張ツール（2025-12-01）
 - `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
 - 管理画面に「API連携」ページを新設し、エンドポイント/ヘッダー/キー更新 UI を表示したうえで、ドキュメント（`docs/admin_user_manual.md` / `docs/session_api.md` / `docs/chrome_extension.md`） を追記。

@@ -38,6 +38,33 @@
   - `answers` (object): 現在までの回答
 - 備考: 空欄で送信された回答は「該当なし」として保存される。
 
+## GET /postal-code/{postal_code}
+- 概要: 郵便番号から住所候補を検索する。患者画面の住所自動入力で利用する。
+- パスパラメータ:
+  - `postal_code` (str): 7桁の郵便番号。ハイフンや全角数字を含んでもサーバー側で正規化する。
+- レスポンス:
+  - `postal_code` (str): 正規化後の7桁。
+  - `found` (bool): 候補が見つかったか。
+  - `address` (str | null): 最初の住所候補。見つからない場合は `null`。
+  - `candidates` (array): `{ postal_code, prefecture, city, town, address }` の候補一覧。
+- 備考: 見つからない場合も 200 で `found=false` を返す。フロントエンドは住所欄の手入力へフォールバックする。
+
+## GET /system/postal-code-dictionary
+- 概要: 郵便番号辞書の登録状態を返す。初回アクセス時、同梱CSVがあれば住所検索用の SQLite 辞書を生成する。
+- レスポンス:
+  - `is_available` (bool)
+  - `row_count` (int)
+  - `source_filename` (str | null)
+  - `last_updated_at` (str | null): ISO8601形式の最終更新日時。
+
+## POST /system/postal-code-dictionary
+- 概要: 管理画面からアップロードした KEN_ALL 形式CSVで郵便番号辞書を更新する。
+- リクエスト: `multipart/form-data`
+  - `file` (file): UTF-8 CSV。
+- レスポンス: `GET /system/postal-code-dictionary` と同じ。
+- エラー:
+  - CSVが空、形式不正、UTF-8以外の場合は 400。
+
 ## POST /sessions/{session_id}/answers
 - 概要: 複数の回答をまとめて保存する。
 - リクエストボディ:

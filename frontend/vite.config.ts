@@ -78,6 +78,7 @@ export default defineConfig(({ mode }) => {
       '/questionnaire-item-images': 'http://localhost:8001',
       '/system-logo': 'http://localhost:8001',
       '/system': 'http://localhost:8001',
+      '/postal-code': 'http://localhost:8001',
       '/healthz': 'http://localhost:8001',
       '/readyz': 'http://localhost:8001',
       '/metrics': 'http://localhost:8001',

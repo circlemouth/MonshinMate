@@ -6,7 +6,6 @@ import {
   Button,
   FormErrorMessage,
   SimpleGrid,
-  Select,
   RadioGroup,
   Radio,
   HStack,
@@ -19,9 +18,54 @@ import { track } from '../metrics';
 import { useNotify } from '../contexts/NotificationContext';
 import {
   createPersonalInfoValue,
+  type PersonalInfoKey,
   personalInfoFields,
   personalInfoMissingKeys,
 } from '../utils/personalInfo';
+
+const normalizeDobInput = (value: string) =>
+  value
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[^\d]/g, '')
+    .trim();
+
+const buildDob = (yearInput: string, monthInput: string, dayInput: string): string => {
+  const normalizedYear = normalizeDobInput(yearInput);
+  const normalizedMonth = normalizeDobInput(monthInput);
+  const normalizedDay = normalizeDobInput(dayInput);
+  if (normalizedYear.length !== 4 || !normalizedMonth || !normalizedDay) return '';
+
+  const year = Number(normalizedYear);
+  const month = Number(normalizedMonth);
+  const day = Number(normalizedDay);
+  if (!year || month < 1 || month > 12 || day < 1) return '';
+
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return '';
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+const trimDobPart = (value: string) => {
+  const normalized = normalizeDobInput(value);
+  const trimmed = normalized.replace(/^0+(\d)/, '$1');
+  return trimmed || normalized;
+};
+
+const normalizePostalCode = (value: string) =>
+  value
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/[^\d]/g, '')
+    .slice(0, 7);
+
+const formatPostalCode = (digits: string) =>
+  digits.length > 3 ? `${digits.slice(0, 3)}-${digits.slice(3)}` : digits;
 
 /** 患者の基本情報を入力するページ。 */
 export default function BasicInfo() {
@@ -33,9 +77,13 @@ export default function BasicInfo() {
   const [gender, setGender] = useState(() => sessionStorage.getItem('gender') || '');
   const [dob, setDob] = useState(() => sessionStorage.getItem('dob') || '');
   const initialDob = sessionStorage.getItem('dob') || '';
-  const [dobYear, setDobYear] = useState<number | ''>(() => (initialDob ? Number(initialDob.slice(0, 4)) : ''));
-  const [dobMonth, setDobMonth] = useState<number | ''>(() => (initialDob ? Number(initialDob.slice(5, 7)) : ''));
-  const [dobDay, setDobDay] = useState<number | ''>(() => (initialDob ? Number(initialDob.slice(8, 10)) : ''));
+  const [dobYearInput, setDobYearInput] = useState(() => (initialDob ? initialDob.slice(0, 4) : ''));
+  const [dobMonthInput, setDobMonthInput] = useState(() =>
+    initialDob ? trimDobPart(initialDob.slice(5, 7)) : ''
+  );
+  const [dobDayInput, setDobDayInput] = useState(() =>
+    initialDob ? trimDobPart(initialDob.slice(8, 10)) : ''
+  );
   const storedPersonal = (() => {
     try {
       const raw = sessionStorage.getItem('personal_info');
@@ -45,6 +93,7 @@ export default function BasicInfo() {
     }
   })();
   const [personalInfo, setPersonalInfo] = useState(() => createPersonalInfoValue(storedPersonal));
+  const [lastAutoAddress, setLastAutoAddress] = useState('');
   const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
@@ -52,30 +101,6 @@ export default function BasicInfo() {
       navigate('/', { replace: true });
     }
   }, [visitType, navigate]);
-
-  const thisYear = new Date().getFullYear();
-  const years = useMemo(() => Array.from({ length: 120 }, (_, i) => thisYear - i), [thisYear]);
-  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => i + 1), []);
-  const daysInMonth = (y: number, m: number) => new Date(y, m, 0).getDate();
-  const maxDay =
-    typeof dobYear === 'number' && typeof dobMonth === 'number'
-      ? daysInMonth(dobYear, dobMonth)
-      : 31;
-  const days = useMemo(() => Array.from({ length: maxDay }, (_, i) => i + 1), [maxDay]);
-
-  useEffect(() => {
-    if (!visitType) return;
-    if (dobYear && dobMonth && dobDay) {
-      const mm = String(dobMonth).padStart(2, '0');
-      const dd = String(Math.min(dobDay, daysInMonth(dobYear, dobMonth))).padStart(2, '0');
-      const iso = `${dobYear}-${mm}-${dd}`;
-      setDob(iso);
-      sessionStorage.setItem('dob', iso);
-    } else {
-      setDob('');
-      sessionStorage.removeItem('dob');
-    }
-  }, [dobYear, dobMonth, dobDay, visitType]);
 
   useEffect(() => {
     if (visitType) {
@@ -95,6 +120,54 @@ export default function BasicInfo() {
     const missing = personalInfoMissingKeys({ ...personalInfo, name }).filter((key) => key !== 'name');
     return new Set<string>(missing);
   }, [personalInfo, visitType, name]);
+
+  useEffect(() => {
+    if (visitType !== 'initial') return;
+    const digits = normalizePostalCode(personalInfo.postal_code);
+    if (digits.length !== 7) return;
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/postal-code/${digits}`, { signal: controller.signal });
+        if (!response.ok) return;
+        const data: { found?: boolean; address?: string | null } = await response.json();
+        const address = typeof data.address === 'string' ? data.address.trim() : '';
+        if (!data.found || !address) return;
+
+        setPersonalInfo((prev) => {
+          const currentAddress = prev.address.trim();
+          if (currentAddress && currentAddress !== lastAutoAddress) {
+            return prev;
+          }
+          const formattedPostalCode = formatPostalCode(digits);
+          if (prev.postal_code === formattedPostalCode && prev.address === address) {
+            return prev;
+          }
+          return {
+            ...prev,
+            postal_code: formattedPostalCode,
+            address,
+          };
+        });
+        setLastAutoAddress(address);
+      } catch {
+        // 郵便番号辞書が未更新または通信失敗でも、住所は手入力で継続できる。
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [lastAutoAddress, personalInfo.postal_code, visitType]);
+
+  const handlePersonalInfoChange = (key: PersonalInfoKey, value: string) => {
+    setPersonalInfo((prev) => ({
+      ...prev,
+      [key]: key === 'postal_code' ? formatPostalCode(normalizePostalCode(value)) : value,
+    }));
+  };
 
   const handleBackToEntry = () => {
     sessionStorage.removeItem('patient_name');
@@ -119,9 +192,11 @@ export default function BasicInfo() {
     if (!visitType) {
       errs.push('受診種別を選択してください');
     } else {
+      const hasDobInput = [dobYearInput, dobMonthInput, dobDayInput].some((value) => value.trim());
       if (!name) errs.push('氏名を入力してください');
       if (!gender) errs.push('性別を選択してください');
-      if (!dob) errs.push('生年月日を入力してください');
+      if (!hasDobInput) errs.push('生年月日を入力してください');
+      if (hasDobInput && !dob) errs.push('生年月日を正しい日付で入力してください');
       if (dob && dob > today) errs.push('生年月日に未来の日付は指定できません');
       if (visitType === 'initial' && personalMissingKeysSet.size > 0) {
         errs.push('患者基本情報を入力してください');
@@ -208,11 +283,11 @@ export default function BasicInfo() {
     }
 
     if (!dob || (dob && dob > today)) {
-      if (!dobYear) {
+      if (!normalizeDobInput(dobYearInput)) {
         document.getElementById('dob-year')?.focus();
         return;
       }
-      if (!dobMonth) {
+      if (!normalizeDobInput(dobMonthInput)) {
         document.getElementById('dob-month')?.focus();
         return;
       }
@@ -228,7 +303,18 @@ export default function BasicInfo() {
         }
       }
     }
-  }, [attempted, visitType, name, gender, dob, dobYear, dobMonth, kanaField, personalMissingKeysSet]);
+  }, [
+    attempted,
+    visitType,
+    name,
+    gender,
+    dob,
+    dobYearInput,
+    dobMonthInput,
+    dobDayInput,
+    kanaField,
+    personalMissingKeysSet,
+  ]);
 
   const renderNameFields = (includeKana: boolean) => (
     <VStack align="stretch" spacing={includeKana ? 2 : 0}>
@@ -291,6 +377,44 @@ export default function BasicInfo() {
     </FormControl>
   );
 
+  const syncDob = (yearInput: string, monthInput: string, dayInput: string) => {
+    const parsed = buildDob(yearInput, monthInput, dayInput);
+    setDob(parsed);
+    if (parsed) {
+      sessionStorage.setItem('dob', parsed);
+    } else {
+      sessionStorage.removeItem('dob');
+    }
+  };
+
+  const handleDobYearChange = (value: string) => {
+    const next = normalizeDobInput(value).slice(0, 4);
+    setDobYearInput(next);
+    syncDob(next, dobMonthInput, dobDayInput);
+  };
+
+  const handleDobMonthChange = (value: string) => {
+    const next = normalizeDobInput(value).slice(0, 2);
+    setDobMonthInput(next);
+    syncDob(dobYearInput, next, dobDayInput);
+  };
+
+  const handleDobDayChange = (value: string) => {
+    const next = normalizeDobInput(value).slice(0, 2);
+    setDobDayInput(next);
+    syncDob(dobYearInput, dobMonthInput, next);
+  };
+
+  const handleDobBlur = () => {
+    const year = normalizeDobInput(dobYearInput).slice(0, 4);
+    const month = trimDobPart(dobMonthInput).slice(0, 2);
+    const day = trimDobPart(dobDayInput).slice(0, 2);
+    setDobYearInput(year);
+    setDobMonthInput(month);
+    setDobDayInput(day);
+    syncDob(year, month, day);
+  };
+
   const renderDobField = () => (
     <FormControl
       isRequired
@@ -301,52 +425,68 @@ export default function BasicInfo() {
       }
     >
       <FormLabel>生年月日</FormLabel>
-      <HStack>
-        <Select
+      <HStack spacing={2} align="center" flexWrap="wrap">
+        <Input
           id="dob-year"
-          placeholder="年"
-          value={dobYear}
-          onChange={(e) => setDobYear(e.target.value ? Number(e.target.value) : '')}
-          autoComplete="off"
-        >
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </Select>
-        <Select
+          name="__noauto_dob_year"
+          type="text"
+          inputMode="numeric"
+          placeholder="1990"
+          value={dobYearInput}
+          onChange={(e) => handleDobYearChange(e.target.value)}
+          onInput={(e) => handleDobYearChange(e.currentTarget.value)}
+          onBlur={handleDobBlur}
+          autoComplete="bday-year"
+          aria-label="生年月日 年"
+          maxW="7rem"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+        <Text flexShrink={0}>年</Text>
+        <Input
           id="dob-month"
-          placeholder="月"
-          value={dobMonth}
-          onChange={(e) => setDobMonth(e.target.value ? Number(e.target.value) : '')}
-          autoComplete="off"
-        >
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </Select>
-        <Select
+          name="__noauto_dob_month"
+          type="text"
+          inputMode="numeric"
+          placeholder="1"
+          value={dobMonthInput}
+          onChange={(e) => handleDobMonthChange(e.target.value)}
+          onInput={(e) => handleDobMonthChange(e.currentTarget.value)}
+          onBlur={handleDobBlur}
+          autoComplete="bday-month"
+          aria-label="生年月日 月"
+          maxW="5rem"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+        <Text flexShrink={0}>月</Text>
+        <Input
           id="dob-day"
-          placeholder="日"
-          value={dobDay}
-          onChange={(e) => setDobDay(e.target.value ? Number(e.target.value) : '')}
-          isDisabled={!dobYear || !dobMonth}
-          autoComplete="off"
-        >
-          {days.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </Select>
+          name="__noauto_dob_day"
+          type="text"
+          inputMode="numeric"
+          placeholder="1"
+          value={dobDayInput}
+          onChange={(e) => handleDobDayChange(e.target.value)}
+          onInput={(e) => handleDobDayChange(e.currentTarget.value)}
+          onBlur={handleDobBlur}
+          autoComplete="bday-day"
+          aria-label="生年月日 日"
+          maxW="5rem"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+        />
+        <Text flexShrink={0}>日</Text>
       </HStack>
       <FormErrorMessage>
         {dob && dob > new Date().toISOString().slice(0, 10)
           ? '生年月日に未来の日付は指定できません'
-          : '生年月日を入力してください'}
+          : [dobYearInput, dobMonthInput, dobDayInput].some((value) => value.trim())
+            ? '生年月日を正しい日付で入力してください'
+            : '生年月日を入力してください'}
       </FormErrorMessage>
     </FormControl>
   );
@@ -370,12 +510,7 @@ export default function BasicInfo() {
                 placeholder={field.placeholder}
                 autoComplete={field.autoComplete}
                 inputMode={field.inputMode}
-                onChange={(e) =>
-                  setPersonalInfo((prev) => ({
-                    ...prev,
-                    [field.key]: e.target.value,
-                  }))
-                }
+                onChange={(e) => handlePersonalInfoChange(field.key, e.target.value)}
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck={false}

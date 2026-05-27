@@ -118,6 +118,12 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 - `COUCHDB_URL` を設定すると、セッション/回答のみ CouchDB に保存されます。テンプレート・設定は SQLite に保存します。
 - 管理画面の「メイン」カードで、現在の DB 種別（SQLite/CouchDB/エラー）を確認できます。
 
+## 郵便番号辞書
+- 住所自動入力用の初期データは `backend/app/postal_code_data/utf_ken_all.csv` に配置しています。
+- データ元は日本郵便の「住所の郵便番号（1レコード1行、UTF-8形式）（CSV形式）」です。最新データは https://www.post.japanpost.jp/service/search/zipcode/download/utf-zip.html から取得できます。
+- 初回利用時に上記 CSV から検索用 SQLite 辞書を生成します。生成された `backend/app/postal_code_data/postal_codes.sqlite3` は実行時データのため Git 管理対象外です。
+- マスタ更新は管理画面の「郵便番号辞書」から KEN_ALL 形式のUTF-8 CSVを手動アップロードして行えます。更新後は患者基本情報画面の郵便番号による住所自動入力へ反映されます。
+
 ## エクスポート（PDF / CSV / Markdown / JSON）
 - 管理画面のセッション一覧から、単体の PDF / Markdown / CSV をダウンロードできます。
 - 一括出力ボタンで、複数選択の ZIP（PDF/MD）または集計 CSV をダウンロードできます。

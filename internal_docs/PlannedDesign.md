@@ -15,7 +15,8 @@
 
 ### 患者向け
 1. **/ (Entry)**
-   - 基本情報入力（患者名・生年月日）＋受診種別の選択（初診/再診）
+   - 基本情報入力（患者名・生年月日、初診時は郵便番号・住所・電話番号を含む）＋受診種別の選択（初診/再診）
+   - 郵便番号は半角/全角数字とハイフン混在を許容し、辞書に一致した場合のみ住所を自動入力する。失敗時は手入力で継続できる。
    - 右上：管理画面へのボタン（/admin へ。/admin はテンプレート一覧へリダイレクト）
 2. （統合済み）受診種別は Entry に統合（本セクションは廃止）
 3. **/questionnaire**
@@ -40,6 +41,8 @@
    - セッションの質問と回答の詳細表示
 6. **/admin/llm**
    - LLM接続設定（ローカルLLM接続に必要な項目）
+7. **/admin/postal-code**
+   - 郵便番号辞書の登録件数・最終更新日確認、KEN_ALL CSVアップロード更新
 
 ---
 
@@ -56,7 +59,8 @@
 ### 3.1 Entry（/）
 - **フォーム項目**
   - 氏名（必須、テキスト）
-  - 生年月日（必須、日付ピッカー。YYYY-MM-DD）
+  - 生年月日（必須、「年」「月」「日」の3欄で手入力。半角/全角数字を許容し、内部では `YYYY-MM-DD` に正規化）
+  - 初診時の郵便番号・住所・電話番号（必須）。郵便番号は7桁入力時に住所辞書を検索し、候補があれば住所欄へ反映する。住所欄に手入力済みの値がある場合は上書きしない。
 - 受診種別（必須、初診/再診のラジオ）
 - **ボタン**：次へ（セッション作成→/questionnaire へ）
 - **バリデーション**
@@ -131,6 +135,11 @@
 - **テストボタン**：疎通確認→成功/失敗の結果とログを表示
 - **注意**：画面ヘッダーに**「ローカルLLM利用・外部送信なし」**の再掲
 
+### 4.7 郵便番号辞書（/admin/postal-code）
+- **表示**：辞書の利用可否、登録件数、元ファイル名、最終更新日時
+- **操作**：日本郵便 KEN_ALL 形式のUTF-8 CSVをアップロードし、住所自動入力用の辞書DBを更新
+- **注意**：患者画面の住所欄は常に手入力可能とし、自動入力の失敗は問診継続を妨げない
+
 ---
 
 ## 5. 主要コンポーネント設計（提案）
@@ -158,6 +167,7 @@
 ### 5.5 管理UI
 - `TemplateList`, `TemplateEditor`, `TemplateItemForm`
 - `LlmSettingsForm`
+- `PostalCodeDictionarySettings`
 
 ---
 
@@ -188,7 +198,7 @@
 ## 9. アクセシビリティ / UX 配慮
 - すべての入力にラベル、必須アスタリスク、aria-invalid 付与。
 - キーボード操作（Tab順）、Enterで次へ、Escでモーダル閉。
-- スマホ配慮（タップ領域44px、日付ピッカーはOSネイティブ優先）。
+- スマホ配慮（タップ領域44px、患者基本情報の生年月日は「年」「月」「日」の3欄で手入力）。
 - コントラスト基準: 本文 `#212121` と背景（白/薄灰）の組み合わせで WCAG AA を満たす。リンクは `primary.700`、ボタンは `primary.600` / `#FFFFFF` で AA を確認済み。
 - 補助テキストは `neutral.700` に統一し、境界線は `neutral.300` として視認性を担保。
 - 印刷スタイルは `@media print` でボタン類を非表示にし、本文の可読性を優先。
@@ -229,7 +239,8 @@
 - `POST /sessions/:id/llm-questions` → LlmQuestion[]
 - `POST /sessions/:id/llm-answers` → { ok, remaining }
 - `POST /sessions/:id/finalize` → { summaryText, allAnswers }
-- 管理系：`GET/POST /admin/templates`, `GET/PUT /admin/templates/:id`, `GET/PUT /admin/llm`
+- `GET /postal-code/:postalCode` → { found, address, candidates }
+- 管理系：`GET/POST /admin/templates`, `GET/PUT /admin/templates/:id`, `GET/PUT /admin/llm`, `GET/POST /system/postal-code-dictionary`
 
 > 注：API 名は暫定。最終はバックエンド設計書に合わせる。
 

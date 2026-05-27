@@ -31,7 +31,7 @@ import AdminPasswordReset from './pages/AdminPasswordReset';
 import AdminSecurity from './pages/AdminSecurity';
 import AdminMain from './pages/AdminMain';
 import AdminApi from './pages/AdminApi';
-// removed: yubinbango preload
+import AdminPostalCode from './pages/AdminPostalCode';
 
 
 // Layouts
@@ -44,7 +44,6 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoading, isInitialPassword, showTotpSetup, isAuthenticated, logout } = useAuth();
-  // removed: postal-code address lookup preload
 
   useEffect(() => {
     flushQueue();
@@ -253,6 +252,7 @@ export default function App() {
           <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
           <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
           <Route path="/admin/api" element={<AdminLayout><AdminApi /></AdminLayout>} />
+          <Route path="/admin/postal-code" element={<AdminLayout><AdminPostalCode /></AdminLayout>} />
           <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
           <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
           <Route path="/admin/license" element={<AdminLayout><AdminLicense /></AdminLayout>} />

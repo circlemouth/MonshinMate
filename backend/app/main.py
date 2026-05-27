@@ -104,6 +104,12 @@ from .personal_info import (
     format_lines as format_personal_info_lines,
     format_multiline as format_personal_info_multiline,
 )
+from .postal_code_lookup import (
+    PostalCodeImportError,
+    get_postal_dictionary_info,
+    import_postal_csv,
+    lookup_postal_code,
+)
 from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
@@ -2376,6 +2382,56 @@ class LogoSettings(BaseModel):
     crop: LogoCrop | None = None
 
 
+class PostalCodeCandidate(BaseModel):
+    postal_code: str
+    prefecture: str
+    city: str
+    town: str
+    address: str
+
+
+class PostalCodeLookupResponse(BaseModel):
+    postal_code: str
+    found: bool
+    address: str | None = None
+    candidates: list[PostalCodeCandidate] = Field(default_factory=list)
+
+
+class PostalCodeDictionaryInfo(BaseModel):
+    is_available: bool
+    row_count: int
+    source_filename: str | None = None
+    last_updated_at: str | None = None
+
+
+@app.get("/postal-code/{postal_code}", response_model=PostalCodeLookupResponse)
+def get_postal_code_address(postal_code: str) -> PostalCodeLookupResponse:
+    """郵便番号から住所候補を返す。未登録時は found=false として手入力へフォールバックする。"""
+
+    return PostalCodeLookupResponse(**lookup_postal_code(postal_code))
+
+
+@app.get("/system/postal-code-dictionary", response_model=PostalCodeDictionaryInfo)
+def get_system_postal_code_dictionary() -> PostalCodeDictionaryInfo:
+    """郵便番号辞書の状態を返す。初回は同梱 CSV から辞書 DB を作成する。"""
+
+    return PostalCodeDictionaryInfo(**get_postal_dictionary_info())
+
+
+@app.post("/system/postal-code-dictionary", response_model=PostalCodeDictionaryInfo)
+def upload_system_postal_code_dictionary(file: UploadFile = File(...)) -> PostalCodeDictionaryInfo:
+    """管理画面からアップロードされた郵便番号 CSV で辞書 DB を更新する。"""
+
+    filename = Path(file.filename or "").name or "postal_codes.csv"
+    try:
+        return PostalCodeDictionaryInfo(**import_postal_csv(file.file, filename))
+    except PostalCodeImportError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("postal_code_dictionary_upload_failed")
+        raise HTTPException(status_code=500, detail="postal_code_dictionary_upload_failed") from exc
+
+
 @app.get("/system/timezone", response_model=TimezoneSettings)
 def get_system_timezone() -> TimezoneSettings:
     """システム全体で利用する時間帯を返す。未設定時は JST。"""
@@ -3944,8 +4000,6 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
-
 
 
 

@@ -45,6 +45,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       { label: '問診結果一覧', to: '/admin/sessions' },
       { label: 'LLM設定', to: '/admin/llm' },
       { label: 'API連携', to: '/admin/api' },
+      { label: '郵便番号辞書', to: '/admin/postal-code' },
       { label: '外観・通知設定', to: '/admin/appearance' },
       { label: 'タイムゾーン設定', to: '/admin/timezone' },
       { label: 'セキュリティ', to: '/admin/security' },

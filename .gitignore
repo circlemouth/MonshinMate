@@ -9,6 +9,8 @@ venv*/
 .env
 backend/.env
 backend/app/*.sqlite3
+backend/app/postal_code_data/*.sqlite3
+backend/app/postal_code_data/*.sqlite3-*
 
 # Log files
 *.log

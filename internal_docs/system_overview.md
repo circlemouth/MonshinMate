@@ -9,13 +9,14 @@
 ### 2.1 コンポーネント構成
 - **フロントエンド**（`frontend/`）: React 18 + Vite + Chakra UI。患者フローと管理フローを SPA で提供。
 - **バックエンド API**（`backend/app/main.py`）: FastAPI。テンプレート CRUD、セッション管理、LLM 連携、エクスポート、管理者認証を提供。
+- **郵便番号辞書**（`backend/app/postal_code_lookup.py`）: 同梱または管理画面アップロードの KEN_ALL CSV を SQLite 辞書化し、患者画面の住所自動入力に利用。
 - **LLM ゲートウェイ**（`backend/app/llm_gateway.py`）: OpenAI 互換 API / ollama / LM Studio への疎通を抽象化し、追加質問・要約生成をハンドリング。
 - **永続化層**（`backend/app/db.py`）: SQLite を既定としつつ、環境変数で CouchDB を有効化した場合はセッション回答を CouchDB に保存。監査ログや管理設定は SQLite。
 - **ドキュメント生成**（`backend/app/pdf_renderer.py`）: ReportLab で問診結果の PDF を生成。CSV・Markdown 変換も `main.py` 内で扱う。
 - **補助スクリプト**（`tools/`、`backend/tools/`）: テンプレート/セッションのエクスポート、管理者パスワードリセット、TOTP 秘密鍵暗号化など。
 
 ### 2.2 主要データフロー
-1. 患者が `/` で受診種別を選択し、`/basic-info` で氏名・生年月日・性別（＋初診時は詳細個人情報）を入力。
+1. 患者が `/` で受診種別を選択し、`/basic-info` で氏名・生年月日・性別（＋初診時は郵便番号・住所・電話番号等）を入力。郵便番号は7桁入力時に辞書検索し、該当時のみ住所欄へ自動反映する。
 2. `POST /sessions` によりセッションが作成され、テンプレート ID と回答ドラフトが返却。ブラウザ `sessionStorage` に保存。
 3. `/questionnaire` でテンプレート項目を回答し、各回答は `POST /sessions/{id}/answers` 経由で保存。`sessionStorage` のドラフトも同期。
 4. 追加質問フェーズ `/questions` では `POST /sessions/{id}/llm-questions` → `POST /sessions/{id}/llm-answers` をまとめて呼び出し、上限に達するか LLM が質問を返さなくなるまで繰り返す。
@@ -29,6 +30,7 @@
 - **環境変数**: `backend/.env` とリポジトリ直下 `.env`（Docker 用）を読み込む。`MONSHINMATE_DB` を未設定の場合、`backend/app/app.sqlite3` を使用。
 - **CORS 設定**: Cloud Run 等でフロントとバックエンドを別ドメイン運用する場合は `FRONTEND_ALLOWED_ORIGINS` に許可ドメインをカンマ区切りで指定する。未設定かつ `MONSHINMATE_ENV=local` では `http://localhost:5173` 系を自動許可する。
 - **静的アセット**: 問診項目画像とロゴ画像はデータベースに保存し、`/questionnaire-item-images/files/*` と `/system-logo/files/*` の API から配信する（旧ディレクトリ内のファイルは起動時に自動移行）。
+- **郵便番号初期データ**: `backend/app/postal_code_data/utf_ken_all.csv` を同梱し、初回検索または辞書状態確認時に `postal_codes.sqlite3` を生成する。生成DBはGit管理対象外。
 
 ### 3.5 Cloud Run / Firestore 拡張
 - Cloud Run + Firestore 向けの永続化アダプタおよび Secret Manager 連携は、`private/` 配下に配置する非公開サブモジュールで提供する。
@@ -43,6 +45,7 @@
 - `db.py`: SQLite テーブル作成・マイグレーション代替（`init_db`）、テンプレート/セッション/ユーザー CRUD、CouchDB 接続ヘルパー、監査ログ記録。
 - `session_fsm.py`: セッション状態遷移（残項目管理、LLM 追加質問キュー）。
 - `validator.py`: 項目タイプ別バリデーション。個人情報フィールドは `personal_info` ユーティリティで整形。
+- `postal_code_lookup.py`: 郵便番号CSVのインポート、住所検索、辞書メタ情報管理。
 - `structured_context.py`: 回答値の正規化（空回答→`該当なし` など）とセッション辞書更新。
 - `llm_gateway.py`: LLM 設定の正規化、HTTP 呼び出し、状態キャッシュ、直列化ロック。
 - `pdf_renderer.py`: A4 縦構成／structured/legacy レイアウト切替、質問ツリーのフラット化、ReportLab スタイル適用。
@@ -54,6 +57,7 @@
 - **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UI で未保存の `project_id` やアップロード済みの `service_account_json`（サービスアカウント JSON キー）といった入力値を一時的に反映して疎通確認できる（ただし Vertex AI は Google 側の制約でモデル一覧 UI を表示せず、手入力＋疎通テストのみ提供）。
 - **LLM プロバイダメタ情報**: `/llm/providers` で利用可能なプロバイダ一覧と UI 向けメタデータを返す。`ollama` / `lm_studio` / `openai` に加えて、Vertex AI を利用する `gcp_vertex` プロバイダが常に含まれる。メタデータには追加設定項目や既定値を含め、管理画面での入力欄が自動的に構成される。
 - **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
+- **郵便番号辞書**: `GET /postal-code/{postal_code}` で住所候補を返す。`GET/POST /system/postal-code-dictionary` で辞書状態確認とCSVアップロード更新を行う。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
 - **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers`、`/sessions/{id}/finalize`。
 - **管理セッション**: `GET /admin/sessions`（フィルタ: 氏名・DOB・期間）、`/admin/sessions/{id}`、`/admin/sessions/stream`（SSE）、`/admin/sessions/bulk/download/{fmt}`、`/admin/sessions/{id}/download/{fmt}`、削除 API。
@@ -100,13 +104,13 @@
 ### 5.1 ルーティングと画面
 - 患者フロー: `/`（Entry）→ `/basic-info` → `/questionnaire` → `/questions` → `/done`。ページ遷移時に `FlowProgress` で進捗を表示。
 - 管理フロー: `/admin/login`（モーダル実装あり）→ `/admin/main`（ダッシュボード）→ 各種設定・データページ。
-- 管理ページ一覧: `AdminMain`, `AdminTemplates`, `AdminTemplateEditor`（コンポーネント構成）、`AdminSessions`, `AdminSessionDetail`, `AdminDataTransfer`, `AdminLlm`, `AdminAppearance`, `AdminTimezone`, `AdminManual`, `AdminLicense`, `AdminLicenseDeps`, `AdminSecurity`, `AdminInitialPassword`, `AdminTotpSetup`, `AdminPasswordReset`, `LLMChat`, `LlmWait` 等。
+- 管理ページ一覧: `AdminMain`, `AdminTemplates`, `AdminTemplateEditor`（コンポーネント構成）、`AdminSessions`, `AdminSessionDetail`, `AdminDataTransfer`, `AdminLlm`, `AdminPostalCode`, `AdminAppearance`, `AdminTimezone`, `AdminManual`, `AdminLicense`, `AdminLicenseDeps`, `AdminSecurity`, `AdminInitialPassword`, `AdminTotpSetup`, `AdminPasswordReset`, `LLMChat`, `LlmWait` 等。
 - すべて `App.tsx` 内の `Routes` で定義し、ヘッダー右上の「管理画面」ボタンからモーダルログインを起動。
 
 ### 5.2 状態管理とユーティリティ
 - **コンテキスト**: `AuthContext`（TOTP 状態と adminLoggedIn フラグ）、`NotificationContext`（Chakra Toast を患者/管理で出し分け）、`TimezoneContext`（`/system/timezone` と連動）、`LLMStatus` ユーティリティ（疎通情報の購読）。
 - **保存戦略**: 患者回答はブラウザ `sessionStorage` に保存。`retryQueue.ts` でネットワーク断時の POST をキューし、`flushQueue()` がページ遷移時に再送。
-- **フォーム補助**: `utils/personalInfo` で個人情報入力（かな等）をフォーマット。`QuestionnaireForm` はテンプレート JSON から Chakra コンポーネントを動的生成し、条件表示（`when`）、年齢/性別制限、複数選択、自由入力を扱う。
+- **フォーム補助**: `utils/personalInfo` で個人情報入力（かな等）をフォーマット。`BasicInfo` は郵便番号を全角/半角数字から7桁へ正規化し、住所自動入力に失敗した場合は手入力を維持する。`QuestionnaireForm` はテンプレート JSON から Chakra コンポーネントを動的生成し、条件表示（`when`）、年齢/性別制限、複数選択、自由入力を扱う。
 - **スタイル**: `theme/` で色・タイポグラフィを定義。`FontSizeControl` と `useAutoFontSize` でロゴ・システム名称の自動縮小を実装。
 
 ### 5.3 通信とエラー処理
