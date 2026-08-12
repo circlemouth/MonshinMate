@@ -5,9 +5,9 @@
 ## POST /patient-summary
 - 概要: 患者名と生年月日をキーに、最新の確定済み問診を Markdown 形式で返す統合 API。
 - リクエストヘッダー:
-  - `X-MonshinMate-Api-Key` (str): 管理画面「API連携」で生成した API キー。登録済みでなければ失敗する。
+  - `X-MonshinMate-Api-Key` (str): Secret Managerから読み込む専用APIキー。登録済みでなければ失敗する。
 - リクエストボディ:
-  - `patient_name` (str): 患者氏名（部分一致）。
+  - `patient_name` (str): 患者氏名。NFKC正規化と空白除去後の完全一致で照合する。
   - `dob` (str): 生年月日。`YYYY-MM-DD` 以外に `/` や `.` で区切った表記、`令和5年4月1日` などの和暦表記も自動整形される。
 - レスポンス:
   - `session_id` (str)
@@ -18,9 +18,12 @@
   - `finalized_at` (str | null)
   - `markdown` (str): `build_markdown_lines` と同じ形式の Markdown 本文。
 - 備考:
-  - `patient_name` にマッチするログから最も新しい `completion_status='finalized'` のセッションを返す。該当なしの場合は 404。
+  - 氏名と生年月日が一致するセッションから、最も新しい `completion_status='finalized'` の一件を返す。
+  - 氏名の部分一致、候補なし、曖昧な照合、未確定セッションは返さない。該当なしの場合は404。
+  - 認証失敗時のログとエラー本文には、患者氏名、生年月日、APIキーを記録しない。
   - API キー未設定/無効な場合は 401。
-  - `/system/patient-summary-api` でエンドポイント・ヘッダー名・キー状態を確認し、`/system/patient-summary-api-key` でキーを登録/更新する。
+  - `/system/patient-summary-api` ではエンドポイント、ヘッダー名、キー状態だけを確認できる。
+  - 公開HTTP面からのキー登録と更新は無効であり、Secret Managerのrotationと再デプロイで更新する。
 
 ## POST /sessions
 - 概要: 新しい問診セッションを作成する。

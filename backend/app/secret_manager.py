@@ -41,6 +41,7 @@ _DEFAULT_SECRET_KEYS = [
     "SECRET_KEY",
     "TOTP_ENC_KEY",
     "LLM_API_KEY",
+    "PATIENT_SUMMARY_API_KEY",
 ]
 
 

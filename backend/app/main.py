@@ -18,6 +18,8 @@ import base64
 import hashlib
 import secrets
 import mimetypes
+import unicodedata
+import threading
 from urllib.parse import urlparse
 from pathlib import Path
 try:
@@ -2078,6 +2080,15 @@ def _normalize_dob_variants(value: str | None) -> set[str]:
     return variants
 
 
+def _normalize_patient_name_for_identity(value: str | None) -> str:
+    """氏名照合用に表記幅と空白だけを正規化する。部分一致は行わない。"""
+
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFKC", value)
+    return "".join(character for character in normalized if not character.isspace())
+
+
 def _hash_patient_summary_api_key(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -2085,6 +2096,9 @@ def _hash_patient_summary_api_key(value: str) -> str:
 def _is_patient_summary_api_key_valid(provided: str | None) -> bool:
     if not provided:
         return False
+    environment_key = os.getenv("PATIENT_SUMMARY_API_KEY", "").strip()
+    if environment_key:
+        return secrets.compare_digest(provided.strip(), environment_key)
     stored = load_app_settings() or {}
     stored_hash = stored.get("patient_summary_api_key_hash")
     if not stored_hash:
@@ -2093,19 +2107,56 @@ def _is_patient_summary_api_key_valid(provided: str | None) -> bool:
     return secrets.compare_digest(candidate, stored_hash)
 
 
+_PATIENT_SUMMARY_RATE_LOCK = threading.Lock()
+_PATIENT_SUMMARY_RATE: dict[str, list[float]] = {}
+PATIENT_SUMMARY_RATE_LIMIT = 30
+PATIENT_SUMMARY_RATE_WINDOW_SECONDS = 60.0
+
+
+def _patient_summary_rate_allowed(request: Request) -> bool:
+    source = request.client.host if request.client else "unknown"
+    source_key = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    now = time.monotonic()
+    cutoff = now - PATIENT_SUMMARY_RATE_WINDOW_SECONDS
+    with _PATIENT_SUMMARY_RATE_LOCK:
+        recent = [stamp for stamp in _PATIENT_SUMMARY_RATE.get(source_key, []) if stamp >= cutoff]
+        if len(recent) >= PATIENT_SUMMARY_RATE_LIMIT:
+            _PATIENT_SUMMARY_RATE[source_key] = recent
+            return False
+        recent.append(now)
+        _PATIENT_SUMMARY_RATE[source_key] = recent
+    return True
+
+
 def _find_latest_finalized_session(patient_name: str, dob: str) -> dict[str, Any] | None:
     normalized_dob_variants = _normalize_dob_variants(dob)
     if not normalized_dob_variants:
         return None
-    trimmed_name = patient_name.strip()
-    if not trimmed_name:
+    normalized_name = _normalize_patient_name_for_identity(patient_name)
+    if not normalized_name:
         return None
-    summaries = db_list_sessions(patient_name=trimmed_name)
+    summaries_by_id: dict[str, dict[str, Any]] = {}
+    for dob_variant in sorted(normalized_dob_variants):
+        for summary in db_list_sessions(
+            patient_name=patient_name.strip(),
+            dob=dob_variant,
+            limit=25,
+        ):
+            summary_id = summary.get("id")
+            if isinstance(summary_id, str):
+                summaries_by_id[summary_id] = summary
+    summaries = sorted(
+        summaries_by_id.values(),
+        key=lambda item: (item.get("started_at") or "", item.get("finalized_at") or ""),
+        reverse=True,
+    )
     for summary in summaries:
         session = db_get_session(summary.get("id"))
         if not session:
             continue
         if (session.get("completion_status") or "") != "finalized":
+            continue
+        if _normalize_patient_name_for_identity(session.get("patient_name")) != normalized_name:
             continue
         stored_dob_variants = _normalize_dob_variants(session.get("dob"))
         if normalized_dob_variants & stored_dob_variants:
@@ -2696,7 +2747,10 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
 @app.get("/system/patient-summary-api", response_model=PatientSummaryApiInfo)
 def get_patient_summary_api_info(request: Request) -> PatientSummaryApiInfo:
     stored = load_app_settings() or {}
-    enabled = bool(stored.get("patient_summary_api_key_hash"))
+    enabled = bool(
+        os.getenv("PATIENT_SUMMARY_API_KEY", "").strip()
+        or stored.get("patient_summary_api_key_hash")
+    )
     return PatientSummaryApiInfo(
         endpoint=_external_url_for(request, "patient_summary"),
         header_name=PATIENT_SUMMARY_API_HEADER,
@@ -2707,24 +2761,8 @@ def get_patient_summary_api_info(request: Request) -> PatientSummaryApiInfo:
 
 @app.put("/system/patient-summary-api-key", response_model=PatientSummaryApiInfo)
 def set_patient_summary_api_key(payload: PatientSummaryApiKeyPayload, request: Request) -> PatientSummaryApiInfo:
-    current = load_app_settings() or {}
-    if payload.api_key is not None and payload.api_key.strip():
-        trimmed = payload.api_key.strip()
-        if len(trimmed) < 16:
-            raise HTTPException(status_code=400, detail="api_key_too_short")
-        current["patient_summary_api_key_hash"] = _hash_patient_summary_api_key(trimmed)
-        current["patient_summary_api_key_updated_at"] = datetime.now(UTC).isoformat()
-    else:
-        current.pop("patient_summary_api_key_hash", None)
-        current.pop("patient_summary_api_key_updated_at", None)
-    save_app_settings(current)
-    enabled = bool(current.get("patient_summary_api_key_hash"))
-    return PatientSummaryApiInfo(
-        endpoint=_external_url_for(request, "patient_summary"),
-        header_name=PATIENT_SUMMARY_API_HEADER,
-        is_enabled=enabled,
-        last_updated_at=current.get("patient_summary_api_key_updated_at"),
-    )
+    del payload, request
+    raise HTTPException(status_code=404, detail="not_found")
 
 
 class PatientSummaryApiRequest(BaseModel):
@@ -2744,8 +2782,11 @@ class PatientSummaryApiResponse(BaseModel):
 
 @app.post("/patient-summary", name="patient_summary", response_model=PatientSummaryApiResponse)
 def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> PatientSummaryApiResponse:
+    if not _patient_summary_rate_allowed(request):
+        logger.warning("patient_summary_rate_limited")
+        raise HTTPException(status_code=429, detail="rate_limited")
     if not _is_patient_summary_api_key_valid(request.headers.get(PATIENT_SUMMARY_API_HEADER)):
-        logger.warning("patient_summary_invalid_api_key patient_name=%s", payload.patient_name)
+        logger.warning("patient_summary_invalid_api_key")
         raise HTTPException(status_code=401, detail="invalid_api_key")
     trimmed_name = payload.patient_name.strip()
     trimmed_dob = payload.dob.strip()
@@ -4003,7 +4044,4 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-
-
-
 

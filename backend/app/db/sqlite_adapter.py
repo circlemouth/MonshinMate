@@ -1191,6 +1191,7 @@ def list_sessions(
     start_date: str | None = None,
     end_date: str | None = None,
     visit_type: str | None = None,
+    limit: int | None = None,
     db_path: str = DEFAULT_DB_PATH,
 ) -> list[dict[str, Any]]:
     """保存済みセッションの概要一覧を取得する。
@@ -1240,7 +1241,7 @@ def list_sessions(
                 }
             )
         result.sort(key=lambda x: (x.get("started_at") or "", x.get("finalized_at") or ""), reverse=True)
-        return result
+        return result[: max(1, min(int(limit), 1000))] if limit is not None else result
     conn = get_conn(db_path)
     try:
         query = "SELECT id, patient_name, dob, visit_type, started_at, finalized_at, completion_status FROM sessions"
@@ -1273,6 +1274,9 @@ def list_sessions(
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY COALESCE(started_at, finalized_at, '') DESC"
+        if limit is not None:
+            query += " LIMIT ?"
+            params.append(max(1, min(int(limit), 1000)))
         rows = conn.execute(query, params).fetchall()
         for row in rows:
             if not row.get("started_at"):
@@ -2289,5 +2293,4 @@ class SQLiteAdapter:
     def shutdown(self) -> None:
         """SQLite 実装では特別な終了処理は不要。"""
         return None
-
 

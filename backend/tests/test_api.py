@@ -1,17 +1,92 @@
 from pathlib import Path
 import sys
 import base64
+import logging
+import hashlib
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.main import app, on_startup  # type: ignore[import]
-from app.db import get_session as db_get_session
+from app.db import get_session as db_get_session, load_app_settings, save_app_settings
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
 import base64
 
 
 client = TestClient(app)
+
+
+def _create_finalized_patient_summary_session(patient_name: str, dob: str) -> str:
+    created = client.post(
+        "/sessions",
+        json={
+            "patient_name": patient_name,
+            "dob": dob,
+            "gender": "female",
+            "visit_type": "initial",
+            "answers": {"chief_complaint": "合成テスト回答"},
+        },
+    )
+    assert created.status_code == 200
+    session_id = created.json()["id"]
+    finalized = client.post(f"/sessions/{session_id}/finalize")
+    assert finalized.status_code == 200
+    return session_id
+
+
+def test_patient_summary_requires_exact_normalized_name_and_dob() -> None:
+    on_startup()
+    api_key = "synthetic-summary-key-20260812"
+    settings = load_app_settings() or {}
+    settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
+    save_app_settings(settings)
+    session_id = _create_finalized_patient_summary_session(
+        "統合試験 花子", "1990-02-03"
+    )
+
+    partial = client.post(
+        "/patient-summary",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "統合試験", "dob": "1990-02-03"},
+    )
+    assert partial.status_code == 404
+
+    exact = client.post(
+        "/patient-summary",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "統合試験花子", "dob": "1990/02/03"},
+    )
+    assert exact.status_code == 200
+    assert exact.json()["session_id"] == session_id
+
+
+def test_patient_summary_invalid_auth_log_contains_no_request_pii(caplog) -> None:
+    on_startup()
+    patient_name = "ログ非記録 合成患者"
+    dob = "1988-07-06"
+    invalid_key = "invalid-synthetic-key"
+    caplog.set_level(logging.WARNING)
+
+    response = client.post(
+        "/patient-summary",
+        headers={"X-MonshinMate-Api-Key": invalid_key},
+        json={"patient_name": patient_name, "dob": dob},
+    )
+
+    assert response.status_code == 401
+    combined = "\n".join(record.getMessage() for record in caplog.records)
+    assert "patient_summary_invalid_api_key" in combined
+    assert patient_name not in combined
+    assert dob not in combined
+    assert invalid_key not in combined
+
+
+def test_patient_summary_api_key_write_route_is_not_public() -> None:
+    response = client.put(
+        "/system/patient-summary-api-key",
+        json={"api_key": "synthetic-summary-key-should-not-be-set"},
+    )
+    assert response.status_code == 404
 
 
 def test_get_questionnaire_template() -> None:
