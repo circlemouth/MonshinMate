@@ -2782,12 +2782,12 @@ class PatientSummaryApiResponse(BaseModel):
 
 @app.post("/patient-summary", name="patient_summary", response_model=PatientSummaryApiResponse)
 def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> PatientSummaryApiResponse:
-    if not _patient_summary_rate_allowed(request):
-        logger.warning("patient_summary_rate_limited")
-        raise HTTPException(status_code=429, detail="rate_limited")
     if not _is_patient_summary_api_key_valid(request.headers.get(PATIENT_SUMMARY_API_HEADER)):
         logger.warning("patient_summary_invalid_api_key")
         raise HTTPException(status_code=401, detail="invalid_api_key")
+    if not _patient_summary_rate_allowed(request):
+        logger.warning("patient_summary_rate_limited")
+        raise HTTPException(status_code=429, detail="rate_limited")
     trimmed_name = payload.patient_name.strip()
     trimmed_dob = payload.dob.strip()
     if not trimmed_name or not trimmed_dob:
@@ -4044,4 +4044,3 @@ def metrics_ui(payload: UiMetricEvents) -> dict:
         count = 0
     logger.info("ui_metrics received=%d", count)
     return {"status": "ok", "received": count}
-

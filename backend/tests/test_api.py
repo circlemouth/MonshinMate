@@ -6,7 +6,12 @@ import hashlib
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from app.main import app, on_startup  # type: ignore[import]
+from app.main import (  # type: ignore[import]
+    PATIENT_SUMMARY_RATE_LIMIT,
+    _PATIENT_SUMMARY_RATE,
+    app,
+    on_startup,
+)
 from app.db import get_session as db_get_session, load_app_settings, save_app_settings
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
@@ -79,6 +84,33 @@ def test_patient_summary_invalid_auth_log_contains_no_request_pii(caplog) -> Non
     assert patient_name not in combined
     assert dob not in combined
     assert invalid_key not in combined
+
+
+def test_invalid_patient_summary_auth_does_not_exhaust_valid_request_rate_limit() -> None:
+    on_startup()
+    api_key = "synthetic-summary-key-after-invalid-burst"
+    settings = load_app_settings() or {}
+    settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
+    save_app_settings(settings)
+    _PATIENT_SUMMARY_RATE.clear()
+
+    try:
+        for _ in range(PATIENT_SUMMARY_RATE_LIMIT + 1):
+            invalid = client.post(
+                "/patient-summary",
+                headers={"X-MonshinMate-Api-Key": "invalid-synthetic-key"},
+                json={"patient_name": "合成 該当なし", "dob": "1900-01-01"},
+            )
+            assert invalid.status_code == 401
+
+        valid = client.post(
+            "/patient-summary",
+            headers={"X-MonshinMate-Api-Key": api_key},
+            json={"patient_name": "合成 該当なし", "dob": "1900-01-01"},
+        )
+        assert valid.status_code == 404
+    finally:
+        _PATIENT_SUMMARY_RATE.clear()
 
 
 def test_patient_summary_api_key_write_route_is_not_public() -> None:

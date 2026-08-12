@@ -1201,5 +1201,6 @@
 ## 10. API連携と拡張ツール（2025-12-01）
 - `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
 - 2026-08-12: Clinic Hermesの読み取り専用接続に備え、`POST /patient-summary`の氏名照合をNFKC正規化と空白除去後の完全一致へ変更した。無効なAPIキーを受けたログから患者氏名を除き、氏名、生年月日、APIキーをエラーとログへ残さない回帰テストを追加した。公開HTTP面のキー更新routeを無効化し、運用キーはSecret Managerのrotationと再デプロイで更新する。
+- 2026-08-12: 公開フロントエンド経由の無効なAPIキー連打が、共有送信元単位の正規リクエスト用レート制限を消費しないよう、APIキー検証後にレートカウンターを更新する順序へ変更した。無効キーの上限超過後も正規キーによる合成no-match要求が429にならない回帰テストを追加した。
 - 管理画面に「API連携」ページを新設し、エンドポイント/ヘッダー/キー更新 UI を表示したうえで、ドキュメント（`docs/admin_user_manual.md` / `docs/session_api.md` / `docs/chrome_extension.md`） を追記。
 - Chrome 拡張 `extensions/patient-summary` を作成し、XPath ベースの患者抽出・日付正規化・API 呼び出し・Markdown コピー・通知の流れを構築した。
