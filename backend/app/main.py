@@ -2137,11 +2137,9 @@ def _find_latest_finalized_session(patient_name: str, dob: str) -> dict[str, Any
         return None
     summaries_by_id: dict[str, dict[str, Any]] = {}
     for dob_variant in sorted(normalized_dob_variants):
-        for summary in db_list_sessions(
-            patient_name=patient_name.strip(),
-            dob=dob_variant,
-            limit=25,
-        ):
+        # SQLite/CouchDB 側の氏名検索は NFKC 正規化を保証しない。
+        # 生年月日で候補を絞り、氏名の完全一致はこの関数で判定する。
+        for summary in db_list_sessions(dob=dob_variant):
             summary_id = summary.get("id")
             if isinstance(summary_id, str):
                 summaries_by_id[summary_id] = summary

@@ -3,16 +3,27 @@ import sys
 import base64
 import logging
 import hashlib
+from datetime import UTC, datetime
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from app.main import (  # type: ignore[import]
     PATIENT_SUMMARY_RATE_LIMIT,
+    SessionCreateRequest,
     _PATIENT_SUMMARY_RATE,
+    _find_latest_finalized_session,
     app,
+    create_session,
+    llm_gateway,
     on_startup,
+    sessions,
 )
-from app.db import get_session as db_get_session, load_app_settings, save_app_settings
+from app.db import (
+    get_session as db_get_session,
+    load_app_settings,
+    save_app_settings,
+    save_session,
+)
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
 import base64
@@ -22,24 +33,26 @@ client = TestClient(app)
 
 
 def _create_finalized_patient_summary_session(patient_name: str, dob: str) -> str:
-    created = client.post(
-        "/sessions",
-        json={
-            "patient_name": patient_name,
-            "dob": dob,
-            "gender": "female",
-            "visit_type": "initial",
-            "answers": {"chief_complaint": "合成テスト回答"},
-        },
+    created = create_session(
+        SessionCreateRequest(
+            patient_name=patient_name,
+            dob=dob,
+            gender="female",
+            visit_type="initial",
+            answers={"chief_complaint": "合成テスト回答"},
+        )
     )
-    assert created.status_code == 200
-    session_id = created.json()["id"]
-    finalized = client.post(f"/sessions/{session_id}/finalize")
-    assert finalized.status_code == 200
+    session_id = created.id
+    session = sessions[session_id]
+    session.finalized_at = datetime.now(UTC)
+    session.interrupted = False
+    session.completion_status = "finalized"
+    save_session(session)
     return session_id
 
 
-def test_patient_summary_requires_exact_normalized_name_and_dob() -> None:
+def test_patient_summary_requires_exact_normalized_name_and_dob(monkeypatch) -> None:
+    monkeypatch.setattr(llm_gateway, "sync_status", lambda **_kwargs: None)
     on_startup()
     api_key = "synthetic-summary-key-20260812"
     settings = load_app_settings() or {}
@@ -65,8 +78,26 @@ def test_patient_summary_requires_exact_normalized_name_and_dob() -> None:
     assert exact.json()["session_id"] == session_id
 
 
-def test_patient_summary_invalid_auth_log_contains_no_request_pii(caplog) -> None:
+def test_patient_summary_finds_exact_name_beyond_recent_partial_matches(monkeypatch) -> None:
+    monkeypatch.setattr(llm_gateway, "sync_status", lambda **_kwargs: None)
     on_startup()
+    api_key = "synthetic-summary-key-many-partial-matches"
+    settings = load_app_settings() or {}
+    settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
+    save_app_settings(settings)
+    dob = "1991-04-05"
+    expected_session_id = _create_finalized_patient_summary_session("検索試験", dob)
+
+    for index in range(26):
+        _create_finalized_patient_summary_session(f"検索試験 {index:02d}", dob)
+
+    session = _find_latest_finalized_session("検索試験", dob)
+
+    assert session is not None
+    assert session["id"] == expected_session_id
+
+
+def test_patient_summary_invalid_auth_log_contains_no_request_pii(caplog) -> None:
     patient_name = "ログ非記録 合成患者"
     dob = "1988-07-06"
     invalid_key = "invalid-synthetic-key"
@@ -87,7 +118,6 @@ def test_patient_summary_invalid_auth_log_contains_no_request_pii(caplog) -> Non
 
 
 def test_invalid_patient_summary_auth_does_not_exhaust_valid_request_rate_limit() -> None:
-    on_startup()
     api_key = "synthetic-summary-key-after-invalid-burst"
     settings = load_app_settings() or {}
     settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
