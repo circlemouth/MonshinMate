@@ -1363,3 +1363,64 @@ def test_summary_prompt_api_default() -> None:
     data = res.json()
     assert data["prompt"].startswith("あなたは医療記録作成の専門家です")
     assert data["enabled"] is False
+
+
+def test_session_can_resume_after_memory_cache_loss_and_batch_answers() -> None:
+    """別Cloud Runインスタンス相当でも永続層からセッションを復元できる。"""
+
+    on_startup()
+    created = client.post(
+        "/sessions",
+        json={
+            "patient_name": "復元試験",
+            "dob": "2000-01-01",
+            "gender": "female",
+            "visit_type": "initial",
+            "answers": {},
+        },
+    )
+    session_id = created.json()["id"]
+    sessions.clear()
+    response = client.post(
+        f"/sessions/{session_id}/llm-answers/batch",
+        json={"answers": {"chief_complaint": "発熱", "onset": "昨日"}},
+    )
+    assert response.status_code == 200
+    stored = db_get_session(session_id)
+    assert stored["answers"]["chief_complaint"] == "発熱"
+    assert stored["answers"]["onset"] == "昨日"
+
+
+def test_finalize_is_idempotent_after_memory_cache_loss() -> None:
+    """再送や別インスタンス到着でも確定日時を更新しない。"""
+
+    on_startup()
+    client.post(
+        "/questionnaires/default/summary-prompt",
+        json={"visit_type": "initial", "prompt": "", "enabled": False},
+    )
+    created = client.post(
+        "/sessions",
+        json={
+            "patient_name": "冪等試験",
+            "dob": "2000-01-01",
+            "gender": "male",
+            "visit_type": "initial",
+            "answers": {"chief_complaint": "頭痛"},
+        },
+    )
+    session_id = created.json()["id"]
+    first = client.post(f"/sessions/{session_id}/finalize")
+    sessions.clear()
+    second = client.post(f"/sessions/{session_id}/finalize")
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert second.json()["finalized_at"] == first.json()["finalized_at"]
+
+
+def test_admin_sessions_page_has_bounded_shape() -> None:
+    response = client.get("/admin/sessions/page?limit=2")
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload["items"]) <= 2
+    assert "next_cursor" in payload

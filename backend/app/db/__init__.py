@@ -164,6 +164,7 @@ _METHOD_NAMES = [
     "rename_template",
     "save_session",
     "list_sessions",
+    "list_sessions_page",
     "list_sessions_finalized_after",
     "get_session",
     "delete_session",
@@ -183,6 +184,9 @@ _METHOD_NAMES = [
     "export_sessions_data",
     "import_sessions_data",
     "list_audit_logs",
+    "save_push_subscription",
+    "delete_push_subscription",
+    "list_push_subscriptions",
     "get_user_by_username",
     "update_password",
     "verify_password",
@@ -215,4 +219,3 @@ __all__ = [
     "get_couch_db",
     "init_db",
 ] + _METHOD_NAMES
-

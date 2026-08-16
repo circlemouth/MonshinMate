@@ -58,6 +58,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const logout = () => {
     sessionStorage.removeItem('adminLoggedIn');
+    sessionStorage.removeItem('adminAccessToken');
     navigate('/admin/login');
   };
 

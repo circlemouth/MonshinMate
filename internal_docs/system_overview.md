@@ -38,6 +38,8 @@
 - Secret Manager 連携を有効化する際は `MONSHINMATE_SECRET_MANAGER_ADAPTER` を設定し、プラグイン側の `load_secrets` をロードさせる。
 - 本リポジトリのみで運用する場合は `PERSISTENCE_BACKEND=sqlite` を既定とし、Cloud Run 向け設定値は読み込まれない。
 - Cloud Run 部署時に利用する `.env` サンプルはサブモジュール側の `.env.cloudrun.example` を参照する。
+- Firestore の `sessions`、`auditLogs`、`pushSubscriptions` は `expires_at` を TTL フィールドとして使う。既定保持期間は、確定済み問診365日、中断問診24時間、監査ログ365日、Pushトークン90日。
+- Cloud Run はリクエスト課金、最小インスタンス0、最大インスタンス数付きで配備する。予算アラートは月額3,000円の50%・80%・100%到達時と100%到達予測時に通知するが、サービスは自動停止しない。
 
 ## 4. バックエンド（FastAPI）
 ### 4.1 主要モジュール
@@ -59,8 +61,9 @@
 - **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
 - **郵便番号辞書**: `GET /postal-code/{postal_code}` で住所候補を返す。`GET/POST /system/postal-code-dictionary` で辞書状態確認とCSVアップロード更新を行う。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
-- **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers`、`/sessions/{id}/finalize`。
-- **管理セッション**: `GET /admin/sessions`（フィルタ: 氏名・DOB・期間）、`/admin/sessions/{id}`、`/admin/sessions/stream`（SSE）、`/admin/sessions/bulk/download/{fmt}`、`/admin/sessions/{id}/download/{fmt}`、削除 API。
+- **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers[/batch]`、`/sessions/{id}/finalize`。
+- **管理セッション**: `GET /admin/sessions`（フィルタ検索）、`/admin/sessions/page`（通常一覧のカーソルページング）、`/admin/sessions/completed`（Push非対応時の低頻度ポーリング）、`/admin/sessions/{id}`、旧クライアント互換の `/admin/sessions/stream`（SSE）、出力・削除 API。
+- **完了通知**: 管理画面は FCM Push を優先し、設定不足または通知未許可の場合だけ画面表示中に60秒間隔でポーリングする。Push購読操作には管理者ログイン時に発行する8時間の用途限定JWTを使い、Push本文には患者情報を含めない。
 - **メトリクス**: `GET /metrics`（OpenMetrics テキスト）、`POST /metrics/ui`（UI 追跡イベント）。
 
 ### 4.3 セッションライフサイクル
@@ -69,6 +72,7 @@
 - 追加質問は `SessionFSM.next_questions()` が LLM ゲートウェイを呼び、`llm_*` 形式の ID を採番して `pending_llm_questions` に積む。提示文は `llm_question_texts` と `question_texts` に保持し、履歴テーブルにも保存。
 - 回答は `session_responses` テーブルに JSON で永続化。CouchDB が有効な場合は `answers` ドキュメントにも反映（`db.py` の `save_session`）。
 - `POST /sessions/{id}/finalize` で `METRIC_SUMMARIES` を加算し、まとめた回答と要約を保存・返却。LLM 失敗時は `llm_error` を `sessionStorage` に退避して完了まで進める設計。
+- セッション処理はメモリに存在しない場合でも永続層から復元する。確定済みセッションへの再度の `finalize` は保存済み結果を返し、LLM生成・保存・通知を重複実行しない。
 
 ### 4.4 LLM 連携（通信仕様）
 - **デフォルトプロンプト**: 追加質問用 `DEFAULT_SYSTEM_PROMPT` / `DEFAULT_FOLLOWUP_PROMPT`、サマリー用 `DEFAULT_SUMMARY_PROMPT` を `llm_gateway.py` / `main.py` に定義。管理画面の「LLM 設定」「テンプレート詳細」からテンプレート単位で上書きでき、プレースホルダ `{max_questions}` を埋め込む。

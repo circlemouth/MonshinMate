@@ -1,6 +1,8 @@
 interface QueueItem {
   url: string;
   options: RequestInit;
+  attempts: number;
+  nextAttemptAt: number;
 }
 
 const KEY = 'retry_queue';
@@ -19,19 +21,39 @@ function save(q: QueueItem[]): void {
 
 export function enqueue(item: QueueItem): void {
   const q = load();
-  q.push(item);
-  save(q);
+  const key = `${item.options.method || 'GET'}:${item.url}:${String(item.options.body || '')}`;
+  const withoutDuplicate = q.filter(
+    (queued) => `${queued.options.method || 'GET'}:${queued.url}:${String(queued.options.body || '')}` !== key,
+  );
+  withoutDuplicate.push(item);
+  save(withoutDuplicate.slice(-50));
 }
+
+const isRetriableStatus = (status: number) => status === 408 || status === 425 || status === 429 || status >= 500;
+
+const retryDelay = (attempts: number) => Math.min(5 * 60_000, 2 ** Math.min(attempts, 8) * 1_000);
 
 export async function flushQueue(): Promise<void> {
   const q = load();
   const remaining: QueueItem[] = [];
   for (const item of q) {
+    if ((item.nextAttemptAt || 0) > Date.now()) {
+      remaining.push(item);
+      continue;
+    }
     try {
       const res = await fetch(item.url, item.options);
-      if (!res.ok) throw new Error('http error');
+      if (!res.ok && isRetriableStatus(res.status)) {
+        const attempts = (item.attempts || 0) + 1;
+        if (attempts < 8) {
+          remaining.push({ ...item, attempts, nextAttemptAt: Date.now() + retryDelay(attempts) });
+        }
+      }
     } catch {
-      remaining.push(item);
+      const attempts = (item.attempts || 0) + 1;
+      if (attempts < 8) {
+        remaining.push({ ...item, attempts, nextAttemptAt: Date.now() + retryDelay(attempts) });
+      }
     }
   }
   save(remaining);
@@ -45,11 +67,18 @@ export async function postWithRetry(url: string, body: any): Promise<Response | 
   };
   try {
     const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      if (isRetriableStatus(res.status)) {
+        enqueue({ url, options, attempts: 0, nextAttemptAt: Date.now() + retryDelay(0) });
+      }
+      throw new Error(`HTTP ${res.status}`);
+    }
     return res;
-  } catch {
-    enqueue({ url, options });
-    throw new Error('queued');
+  } catch (error) {
+    if (error instanceof TypeError) {
+      enqueue({ url, options, attempts: 0, nextAttemptAt: Date.now() + retryDelay(0) });
+      throw new Error('queued');
+    }
+    throw error;
   }
 }
-

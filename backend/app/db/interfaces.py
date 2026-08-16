@@ -42,6 +42,9 @@ class PersistenceAdapter(Protocol):
     def list_sessions(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         ...
 
+    def list_sessions_page(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        ...
+
     def list_sessions_finalized_after(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         ...
 
@@ -99,6 +102,15 @@ class PersistenceAdapter(Protocol):
     def list_audit_logs(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
         ...
 
+    def save_push_subscription(self, *args: Any, **kwargs: Any) -> None:
+        ...
+
+    def delete_push_subscription(self, *args: Any, **kwargs: Any) -> None:
+        ...
+
+    def list_push_subscriptions(self, *args: Any, **kwargs: Any) -> list[str]:
+        ...
+
     def get_user_by_username(self, *args: Any, **kwargs: Any) -> dict[str, Any] | None:
         ...
 
@@ -137,5 +149,4 @@ class PersistenceAdapter(Protocol):
 
 
 __all__ = ["PersistenceAdapter"]
-
 

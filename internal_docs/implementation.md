@@ -1198,6 +1198,20 @@
 - [x] 本番疎通: backend/frontend の `/readyz`、`/system/database-status`（Firestore）、独自ドメイン `https://monshinmate.maruguchi-clinic.com/`、`/postal-code/1000001` が成功。郵便番号辞書は `utf_ken_all.csv` 由来で 124,508 件の初期化を確認した。
 - [x] ログ確認: 新リビジョンの直近ログで 500 系・例外・Traceback は検出されなかった。
 
+## 147. GCP課金抑制とデータ保持期限（2026-08-17）
+
+- [x] Firestore: 新規・更新セッションへ `expires_at` を保存し、確定済み365日、中断24時間でTTL削除できるようにした。監査ログ365日、FCMトークン90日も同じ方式で管理する。
+- [x] 移行: 既存文書を走査するツールをサブモジュールへ追加した。既定はdry-runで、適用時はTTL変更前の値だけを権限600のロールバック用JSONへ保存し、最低7日の猶予を設ける。
+- [x] Firestore読取: 通常一覧を200件単位のカーソルページングへ変更し、完了確認クエリとreadyチェックの全件走査を除去した。複数削除は400件単位のバッチにした。
+- [x] Cloud Run/周辺サービス: 最小インスタンス0、最大インスタンス数、CPUスロットリング、Artifact Registryのdry-run対応クリーンアップ、Cloud Buildバケット30日、Logging 30日、月額3,000円の50%・80%・100%実績/100%予測アラートを設定できるスクリプトを追加した。
+- [x] Secret Manager: 値が同じ場合は新バージョンを作らず、保持数を超えた旧バージョンは無効化ではなく破棄するようにした。
+- [x] バックエンド: ログイン時のLLM疎通を廃止し、セッションの永続層復元、追加回答の一括保存、確定APIの冪等化、起動時既定テンプレートの欠損時のみ作成を実装した。
+- [x] 通知: 管理画面の常時SSEをFCM Push優先へ変更した。FCM未設定時は画面表示中だけ60秒間隔で確認し、通知ペイロードには患者情報を含めない。
+- [x] フロントエンド: 再送キューへ重複排除、指数バックオフ、最大8回、最大50件、4xx破棄を追加した。Firebase SDKは管理画面で必要になった時だけ遅延ロードする。
+- [x] 検証: バックエンドテスト81件、フロントエンド本番ビルド、GCP運用スクリプトの構文検査、backend/frontend Dockerビルドを完了した。一時Dockerネットワーク上でフロント経由の `/healthz`、`/readyz`、`/system/push-config` とService Worker配信も確認した。
+- [x] Chrome拡張: `POST /patient-summary` のURL、認証ヘッダー、レスポンスを変更していないため修正不要と判断した。Firestore側は同APIの候補取得を生年月日で絞り込み、読み取り量だけを削減した。
+- [ ] 本番適用: GCP CLIと本番権限がある環境で、コード配備、TTL有効化、既存データdry-run、バックアップ付きbackfill、Artifact cleanupのdry-run確認、予算アラート作成の順に実施する。
+
 ## 10. API連携と拡張ツール（2025-12-01）
 - `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
 - 2026-08-12: Clinic Hermesの読み取り専用接続に備え、`POST /patient-summary`の氏名照合をNFKC正規化と空白除去後の完全一致へ変更した。無効なAPIキーを受けたログから患者氏名を除き、氏名、生年月日、APIキーをエラーとログへ残さない回帰テストを追加した。公開HTTP面のキー更新routeを無効化し、運用キーはSecret Managerのrotationと再デプロイで更新する。

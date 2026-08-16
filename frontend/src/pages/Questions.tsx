@@ -116,10 +116,10 @@ export default function Questions() {
     if (!sessionId || !hasQuestions) return;
     const toSend = pending.map((q) => ({ id: q.id, answer: form[q.id] ?? '' }));
     try {
-      // すべての回答を送信（順不同で可）。ネットワーク断時はキューへ退避。
-      await Promise.all(
-        toSend.map((x) => postWithRetry(`/sessions/${sessionId}/llm-answers`, { item_id: x.id, answer: x.answer }))
-      );
+      // 1バッチ1リクエスト・1永続化書き込みにまとめる。
+      await postWithRetry(`/sessions/${sessionId}/llm-answers/batch`, {
+        answers: Object.fromEntries(toSend.map((item) => [item.id, item.answer])),
+      });
       const merged: Record<string, any> = { ...answers };
       for (const x of toSend) merged[x.id] = x.answer;
       setAnswers(merged);

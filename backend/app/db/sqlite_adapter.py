@@ -23,6 +23,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_push_subscriptions: set[str] = set()
+
 
 _MODULE_DIR = Path(__file__).resolve().parent
 _APP_DIR = _MODULE_DIR.parent
@@ -2196,6 +2198,18 @@ class SQLiteAdapter:
     def list_sessions(self, *args, **kwargs):
         return self._call_with_db_path(list_sessions, *args, **kwargs)
 
+    def list_sessions_page(self, *args, **kwargs):
+        limit = min(200, max(1, int(kwargs.pop("limit", 50))))
+        raw_cursor = kwargs.pop("cursor", None)
+        try:
+            offset = max(0, int(raw_cursor or 0))
+        except (TypeError, ValueError):
+            offset = 0
+        rows = self._call_with_db_path(list_sessions, *args, **kwargs)
+        items = rows[offset : offset + limit]
+        next_cursor = str(offset + limit) if offset + limit < len(rows) else None
+        return {"items": items, "next_cursor": next_cursor}
+
     def list_sessions_finalized_after(self, *args, **kwargs):
         return self._call_with_db_path(list_sessions_finalized_after, *args, **kwargs)
 
@@ -2207,6 +2221,15 @@ class SQLiteAdapter:
 
     def delete_sessions(self, ids: Iterable[str], *args, **kwargs):
         return self._call_with_db_path(delete_sessions, ids, *args, **kwargs)
+
+    def save_push_subscription(self, token: str, *args, **kwargs):
+        _push_subscriptions.add(token)
+
+    def delete_push_subscription(self, token: str, *args, **kwargs):
+        _push_subscriptions.discard(token)
+
+    def list_push_subscriptions(self, *args, **kwargs):
+        return list(_push_subscriptions)
 
     def upsert_summary_prompt(self, *args, **kwargs):
         return self._call_with_db_path(upsert_summary_prompt, *args, **kwargs)
@@ -2289,4 +2312,3 @@ class SQLiteAdapter:
     def shutdown(self) -> None:
         """SQLite 実装では特別な終了処理は不要。"""
         return None
-

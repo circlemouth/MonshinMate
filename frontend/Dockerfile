@@ -1,5 +1,5 @@
 # フロントエンドをビルドして配信するコンテナ
-FROM node:18 AS build
+FROM node:20 AS build
 WORKDIR /app
 # 依存をインストール
 COPY frontend/package*.json ./

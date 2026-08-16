@@ -268,11 +268,12 @@ export default function AdminMain() {
           params.append('visit_type', filters.visitType);
         }
         const query = params.toString();
-        const res = await fetch(`/admin/sessions${query ? `?${query}` : ''}`);
+        const res = await fetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=100');
         if (!res.ok) {
           throw new Error('failed to load sessions');
         }
-        const data: SessionSummary[] = await res.json();
+        const payload: SessionSummary[] | { items: SessionSummary[] } = await res.json();
+        const data = Array.isArray(payload) ? payload : payload.items;
         const sorted = [...data].sort((a, b) => {
           const av = a.started_at || a.finalized_at || '';
           const bv = b.started_at || b.finalized_at || '';

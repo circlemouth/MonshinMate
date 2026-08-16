@@ -91,6 +91,15 @@
   - `{ status: "ok", remaining_items: string[] }`
 - 備考: 型や選択肢を検証し、不正な場合は 400 を返す。空欄で送信された回答は「該当なし」として保存される。
 
+## POST /sessions/{session_id}/llm-answers/batch
+
+- 概要: 追加質問への複数回答を、一回のリクエストと永続化書き込みで保存する。
+- リクエストボディ:
+  - `answers` (object): `{ 質問ID: 回答 }`
+- レスポンス:
+  - `{ status: "ok", remaining_items: string[] }`
+- 備考: 従来の単件APIは互換性のため継続して利用できる。
+
 ## POST /sessions/{session_id}/finalize
 - 概要: セッションを確定し要約を生成する（回答送信後すぐに呼び出される）。
 - リクエストボディ:
@@ -100,6 +109,16 @@
   - `answers` (object): 確定した回答
   - `finalized_at` (str): ISO8601形式の確定時刻
   - `status` (str): `finalized`
+- 備考: 同じセッションを再度確定した場合は、保存済みの確定結果を返す。要約生成と完了通知は重複実行しない。
+
+## GET /admin/sessions/page
+
+- 概要: 管理画面の通常一覧をカーソル方式で取得する。
+- クエリ:
+  - `limit` (int): 1〜200。既定値は50。
+  - `cursor` (str, 任意): 直前の応答に含まれる `next_cursor`。
+- レスポンス: `{ items: SessionSummary[], next_cursor: string | null }`
+- 備考: 条件検索では従来の `GET /admin/sessions` を使用する。
 
 ※ セッションと回答は既定で CouchDB に保存される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象。環境変数 `COUCHDB_URL` を設定しない場合は従来通り SQLite に保存される。`COUCHDB_URL` に認証情報を含めない場合は、`COUCHDB_USER` と `COUCHDB_PASSWORD` を併せて設定する。CouchDB が設定されているにもかかわらず保存に失敗した場合、SQLite へは保存されずエラーとなる。サンプル `.env` では `COUCHDB_URL=http://couchdb:5984/` などが設定されており、Docker Compose で構築した CouchDB とそのまま連携できる。
 

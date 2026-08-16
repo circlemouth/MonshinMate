@@ -70,6 +70,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = () => {
     sessionStorage.removeItem('adminLoggedIn');
+    sessionStorage.removeItem('adminAccessToken');
     setIsAuthenticated(false);
   };
 

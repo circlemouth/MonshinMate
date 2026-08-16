@@ -115,6 +115,7 @@ export default function AdminSessions() {
   const [endDate, setEndDate] = useState('');
   const [visitTypeFilter, setVisitTypeFilter] = useState<VisitTypeFilter>('both');
   const [page, setPage] = useState(0);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [confirmState, setConfirmState] = useState<{ type: 'bulk-selected' | 'bulk-displayed' | 'row'; id?: string } | null>(null);
   const cancelRef = useRef<HTMLButtonElement | null>(null);
 
@@ -141,11 +142,13 @@ export default function AdminSessions() {
           params.append('visit_type', filters.visitType);
         }
         const query = params.toString();
-        const response = await fetch(`/admin/sessions${query ? `?${query}` : ''}`);
+        const response = await fetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=200');
         if (!response.ok) {
           throw new Error('failed to load sessions');
         }
-        const data: SessionSummary[] = await response.json();
+        const payload: SessionSummary[] | { items: SessionSummary[]; next_cursor?: string | null } = await response.json();
+        const data = Array.isArray(payload) ? payload : payload.items;
+        setNextCursor(Array.isArray(payload) ? null : payload.next_cursor || null);
         const sorted = [...data].sort((a, b) => {
           const av = a.started_at || a.finalized_at || '';
           const bv = b.started_at || b.finalized_at || '';
@@ -168,6 +171,23 @@ export default function AdminSessions() {
     },
     [notify]
   );
+
+  const loadMoreSessions = async () => {
+    if (!nextCursor || listLoading) return;
+    setListLoading(true);
+    try {
+      const response = await fetch(`/admin/sessions/page?limit=200&cursor=${encodeURIComponent(nextCursor)}`);
+      if (!response.ok) throw new Error('failed to load more sessions');
+      const payload: { items: SessionSummary[]; next_cursor?: string | null } = await response.json();
+      setSessions((current) => [...current, ...payload.items]);
+      setNextCursor(payload.next_cursor || null);
+    } catch (error) {
+      console.error(error);
+      notify({ title: '追加データの取得に失敗しました', status: 'error', channel: 'admin' });
+    } finally {
+      setListLoading(false);
+    }
+  };
 
   const refreshWithCurrentFilters = useCallback(() => {
     void loadSessions({ patientName, dob, startDate, endDate, visitType: visitTypeFilter });
@@ -874,8 +894,13 @@ export default function AdminSessions() {
             </Button>
           </HStack>
           <Text fontSize="sm" color="fg.muted" textAlign="center">
-            全問診件数： {sessions.length} 件
+            読み込み済み： {sessions.length} 件
           </Text>
+          {nextCursor && (
+            <Button size="sm" variant="outline" onClick={loadMoreSessions} isLoading={listLoading}>
+              さらに読み込む
+            </Button>
+          )}
         </VStack>
       </Box>
 

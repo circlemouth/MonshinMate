@@ -33,7 +33,7 @@ _BASE_DIR = Path(__file__).resolve().parents[1]
 _PROJECT_ROOT = _BASE_DIR.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
-from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import sqlite3
@@ -63,6 +63,7 @@ from .db import (
     rename_template,
     save_session,
     list_sessions as db_list_sessions,
+    list_sessions_page as db_list_sessions_page,
     get_session as db_get_session,
     list_sessions_finalized_after,
     upsert_summary_prompt,
@@ -97,6 +98,9 @@ from .db import (
     load_binary_asset,
     delete_binary_asset,
     list_binary_assets,
+    save_push_subscription,
+    delete_push_subscription,
+    list_push_subscriptions,
 )
 from .validator import Validator
 from .session_fsm import SessionFSM
@@ -152,6 +156,7 @@ def _external_url_for(request: Request, route_name: str) -> str:
 SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
+ADMIN_PUSH_TOKEN_EXPIRE_MINUTES = 8 * 60
 
 init_db()
 app = FastAPI(title="MonshinMate API")
@@ -993,23 +998,25 @@ def on_startup() -> None:
         logging.getLogger(__name__).info("database_path=%s", DEFAULT_DB_PATH)
     except Exception:
         pass
-    # 既定テンプレート（initial/followup）を投入（存在すれば上書き）
+    # 既定テンプレートは欠損時だけ投入し、起動ごとの Firestore 書き込みを避ける。
     initial_items = make_default_initial_items()
     followup_items = make_default_followup_items()
-    upsert_template(
-        "default",
-        "initial",
-        initial_items,
-        llm_followup_enabled=True,
-        llm_followup_max_questions=5,
-    )
-    upsert_template(
-        "default",
-        "followup",
-        followup_items,
-        llm_followup_enabled=True,
-        llm_followup_max_questions=5,
-    )
+    if db_get_template("default", "initial") is None:
+        upsert_template(
+            "default",
+            "initial",
+            initial_items,
+            llm_followup_enabled=True,
+            llm_followup_max_questions=5,
+        )
+    if db_get_template("default", "followup") is None:
+        upsert_template(
+            "default",
+            "followup",
+            followup_items,
+            llm_followup_enabled=True,
+            llm_followup_max_questions=5,
+        )
     _ensure_default_prompts()
     # 保存済みの LLM 設定があれば読み込む
     try:
@@ -1099,8 +1106,8 @@ def readyz() -> dict:
         detail_parts.append("note=disabled")
     llm_detail = " ".join(detail_parts)
     try:
-        _ = list_templates()
-        db_ok = True
+        backend = get_current_persistence_backend()
+        db_ok = check_firestore_health() if backend == "firestore" else True
     except Exception:
         pass
 
@@ -2887,6 +2894,27 @@ class AdminAuthStatus(BaseModel):
     emergency_reset_available: bool | None = None
 
 
+def _create_admin_push_access_token() -> str:
+    expires_at = datetime.now(UTC) + timedelta(minutes=ADMIN_PUSH_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"sub": "admin", "scope": "push:manage", "exp": expires_at},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _require_admin_push_access(authorization: str | None) -> None:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="authentication required")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        claims = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="invalid access token") from exc
+    if claims.get("sub") != "admin" or claims.get("scope") != "push:manage":
+        raise HTTPException(status_code=403, detail="insufficient scope")
+
+
 class TotpVerifyRequest(BaseModel):
     """TOTP検証リクエスト。"""
     totp_code: str
@@ -3028,16 +3056,18 @@ def admin_login(payload: AdminLoginRequest) -> dict:
             pass
         return {"status": "totp_required"}
 
-    # 認証成功（本来はセッションやJWTを発行）
+    # Push購読管理専用の短期JWTを発行する。既存の画面認証方式は互換のため維持する。
     try:
         logging.getLogger("security").info("admin_login_success")
     except Exception:
         pass
-    try:
-        llm_gateway.test_connection(source="admin_login")
-    except Exception:
-        logging.getLogger(__name__).exception("llm_status_update_failed_on_login")
-    return {"status": "ok", "message": "Login successful"}
+    return {
+        "status": "ok",
+        "message": "Login successful",
+        "access_token": _create_admin_push_access_token(),
+        "token_type": "bearer",
+        "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
+    }
 
 
 @app.post("/admin/login/totp")
@@ -3059,11 +3089,13 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
         logging.getLogger("security").info("admin_login_totp_success")
     except Exception:
         pass
-    try:
-        llm_gateway.test_connection(source="admin_login_totp")
-    except Exception:
-        logging.getLogger(__name__).exception("llm_status_update_failed_on_login_totp")
-    return {"status": "ok", "message": "Login successful"}
+    return {
+        "status": "ok",
+        "message": "Login successful",
+        "access_token": _create_admin_push_access_token(),
+        "token_type": "bearer",
+        "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
+    }
 
 
 @app.get("/admin/totp/setup")
@@ -3377,6 +3409,70 @@ class Session(BaseModel):
     question_texts: dict[str, str] = Field(default_factory=dict)
 
 
+def _parse_session_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    except (TypeError, ValueError):
+        return None
+
+
+def _restore_session(session_id: str) -> Session | None:
+    """Cloud Run の別インスタンスでも処理を継続できるよう永続層から復元する。"""
+
+    row = db_get_session(session_id)
+    if not row:
+        return None
+    questionnaire_id = str(row.get("questionnaire_id") or "default")
+    visit_type = str(row.get("visit_type") or "initial")
+    template = db_get_template(questionnaire_id, visit_type) or db_get_template("default", visit_type)
+    items = [QuestionnaireItem(**item) for item in ((template or {}).get("items") or [])]
+    return Session(
+        id=str(row.get("id") or session_id),
+        patient_name=str(row.get("patient_name") or ""),
+        dob=str(row.get("dob") or ""),
+        gender=str(row.get("gender") or ""),
+        visit_type=visit_type,
+        questionnaire_id=questionnaire_id,
+        template_items=items,
+        answers=row.get("answers") or {},
+        summary=row.get("summary"),
+        remaining_items=list(row.get("remaining_items") or []),
+        completion_status=str(row.get("completion_status") or "in_progress"),
+        attempt_counts=row.get("attempt_counts") or {},
+        additional_questions_used=int(row.get("additional_questions_used") or 0),
+        max_additional_questions=int(row.get("max_additional_questions") or 5),
+        pending_llm_questions=list(row.get("pending_llm_questions") or []),
+        started_at=_parse_session_datetime(row.get("started_at")),
+        finalized_at=_parse_session_datetime(row.get("finalized_at")),
+        interrupted=bool(row.get("interrupted")),
+        followup_prompt=str(row.get("followup_prompt") or DEFAULT_FOLLOWUP_PROMPT),
+        llm_question_texts=row.get("llm_question_texts") or {},
+        question_texts=row.get("question_texts") or {},
+    )
+
+
+def _get_session(session_id: str) -> Session | None:
+    session = sessions.get(session_id)
+    if session is not None:
+        return session
+    session = _restore_session(session_id)
+    if session is not None and session.completion_status != "finalized":
+        max_cached = max(10, int(os.getenv("SESSION_MEMORY_CACHE_MAX", "500")))
+        if len(sessions) >= max_cached:
+            oldest_id = min(
+                sessions,
+                key=lambda key: sessions[key].started_at or datetime.min.replace(tzinfo=UTC),
+            )
+            sessions.pop(oldest_id, None)
+        sessions[session_id] = session
+    return session
+
+
 class SessionCreateResponse(BaseModel):
     """セッション作成時のレスポンス。"""
 
@@ -3404,6 +3500,11 @@ class SessionSummary(BaseModel):
     interrupted: bool = False
 
 
+class SessionSummaryPage(BaseModel):
+    items: list[SessionSummary]
+    next_cursor: str | None = None
+
+
 class SessionFinalizeEvent(BaseModel):
     """問診完了時のイベント通知用レスポンス。"""
 
@@ -3413,6 +3514,95 @@ class SessionFinalizeEvent(BaseModel):
     visit_type: str | None = None
     started_at: str | None = None
     finalized_at: str
+
+
+class PushSubscriptionRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=4096)
+
+
+def _firebase_web_config() -> dict[str, str]:
+    mapping = {
+        "apiKey": "FIREBASE_WEB_API_KEY",
+        "authDomain": "FIREBASE_WEB_AUTH_DOMAIN",
+        "projectId": "FIREBASE_WEB_PROJECT_ID",
+        "storageBucket": "FIREBASE_WEB_STORAGE_BUCKET",
+        "messagingSenderId": "FIREBASE_WEB_MESSAGING_SENDER_ID",
+        "appId": "FIREBASE_WEB_APP_ID",
+    }
+    return {key: os.getenv(env_name, "").strip() for key, env_name in mapping.items()}
+
+
+@app.get("/system/push-config")
+def get_push_config() -> dict[str, Any]:
+    config = _firebase_web_config()
+    vapid_key = os.getenv("FIREBASE_WEB_VAPID_KEY", "").strip()
+    enabled = bool(vapid_key and all(config.values()))
+    return {"enabled": enabled, "firebase": config if enabled else {}, "vapidKey": vapid_key if enabled else ""}
+
+
+@app.post("/admin/push-subscriptions")
+def register_push_subscription(
+    payload: PushSubscriptionRequest,
+    request: Request,
+    authorization: str | None = Header(None),
+) -> dict[str, str]:
+    _require_admin_push_access(authorization)
+    save_push_subscription(payload.token, request.headers.get("user-agent"))
+    return {"status": "ok"}
+
+
+@app.delete("/admin/push-subscriptions")
+def unregister_push_subscription(
+    payload: PushSubscriptionRequest,
+    authorization: str | None = Header(None),
+) -> dict[str, str]:
+    _require_admin_push_access(authorization)
+    delete_push_subscription(payload.token)
+    return {"status": "ok"}
+
+
+def _send_push_finalize_notification(event: dict[str, Any]) -> None:
+    """FCMへ個人情報を含まない完了通知を送り、無効トークンを除去する。"""
+
+    tokens = list_push_subscriptions()
+    if not tokens:
+        return
+    try:
+        import firebase_admin  # type: ignore
+        from firebase_admin import messaging  # type: ignore
+
+        if not firebase_admin._apps:
+            firebase_admin.initialize_app()
+        public_url = os.getenv("FRONTEND_PUBLIC_URL", "").strip().rstrip("/")
+        webpush = None
+        if public_url.startswith("https://"):
+            webpush = messaging.WebpushConfig(
+                fcm_options=messaging.WebpushFCMOptions(link=f"{public_url}/admin/sessions")
+            )
+        message = messaging.MulticastMessage(
+            tokens=tokens[:500],
+            data={
+                "type": "session.finalized",
+                "session_id": str(event.get("id") or ""),
+                "finalized_at": str(event.get("finalized_at") or ""),
+            },
+            notification=messaging.Notification(
+                title="新しい問診が完了しました",
+                body="管理画面で問診結果をご確認ください。",
+            ),
+            webpush=webpush,
+        )
+        sender = getattr(messaging, "send_each_for_multicast", None) or messaging.send_multicast
+        response = sender(message)
+        for token, result in zip(tokens, response.responses):
+            if result.success:
+                continue
+            error_name = type(result.exception).__name__ if result.exception else ""
+            if error_name in {"UnregisteredError", "SenderIdMismatchError"}:
+                delete_push_subscription(token)
+        logger.info("push_notification_sent success=%s failure=%s", response.success_count, response.failure_count)
+    except Exception:
+        logger.exception("push_notification_failed")
 
 
 class SessionDetail(BaseModel):
@@ -3561,7 +3751,7 @@ class AnswersRequest(BaseModel):
 @app.post("/sessions/{session_id}/answers")
 def add_answers(session_id: str, req: AnswersRequest) -> dict:
     """複数の回答をまとめて保存する。"""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     fsm = SessionFSM(session, llm_gateway)
@@ -3579,10 +3769,16 @@ class LlmAnswerRequest(BaseModel):
     answer: Any
 
 
+class LlmAnswersRequest(BaseModel):
+    """追加質問への回答を一括保存するリクエスト。"""
+
+    answers: dict[str, Any]
+
+
 @app.post("/sessions/{session_id}/llm-answers")
 def submit_llm_answer(session_id: str, req: LlmAnswerRequest) -> dict:
     """追加質問への回答を保存する。"""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
     fsm = SessionFSM(session, llm_gateway)
@@ -3594,16 +3790,44 @@ def submit_llm_answer(session_id: str, req: LlmAnswerRequest) -> dict:
     return {"status": "ok", "remaining_items": session.remaining_items}
 
 
+@app.post("/sessions/{session_id}/llm-answers/batch")
+def submit_llm_answers(session_id: str, req: LlmAnswersRequest) -> dict:
+    """追加質問の回答を1回の永続化書き込みで保存する。"""
+
+    session = _get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    fsm = SessionFSM(session, llm_gateway)
+    for item_id, answer in req.answers.items():
+        fsm.step(item_id, answer)
+    global METRIC_ANSWERS_RECEIVED
+    METRIC_ANSWERS_RECEIVED += len(req.answers)
+    save_session(session)
+    logger.info("llm_answers_saved id=%s count=%d", session_id, len(req.answers))
+    return {"status": "ok", "remaining_items": session.remaining_items}
+
+
 @app.post("/sessions/{session_id}/llm-questions")
 def get_llm_questions(session_id: str) -> dict:
     """不足項目に応じた追加質問を返す。"""
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
 
     fsm = SessionFSM(session, llm_gateway)
+    before = (
+        session.additional_questions_used,
+        list(session.pending_llm_questions),
+        dict(session.llm_question_texts),
+    )
     questions = fsm.next_questions()
-    save_session(session)
+    after = (
+        session.additional_questions_used,
+        list(session.pending_llm_questions),
+        dict(session.llm_question_texts),
+    )
+    if after != before:
+        save_session(session)
     if not questions:
         logger.info("llm_question_limit id=%s", session_id)
         return {"questions": []}
@@ -3618,9 +3842,16 @@ async def finalize_session(
 ) -> dict:
     """セッションを確定し要約を返す。"""
 
-    session = sessions.get(session_id)
+    session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
+    if session.completion_status == "finalized" and session.finalized_at is not None:
+        return {
+            "summary": session.summary or "",
+            "answers": session.answers,
+            "finalized_at": session.finalized_at.isoformat(),
+            "status": session.completion_status,
+        }
     SessionFSM(session, llm_gateway).update_completion()
     # サマリー生成の有効設定（テンプレID→default の順に確認）
     cfg = get_summary_config(session.questionnaire_id, session.visit_type) or get_summary_config(
@@ -3650,10 +3881,7 @@ async def finalize_session(
     except Exception:
         logger.exception("session_finalize_event_publish_failed id=%s", session_id)
     # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
-    def _bg_summary_task(sid: str) -> None:
-        s = sessions.get(sid)
-        if not s:
-            return
+    def _bg_summary_task(s: Session) -> None:
         labels = {it.id: it.label for it in s.template_items}
         prompt = (
             get_summary_prompt(s.questionnaire_id, s.visit_type)
@@ -3668,14 +3896,17 @@ async def finalize_session(
                 prompt,
                 s.answers,
                 labels,
-                lock_key=sid,
+                lock_key=s.id,
                 retry=1,
             )
             s.summary = new_summary
             save_session(s)
 
     if summary_enabled and llm_gateway.has_remote_backend() and not (payload and payload.llm_error):
-        background.add_task(_bg_summary_task, session.id)
+        background.add_task(_bg_summary_task, session)
+
+    background.add_task(_send_push_finalize_notification, event.dict())
+    sessions.pop(session_id, None)
 
     return {
         "summary": session.summary,
@@ -3814,6 +4045,37 @@ def admin_list_sessions(
         visit_type=visit_type,
     )
     return [SessionSummary(**s) for s in sessions]
+
+
+@app.get("/admin/sessions/page", response_model=SessionSummaryPage)
+def admin_list_sessions_page(
+    limit: int = Query(50, ge=1, le=200),
+    cursor: str | None = None,
+) -> SessionSummaryPage:
+    """既定一覧向けのカーソルページング。Firestoreの全件走査を行わない。"""
+
+    page = db_list_sessions_page(limit=limit, cursor=cursor)
+    return SessionSummaryPage(
+        items=[SessionSummary(**item) for item in page.get("items", [])],
+        next_cursor=page.get("next_cursor"),
+    )
+
+
+@app.get("/admin/sessions/completed", response_model=list[SessionFinalizeEvent])
+def admin_list_completed_sessions(
+    since: str,
+    limit: int = Query(50, ge=1, le=200),
+) -> list[SessionFinalizeEvent]:
+    """Pushを利用できない環境向けの低頻度ポーリングAPI。"""
+
+    try:
+        since_dt = datetime.fromisoformat(since.replace("Z", "+00:00"))
+        if since_dt.tzinfo is None:
+            since_dt = since_dt.replace(tzinfo=UTC)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="invalid_since") from exc
+    events, _ = list_sessions_finalized_after(since_dt, limit=limit)
+    return [SessionFinalizeEvent(**event) for event in events]
 
 
 @app.get("/admin/sessions/{session_id}", response_model=SessionDetail)

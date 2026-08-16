@@ -24,7 +24,7 @@ RUN python -m venv /venv \
        fi
 # PATH を仮想環境に設定
 ENV PATH="/venv/bin:$PATH"
-ENV PYTHONPATH="/app/private/cloud-run-adapter:${PYTHONPATH}"
+ENV PYTHONPATH="/app/private/cloud-run-adapter"
 
 RUN adduser --disabled-password --gecos '' appuser \
     && chown -R appuser:appuser /app /venv

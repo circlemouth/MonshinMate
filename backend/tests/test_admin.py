@@ -60,7 +60,11 @@ def test_admin_auth_flow():
     assert res.json() == {"status": "totp_required"}
     res = client.post("/admin/login/totp", json={"totp_code": totp.now()})
     assert res.status_code == 200
-    assert res.json() == {"status": "ok", "message": "Login successful"}
+    login_data = res.json()
+    assert login_data["status"] == "ok"
+    assert login_data["message"] == "Login successful"
+    assert login_data["token_type"] == "bearer"
+    assert login_data["access_token"]
 
     # === Step 6: パスワードリセット ===
     # 不正なTOTPコードでリセット要求 → 失敗

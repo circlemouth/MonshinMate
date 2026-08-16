@@ -47,6 +47,9 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
         return;
       }
 
+      if (data?.access_token) {
+        sessionStorage.setItem('adminAccessToken', data.access_token);
+      }
       sessionStorage.setItem('adminLoggedIn', '1');
       setFailedAttempts(0);
       await checkAuthStatus(true); // AuthContextの状態を更新
@@ -74,9 +77,12 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ totp_code: totpCode }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || 'TOTPコードが正しくありません');
+      }
+      if (data?.access_token) {
+        sessionStorage.setItem('adminAccessToken', data.access_token);
       }
       sessionStorage.setItem('adminLoggedIn', '1');
       await checkAuthStatus(true); // AuthContextの状態を更新
