@@ -20,7 +20,7 @@ import secrets
 import mimetypes
 import unicodedata
 import threading
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from pathlib import Path
 try:
     from dotenv import load_dotenv
@@ -2785,18 +2785,179 @@ class PatientSummaryApiResponse(BaseModel):
     markdown: str
 
 
-@app.post("/patient-summary", name="patient_summary", response_model=PatientSummaryApiResponse)
-def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> PatientSummaryApiResponse:
+class PatientSummaryPersonalInfo(BaseModel):
+    kana: str | None = None
+    postal_code: str | None = None
+    address: str | None = None
+    phone: str | None = None
+    address_parts: dict[str, str] | None = None
+
+
+class PatientSummaryHistoryItem(BaseModel):
+    session_id: str
+    patient_name: str
+    dob: str
+    visit_type: str | None = None
+    questionnaire_id: str | None = None
+    started_at: str | None = None
+    finalized_at: str | None = None
+    markdown: str
+    gender: str | None = None
+    personal_info: PatientSummaryPersonalInfo
+
+
+class PatientSummariesApiRequest(BaseModel):
+    patient_name: str
+    dob: str
+    cursor: str | None = Field(default=None, max_length=256)
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class PatientSummariesApiResponse(BaseModel):
+    items: list[PatientSummaryHistoryItem]
+    next_cursor: str | None = None
+
+
+class PatientSummaryPdfApiRequest(BaseModel):
+    patient_name: str
+    dob: str
+    session_id: str
+
+
+def _authorize_patient_summary_request(request: Request, log_prefix: str) -> None:
     if not _is_patient_summary_api_key_valid(request.headers.get(PATIENT_SUMMARY_API_HEADER)):
-        logger.warning("patient_summary_invalid_api_key")
+        logger.warning("%s_invalid_api_key", log_prefix)
         raise HTTPException(status_code=401, detail="invalid_api_key")
     if not _patient_summary_rate_allowed(request):
-        logger.warning("patient_summary_rate_limited")
+        logger.warning("%s_rate_limited", log_prefix)
         raise HTTPException(status_code=429, detail="rate_limited")
-    trimmed_name = payload.patient_name.strip()
-    trimmed_dob = payload.dob.strip()
+
+
+def _validated_patient_identity(patient_name: str, dob: str) -> tuple[str, str]:
+    trimmed_name = patient_name.strip()
+    trimmed_dob = dob.strip()
     if not trimmed_name or not trimmed_dob:
         raise HTTPException(status_code=400, detail="patient_name_and_dob_required")
+    if not _normalize_patient_name_for_identity(trimmed_name) or not _normalize_dob_variants(trimmed_dob):
+        raise HTTPException(status_code=400, detail="invalid_patient_identity")
+    return trimmed_name, trimmed_dob
+
+
+def _list_finalized_patient_sessions(patient_name: str, dob: str) -> list[dict[str, Any]]:
+    """DBページを順に走査し、氏名・生年月日が厳密一致する完了セッションを返す。"""
+
+    normalized_name = _normalize_patient_name_for_identity(patient_name)
+    dob_variants = _normalize_dob_variants(dob)
+    candidates: dict[str, dict[str, Any]] = {}
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    while True:
+        page = db_list_sessions_page(patient_name=patient_name, limit=200, cursor=cursor)
+        for summary in page.get("items", []):
+            summary_id = summary.get("id")
+            if not isinstance(summary_id, str) or not summary_id or summary_id in candidates:
+                continue
+            summary_dob_variants = _normalize_dob_variants(summary.get("dob"))
+            if not (dob_variants & summary_dob_variants):
+                continue
+            session = db_get_session(summary_id)
+            if not session or (session.get("completion_status") or "") != "finalized":
+                continue
+            if _normalize_patient_name_for_identity(session.get("patient_name")) != normalized_name:
+                continue
+            if not (dob_variants & _normalize_dob_variants(session.get("dob"))):
+                continue
+            candidates[summary_id] = session
+        next_cursor = page.get("next_cursor")
+        if not isinstance(next_cursor, str) or not next_cursor or next_cursor in seen_cursors:
+            break
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    return sorted(
+        candidates.values(),
+        key=lambda item: (
+            item.get("finalized_at") or "",
+            item.get("started_at") or "",
+            item.get("id") or "",
+        ),
+        reverse=True,
+    )
+
+
+def _patient_summary_personal_info(session: dict[str, Any]) -> PatientSummaryPersonalInfo:
+    answers = session.get("answers") or {}
+    raw: Any = None
+    if isinstance(answers, dict):
+        for key in ("personal_info", "personalInfo", "patient_basic_info"):
+            value = answers.get(key)
+            if isinstance(value, dict):
+                raw = value
+                break
+    if not isinstance(raw, dict):
+        raw = {}
+
+    def optional_text(*keys: str) -> str | None:
+        for key in keys:
+            value = raw.get(key)
+            if value is not None and str(value).strip():
+                return str(value).strip()
+        return None
+
+    postal_code = optional_text("postal_code", "postalCode", "postalcode")
+    address_parts: dict[str, str] | None = None
+    if postal_code:
+        try:
+            lookup = lookup_postal_code(postal_code)
+            candidates = lookup.get("candidates") or []
+            first = candidates[0] if candidates and isinstance(candidates[0], dict) else None
+            if first:
+                address_parts = {
+                    "prefecture": str(first.get("prefecture") or ""),
+                    "city": str(first.get("city") or ""),
+                    "town": str(first.get("town") or ""),
+                }
+        except Exception:
+            logger.warning("patient_summary_postal_lookup_failed")
+    return PatientSummaryPersonalInfo(
+        kana=optional_text("kana", "name_kana", "nameKana"),
+        postal_code=postal_code,
+        address=optional_text("address"),
+        phone=optional_text("phone", "tel", "telephone"),
+        address_parts=address_parts,
+    )
+
+
+def _patient_summary_history_item(session: dict[str, Any]) -> PatientSummaryHistoryItem:
+    rows, vt_label, _ = build_session_rows_and_items(session)
+    return PatientSummaryHistoryItem(
+        session_id=str(session.get("id") or ""),
+        patient_name=str(session.get("patient_name") or ""),
+        dob=str(session.get("dob") or ""),
+        visit_type=session.get("visit_type"),
+        questionnaire_id=session.get("questionnaire_id"),
+        started_at=session.get("started_at"),
+        finalized_at=session.get("finalized_at"),
+        markdown="\n".join(build_markdown_lines(session, rows, vt_label)),
+        gender=session.get("gender"),
+        personal_info=_patient_summary_personal_info(session),
+    )
+
+
+def _patient_summaries_start_index(
+    cursor: str | None, sessions_for_patient: list[dict[str, Any]]
+) -> int:
+    if not cursor:
+        return 0
+    for index, session in enumerate(sessions_for_patient):
+        if session.get("id") == cursor:
+            return index + 1
+    raise HTTPException(status_code=400, detail="invalid_cursor")
+
+
+@app.post("/patient-summary", name="patient_summary", response_model=PatientSummaryApiResponse)
+def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> PatientSummaryApiResponse:
+    _authorize_patient_summary_request(request, "patient_summary")
+    trimmed_name, trimmed_dob = _validated_patient_identity(payload.patient_name, payload.dob)
     session = _find_latest_finalized_session(trimmed_name, trimmed_dob)
     if not session:
         raise HTTPException(status_code=404, detail="問診がありません。")
@@ -2810,6 +2971,64 @@ def get_patient_summary(payload: PatientSummaryApiRequest, request: Request) -> 
         finalized_at=session.get("finalized_at"),
         questionnaire_id=session.get("questionnaire_id"),
         markdown=markdown,
+    )
+
+
+@app.post("/patient-summaries", response_model=PatientSummariesApiResponse)
+def get_patient_summaries(payload: PatientSummariesApiRequest, request: Request) -> PatientSummariesApiResponse:
+    _authorize_patient_summary_request(request, "patient_summaries")
+    trimmed_name, trimmed_dob = _validated_patient_identity(payload.patient_name, payload.dob)
+    sessions_for_patient = _list_finalized_patient_sessions(trimmed_name, trimmed_dob)
+    start_index = _patient_summaries_start_index(payload.cursor, sessions_for_patient)
+    page = sessions_for_patient[start_index : start_index + payload.limit]
+    next_index = start_index + len(page)
+    return PatientSummariesApiResponse(
+        items=[_patient_summary_history_item(session) for session in page],
+        next_cursor=str(page[-1].get("id")) if page and next_index < len(sessions_for_patient) else None,
+    )
+
+
+@app.post("/patient-summary/pdf")
+def get_patient_summary_pdf(payload: PatientSummaryPdfApiRequest, request: Request) -> Response:
+    _authorize_patient_summary_request(request, "patient_summary_pdf")
+    trimmed_name, trimmed_dob = _validated_patient_identity(payload.patient_name, payload.dob)
+    session_id = payload.session_id.strip()
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id_required")
+    session = db_get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="問診がありません。")
+    if (session.get("completion_status") or "") != "finalized" or session.get("visit_type") != "initial":
+        raise HTTPException(status_code=404, detail="初診の完了済み問診がありません。")
+    if _normalize_patient_name_for_identity(session.get("patient_name")) != _normalize_patient_name_for_identity(trimmed_name):
+        raise HTTPException(status_code=404, detail="問診がありません。")
+    if not (_normalize_dob_variants(session.get("dob")) & _normalize_dob_variants(trimmed_dob)):
+        raise HTTPException(status_code=404, detail="問診がありません。")
+    rows, vt_label, items = build_session_rows_and_items(session)
+    layout_mode, facility_name = _resolve_pdf_render_config()
+    pdf_bytes = render_session_pdf(
+        session=session,
+        rows=rows,
+        template_items=items,
+        answers=session.get("answers", {}) or {},
+        vt_label=vt_label,
+        llm_question_texts=session.get("llm_question_texts") or {},
+        summary=session.get("summary"),
+        layout_mode=layout_mode,
+        facility_name=facility_name,
+    )
+    date_value = str(session.get("finalized_at") or session.get("started_at") or "")[:10].replace("-", "")
+    if len(date_value) != 8 or not date_value.isdigit():
+        date_value = datetime.now(ZoneInfo(DEFAULT_TIMEZONE)).strftime("%Y%m%d")
+    session_short = re.sub(r"[^A-Za-z0-9_-]", "", session_id)[:12] or "session"
+    filename = f"問診票_初診_{date_value}_{session_short}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+        },
     )
 
 

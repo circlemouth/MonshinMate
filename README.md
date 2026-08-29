@@ -157,12 +157,14 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 
  
 
-## Chrome拡張機能（問診メイト 連携アシスタント）
-電子カルテや予約システム画面に表示されている患者名と生年月日を読み取り、問診メイトから最新の問診結果を取得・コピーできるChrome拡張機能を提供しています。
-- **機能**: 任意のWebカルテ画面からワンクリックで患者の問診情報を取得
-- **ソースコード**: [`extensions/patient-summary/`](extensions/patient-summary/)
-- **特徴**: XPathによる柔軟な読み取り設定、Markdown形式でのクリップボードコピー
-- **インストール**: Chrome Web Storeからインストールするか、ソースコードをデベロッパーモードで読み込んで使用します。
+## Chrome拡張機能
+
+院内運用では、`medical-document-creator-extension`に統合した患者情報タブを使用します。
+CLINICSの表示患者と完全一致する確定済み問診履歴を自動取得し、最新問診の基本情報、Markdown本文、初診PDFを確認後にCLINICSへ登録できます。
+
+APIは従来の`POST /patient-summary`を互換維持し、履歴用の`POST /patient-summaries`と初診PDF用の`POST /patient-summary/pdf`を提供します。
+従来の[`extensions/patient-summary/`](extensions/patient-summary/)は互換性確認用に残し、新規の院内配布には使用しません。
+詳細は[`docs/chrome_extension.md`](docs/chrome_extension.md)と[`docs/session_api.md`](docs/session_api.md)を参照してください。
 
 ## ライセンス
 - 本プロジェクトは GNU AFFERO GENERAL PUBLIC LICENSE に基づき公開しています。詳細はリポジトリ直下の `LICENSE` を参照してください。

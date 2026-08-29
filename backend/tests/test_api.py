@@ -32,14 +32,20 @@ import base64
 client = TestClient(app)
 
 
-def _create_finalized_patient_summary_session(patient_name: str, dob: str) -> str:
+def _create_finalized_patient_summary_session(
+    patient_name: str,
+    dob: str,
+    *,
+    visit_type: str = "initial",
+    answers: dict | None = None,
+) -> str:
     created = create_session(
         SessionCreateRequest(
             patient_name=patient_name,
             dob=dob,
             gender="female",
-            visit_type="initial",
-            answers={"chief_complaint": "合成テスト回答"},
+            visit_type=visit_type,
+            answers=answers or {"chief_complaint": "合成テスト回答"},
         )
     )
     session_id = created.id
@@ -149,6 +155,135 @@ def test_patient_summary_api_key_write_route_is_not_public() -> None:
         json={"api_key": "synthetic-summary-key-should-not-be-set"},
     )
     assert response.status_code == 404
+
+
+def test_patient_summaries_pages_finalized_exact_identity_and_personal_info(monkeypatch) -> None:
+    monkeypatch.setattr(llm_gateway, "sync_status", lambda **_kwargs: None)
+    on_startup()
+    api_key = "synthetic-history-key-20260830"
+    settings = load_app_settings() or {}
+    settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
+    save_app_settings(settings)
+    patient_name = "履歴試験 花子"
+    dob = "1992-03-04"
+    first_id = _create_finalized_patient_summary_session(
+        patient_name,
+        dob,
+        answers={
+            "personal_info": {
+                "kana": "リレキシケン ハナコ",
+                "postal_code": "1000001",
+                "address": "東京都千代田区千代田1-1",
+                "phone": "0312345678",
+            },
+            "chief_complaint": "1回目",
+        },
+    )
+    second_id = _create_finalized_patient_summary_session(patient_name, dob)
+    sessions[first_id].finalized_at = datetime(2026, 8, 29, tzinfo=UTC)
+    sessions[second_id].finalized_at = datetime(2026, 8, 30, tzinfo=UTC)
+    save_session(sessions[first_id])
+    save_session(sessions[second_id])
+    _create_finalized_patient_summary_session("履歴試験 花子別人", dob)
+
+    first_page = client.post(
+        "/patient-summaries",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "履歴試験花子", "dob": "1992/03/04", "limit": 1},
+    )
+
+    assert first_page.status_code == 200
+    first_data = first_page.json()
+    assert first_data["items"][0]["session_id"] == second_id
+    assert first_data["next_cursor"] == second_id
+
+    inserted_id = _create_finalized_patient_summary_session(patient_name, dob)
+    sessions[inserted_id].finalized_at = datetime(2026, 8, 31, tzinfo=UTC)
+    save_session(sessions[inserted_id])
+
+    second_page = client.post(
+        "/patient-summaries",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={
+            "patient_name": patient_name,
+            "dob": dob,
+            "limit": 1,
+            "cursor": first_data["next_cursor"],
+        },
+    )
+    assert second_page.status_code == 200
+    second_data = second_page.json()
+    assert second_data["items"][0]["session_id"] == first_id
+    assert second_data["items"][0]["personal_info"] == {
+        "kana": "リレキシケン ハナコ",
+        "postal_code": "1000001",
+        "address": "東京都千代田区千代田1-1",
+        "phone": "0312345678",
+        "address_parts": {
+            "prefecture": "東京都",
+            "city": "千代田区",
+            "town": "千代田",
+        },
+    }
+    assert second_data["next_cursor"] is None
+
+    unauthorized = client.post(
+        "/patient-summaries",
+        json={"patient_name": patient_name, "dob": dob, "limit": 20},
+    )
+    assert unauthorized.status_code == 401
+
+    invalid_cursor = client.post(
+        "/patient-summaries",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": patient_name, "dob": dob, "limit": 20, "cursor": "invalid"},
+    )
+    assert invalid_cursor.status_code == 400
+
+
+def test_patient_summary_pdf_requires_owned_finalized_initial_session(monkeypatch) -> None:
+    monkeypatch.setattr(llm_gateway, "sync_status", lambda **_kwargs: None)
+    on_startup()
+    api_key = "synthetic-pdf-key-20260830"
+    settings = load_app_settings() or {}
+    settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
+    save_app_settings(settings)
+    session_id = _create_finalized_patient_summary_session("PDF試験 太郎", "1980-01-02")
+
+    response = client.post(
+        "/patient-summary/pdf",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "PDF試験太郎", "dob": "1980/01/02", "session_id": session_id},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["content-disposition"].startswith("attachment; filename*=UTF-8''")
+    assert response.content.startswith(b"%PDF-")
+
+    unauthorized = client.post(
+        "/patient-summary/pdf",
+        json={"patient_name": "PDF試験 太郎", "dob": "1980-01-02", "session_id": session_id},
+    )
+    assert unauthorized.status_code == 401
+
+    wrong_patient = client.post(
+        "/patient-summary/pdf",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "別人", "dob": "1980-01-02", "session_id": session_id},
+    )
+    assert wrong_patient.status_code == 404
+
+    followup_id = _create_finalized_patient_summary_session(
+        "PDF試験 太郎", "1980-01-02", visit_type="followup"
+    )
+    followup = client.post(
+        "/patient-summary/pdf",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "PDF試験 太郎", "dob": "1980-01-02", "session_id": followup_id},
+    )
+    assert followup.status_code == 404
 
 
 def test_get_questionnaire_template() -> None:

@@ -1212,6 +1212,18 @@
 - [x] Chrome拡張: `POST /patient-summary` のURL、認証ヘッダー、レスポンスを変更していないため修正不要と判断した。Firestore側は同APIの候補取得を生年月日で絞り込み、読み取り量だけを削減した。
 - [ ] 本番適用: GCP CLIと本番権限がある環境で、コード配備、TTL有効化、既存データdry-run、バックアップ付きbackfill、Artifact cleanupのdry-run確認、予算アラート作成の順に実施する。
 
+## 148. 問診結果一覧の氏名検索回帰修正（2026-08-17）
+
+- [x] 原因調査: 直近のFirestore読取削減後も、氏名検索だけはセッションコレクションを全件走査してアプリケーション側で部分一致を判定していた。生年月日検索はFirestoreの等価クエリで候補を絞るため成功していたが、氏名検索はデータ量に応じて読み取り量と応答時間が増える状態だった。
+- [x] 修正: セッション保存時に氏名をNFKC正規化して空白を除去し、部分一致用の検索語を `patient_name_search_terms` へ保存する。氏名検索は同フィールドの `array_contains` クエリで候補を絞り、取得後も従来の判定を残して検索結果の互換性を維持する。
+- [x] 既存データ移行: `private/cloud-run-adapter/tools/gcp/backfill_patient_name_search.py` を追加した。dry-runを既定とし、適用時は権限600のバックアップを必須にしてロールバックできるようにした。
+- [x] Cloud Build設定: 課金抑制更新で指定した `E2_HIGHCPU_4` はCloud Buildの有効なマシン種別ではなく、ビルド設定の解釈時に拒否された。サポートされる `E2_HIGHCPU_8` へ修正した。
+- [x] 検証: 氏名検索の単体テストを含むFirestore/APIテスト50件、バックエンド全テスト81件、フロントエンド本番ビルド、GCP対応backend/frontend Dockerビルドが成功した。フロントエンドビルドはchunk size warningのみ。
+- [x] Cloud Build: `name-search-20260817-1455` タグのbackend/frontendイメージをArtifact Registryへpushした。build IDは `bbe1ca27-06cc-4634-ac67-dbea0de979bf`。
+- [x] 既存データ移行: 本番Firestoreの3,597件へ `patient_name_search_terms` を反映した。ロールバック用JSONはCloud Shellの `/home/circlemouth_h/monshinmate-deploy-20260817/patient-name-search-backup.json` に権限600で保存した。
+- [x] 本番適用: backendは `monshinmate-backend-00012-hlf`、frontendは `monshinmate-frontend-00011-bpk` へ更新し、いずれもLATESTへ100%のトラフィックを切り替えた。旧リビジョンの `clinic-hermes-read` タグは維持した。
+- [x] 本番確認: 独自ドメインの `/readyz` は200、氏名検索APIは200、実データを表示しないFirestore索引照合は成功した。新リビジョンのERRORログはbackend/frontendとも0件だった。
+
 ## 10. API連携と拡張ツール（2025-12-01）
 - `POST /patient-summary` と `/system/patient-summary-api[-key]` を追加し、アプリ設定に API キーを保存・照会できるようにした。取得された問診は既存の `build_markdown_lines` を再利用し、最新の確定済みセッションを Markdown で返す。
 - 2026-08-12: Clinic Hermesの読み取り専用接続に備え、`POST /patient-summary`の氏名照合をNFKC正規化と空白除去後の完全一致へ変更した。無効なAPIキーを受けたログから患者氏名を除き、氏名、生年月日、APIキーをエラーとログへ残さない回帰テストを追加した。公開HTTP面のキー更新routeを無効化し、運用キーはSecret Managerのrotationと再デプロイで更新する。
@@ -1219,3 +1231,17 @@
 - 2026-08-17: 同じ生年月日と部分一致する氏名のセッションが25件を超えても、完全一致する患者の確定済み問診を取得できるよう、生年月日で候補を絞った後に全候補の氏名を正規化して照合するよう修正した。最新の部分一致候補26件の後ろにある完全一致セッションを取得する回帰テストを追加した。
 - 管理画面に「API連携」ページを新設し、エンドポイント/ヘッダー/キー更新 UI を表示したうえで、ドキュメント（`docs/admin_user_manual.md` / `docs/session_api.md` / `docs/chrome_extension.md`） を追記。
 - Chrome 拡張 `extensions/patient-summary` を作成し、XPath ベースの患者抽出・日付正規化・API 呼び出し・Markdown コピー・通知の流れを構築した。
+
+## 149. 統合Chrome拡張の問診履歴・CLINICS登録対応（2026-08-30）
+
+- [x] 互換維持: 従来の`POST /patient-summary`の要求と応答を変更せず、最新の確定済み問診を返す動作を維持した。
+- [x] 履歴API: `POST /patient-summaries`を追加し、氏名と生年月日が完全一致する確定済み問診を新しい順のカーソルページで返すようにした。各件にMarkdown、性別、カナ、郵便番号、住所、電話番号、郵便番号辞書の住所分解結果を含めた。
+- [x] PDF API: `POST /patient-summary/pdf`を追加し、指定患者に所有される確定済み初診問診だけを既存帳票レイアウトのPDFで返すようにした。応答に`Cache-Control: no-store`を付け、患者氏名を含まないファイル名を使う。
+- [x] 永続層: SQLiteとFirestoreの`list_sessions_page`を使って氏名索引の候補をページ終端まで走査する。Firestoreアダプタは氏名索引による事前絞り込み、ドキュメントIDの安定カーソル、取得後の完全一致確認を実装した。
+- [x] 認証とログ: 3つの患者サマリAPIで`X-MonshinMate-Api-Key`、認証後のレート制限、患者情報を含まないログ形式を共用した。所有者不一致と対象なしは、他患者の存在を区別できない404応答にした。
+- [x] Chrome拡張: `medical-document-creator-extension`の患者情報画面に問診タブを統合した。CLINICS患者変更時の自動取得、手動更新、新しい順の履歴、25MB上限、HTMLを実行しないMarkdown表示、最新問診のみを対象とするCLINICS登録を実装した。
+- [x] CLINICS書込: 患者基本情報、表示中カルテ、初診PDFを確認画面で個別選択し、この順に直列実行する。基本情報はカナ、郵便番号、住所、電話番号だけを対象とし、カルテは当日の診療中かつ表示中の一件へだけ追記する。不明応答後は再読込で完了を検証し、再試行はネットワーク、タイムアウト、5xxに対する1回だけとした。
+- [x] 資格情報: 固定送信先を`https://monshinmate.maruguchi-clinic.com`とし、権限600の`monshinmate-mcp.env`から`MONSHINMATE_CLINIC_HERMES_API_KEY`を院内配布ビルド時だけ読み込む。Chrome storage、設定UI、ログへは保存しない。
+- [x] 公開プロキシ: Nginxに`POST /patient-summaries`と`POST /patient-summary/pdf`の完全一致locationを追加した。旧`POST /patient-summary`は変更していない。
+- [x] テスト: バックエンド83件、Firestoreアダプタ4件、統合Chrome拡張446件、拡張E2E 9件が成功した。GCP対応backend/frontendイメージもローカルでビルドし、両コンテナを接続した公開Nginx経由でready 200、履歴no-match 200、無効カーソル400、PDF no-match 404、無認証401を確認した。
+- [ ] 本番適用: 2026-08-30の事前確認では独自ドメインの`/readyz`は200、旧`/patient-summary`は404 no-match、新`/patient-summaries`は未配備のためNginx 405だった。作業端末にGCP CLIと認証設定がなく、Cloud Build、`update_existing_service_images.sh`によるイメージだけの更新、更新後の合成no-match疎通、エラーログ確認、院内配布ビルドの順で実施する必要がある。

@@ -25,6 +25,52 @@
   - `/system/patient-summary-api` ではエンドポイント、ヘッダー名、キー状態だけを確認できる。
   - 公開HTTP面からのキー登録と更新は無効であり、Secret Managerのrotationと再デプロイで更新する。
 
+## POST /patient-summaries
+
+- 概要: 患者名と生年月日が完全一致する確定済み問診履歴を、新しい順にページ返却する。
+- リクエストヘッダー:
+  - `X-MonshinMate-Api-Key` (str): Secret Managerから読み込む専用APIキー。
+- リクエストボディ:
+  - `patient_name` (str): NFKC正規化と空白除去後の完全一致で照合する患者氏名。
+  - `dob` (str): 生年月日。`POST /patient-summary`と同じ日付正規化を行う。
+  - `cursor` (str | null): 前ページの`next_cursor`。初回は`null`。値は最後に返したセッションを示す不透明カーソルとして扱う。
+  - `limit` (int): 1〜100。既定値は20。
+- レスポンス:
+  - `items` (array): 問診履歴。
+  - `items[].session_id` (str)
+  - `items[].patient_name` (str)
+  - `items[].dob` (str)
+  - `items[].visit_type` (str | null)
+  - `items[].questionnaire_id` (str | null)
+  - `items[].started_at` (str | null)
+  - `items[].finalized_at` (str | null)
+  - `items[].markdown` (str): `build_markdown_lines`と同じ形式のMarkdown本文。
+  - `items[].gender` (str | null)
+  - `items[].personal_info` (object): `kana`、`postal_code`、`address`、`phone`、`address_parts`を含む。各値がない場合は`null`。
+  - `items[].personal_info.address_parts` (object | null): 郵便番号辞書で解決した`prefecture`、`city`、`town`。
+  - `next_cursor` (str | null): 次ページがない場合は`null`。
+- 備考:
+  - データベースをカーソル方式で最後まで走査し、`completion_status='finalized'`の完全一致セッションだけを返す。
+  - 該当がない場合は`items=[]`と`next_cursor=null`を返す。
+  - 無効なカーソルは400、認証失敗は401、レート制限は429。
+
+## POST /patient-summary/pdf
+
+- 概要: 指定した患者に所有される確定済み初診問診を、既存の管理画面用帳票レイアウトでPDF出力する。
+- リクエストヘッダー:
+  - `X-MonshinMate-Api-Key` (str): Secret Managerから読み込む専用APIキー。
+- リクエストボディ:
+  - `patient_name` (str): 所有者照合に使う患者氏名。
+  - `dob` (str): 所有者照合に使う生年月日。
+  - `session_id` (str): 初診問診のセッションID。
+- レスポンス:
+  - 本文は`application/pdf`。
+  - `Cache-Control: no-store`を設定する。
+  - ファイル名は`問診票_初診_YYYYMMDD_<session-short>.pdf`で、患者氏名を含めない。
+- 備考:
+  - 氏名と生年月日が指定セッションに完全一致し、`visit_type='initial'`かつ`completion_status='finalized'`の場合だけ返す。
+  - 対象なし、所有者不一致、初診以外、未確定はいずれも404とし、他患者の存在を区別できない応答にする。
+
 ## POST /sessions
 - 概要: 新しい問診セッションを作成する。
 - リクエストボディ:
