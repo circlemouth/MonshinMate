@@ -1244,4 +1244,8 @@
 - [x] 資格情報: 固定送信先を`https://monshinmate.maruguchi-clinic.com`とし、権限600の`monshinmate-mcp.env`から`MONSHINMATE_CLINIC_HERMES_API_KEY`を院内配布ビルド時だけ読み込む。Chrome storage、設定UI、ログへは保存しない。
 - [x] 公開プロキシ: Nginxに`POST /patient-summaries`と`POST /patient-summary/pdf`の完全一致locationを追加した。旧`POST /patient-summary`は変更していない。
 - [x] テスト: バックエンド83件、Firestoreアダプタ4件、統合Chrome拡張446件、拡張E2E 9件が成功した。GCP対応backend/frontendイメージもローカルでビルドし、両コンテナを接続した公開Nginx経由でready 200、履歴no-match 200、無効カーソル400、PDF no-match 404、無認証401を確認した。
-- [ ] 本番適用: 2026-08-30の事前確認では独自ドメインの`/readyz`は200、旧`/patient-summary`は404 no-match、新`/patient-summaries`は未配備のためNginx 405だった。作業端末にGCP CLIと認証設定がなく、Cloud Build、`update_existing_service_images.sh`によるイメージだけの更新、更新後の合成no-match疎通、エラーログ確認、院内配布ビルドの順で実施する必要がある。
+- [x] Cloud Build: build ID `51992e7d-32f8-4d2b-bc7b-92fef58b3b15`で、backendとfrontendの`clinics-monshin-20260830-0540`イメージをArtifact Registryへpushした。
+- [x] Cloud Run更新: 既存の環境変数、Secret、トラフィック設定を維持したままイメージだけを更新し、backendは`monshinmate-backend-00013-pxz`、frontendは`monshinmate-frontend-00012-xcl`へ100%のトラフィックを切り替えた。
+- [x] 本番疎通: 独自ドメインの`/readyz`は200、合成患者による`/patient-summaries`は200と空配列、未認証は401、無効カーソルは400、旧`/patient-summary`と存在しないPDFは404だった。
+- [x] 本番ログ: 新しいbackendとfrontendの直近ERRORログは0件であり、旧`clinic-hermes-read`タグも維持されていることを確認した。
+- [x] 院内配布: owner-onlyの問診メイトAPIキーを読み込んで院内専用ディレクトリへ拡張機能を再ビルドした。
