@@ -29,6 +29,7 @@ import {
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { adminFetch } from '../utils/adminApi';
 import { useNotify } from '../contexts/NotificationContext';
 
 const DEFAULT_SYSTEM_PROMPT =
@@ -41,6 +42,7 @@ const KNOWN_PROFILE_FIELDS = new Set([
   'system_prompt',
   'base_url',
   'api_key',
+  'api_key_configured',
   'followup_timeout_seconds',
 ]);
 
@@ -389,7 +391,7 @@ export default function AdminLlm() {
     const load = async () => {
       let merged = { meta: { ...FALLBACK_PROVIDER_META }, order: [...FALLBACK_PROVIDER_ORDER] };
       try {
-        const providersRes = await fetch('/llm/providers');
+        const providersRes = await adminFetch('/llm/providers');
         if (providersRes.ok) {
           const providerData = await providersRes.json();
           merged = mergeProviderMetaList(providerData);
@@ -398,7 +400,7 @@ export default function AdminLlm() {
 
       let parsed: SettingsState | null = null;
       try {
-        const res = await fetch('/llm/settings');
+        const res = await adminFetch('/llm/settings');
         if (!res.ok) throw new Error('failed');
         const data = await res.json();
         parsed = parseSettingsResponse(data, merged.order, merged.meta);
@@ -492,7 +494,7 @@ export default function AdminLlm() {
       }
       try {
         const payload = buildPayload(state, providerMeta);
-        const res = await fetch('/llm/settings', {
+        const res = await adminFetch('/llm/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -542,7 +544,7 @@ export default function AdminLlm() {
     let status: FeedbackVariant = 'info';
     const parts: string[] = [];
     try {
-      const res = await fetch('/llm/list-models', {
+      const res = await adminFetch('/llm/list-models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -576,7 +578,7 @@ export default function AdminLlm() {
         status = 'error';
       }
       try {
-        const t = await fetch('/llm/settings/test', {
+        const t = await adminFetch('/llm/settings/test', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -622,7 +624,7 @@ export default function AdminLlm() {
   const handleManualTest = async () => {
     try {
       const payload = buildPayload(state, providerMeta);
-      const res = await fetch('/llm/settings/test', {
+      const res = await adminFetch('/llm/settings/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -665,14 +667,13 @@ export default function AdminLlm() {
     const value = currentProfile[fieldKey];
 
     const controlProps = {
-      key: fieldKey,
       isDisabled: !isEnabled,
       isRequired: field.required,
     };
 
     if (type === 'textarea') {
       return (
-        <FormControl {...controlProps}>
+        <FormControl key={fieldKey} {...controlProps}>
           <FormLabel>{label}</FormLabel>
           <Textarea
             value={typeof value === 'string' ? value : ''}
@@ -695,7 +696,7 @@ export default function AdminLlm() {
           ? Number(value)
           : undefined;
       return (
-        <FormControl {...controlProps}>
+        <FormControl key={fieldKey} {...controlProps}>
           <FormLabel>{label}</FormLabel>
           <NumberInput
             value={Number.isFinite(numericValue) ? Number(numericValue) : undefined}
@@ -720,7 +721,7 @@ export default function AdminLlm() {
     if (type === 'select') {
       const options = field.options ?? [];
       return (
-        <FormControl {...controlProps}>
+        <FormControl key={fieldKey} {...controlProps}>
           <FormLabel>{label}</FormLabel>
           <Select
             value={typeof value === 'string' ? value : ''}
@@ -745,7 +746,7 @@ export default function AdminLlm() {
 
     if (type === 'password') {
       return (
-        <FormControl {...controlProps}>
+        <FormControl key={fieldKey} {...controlProps}>
           <FormLabel>{label}</FormLabel>
           <Input
             type="password"
@@ -788,7 +789,7 @@ export default function AdminLlm() {
         updateProfile(activeProvider, (profile) => ({ ...profile, [fieldKey]: '' }));
       };
       return (
-        <FormControl {...controlProps}>
+        <FormControl key={fieldKey} {...controlProps}>
           <FormLabel>{label}</FormLabel>
           <VStack align="stretch" spacing={2}>
             <Input type="file" accept={acceptedTypes} onChange={handleFileChange} />
@@ -811,7 +812,7 @@ export default function AdminLlm() {
     }
 
     return (
-      <FormControl {...controlProps}>
+      <FormControl key={fieldKey} {...controlProps}>
         <FormLabel>{label}</FormLabel>
         <Input
           value={typeof value === 'string' ? value : ''}
@@ -1069,7 +1070,7 @@ export default function AdminLlm() {
 function AutoTestOnUnmount() {
   useEffect(() => {
     return () => {
-      fetch('/llm/settings/test', { method: 'POST' }).finally(() => {
+      adminFetch('/llm/settings/test', { method: 'POST' }).finally(() => {
         refreshLlmStatus().catch(() => {});
       });
     };

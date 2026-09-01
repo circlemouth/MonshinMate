@@ -3,6 +3,7 @@ import sys
 import base64
 import logging
 import hashlib
+import json
 from datetime import UTC, datetime
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -11,6 +12,7 @@ from app.main import (  # type: ignore[import]
     PATIENT_SUMMARY_RATE_LIMIT,
     SessionCreateRequest,
     _PATIENT_SUMMARY_RATE,
+    _create_admin_access_token,
     _find_latest_finalized_session,
     app,
     create_session,
@@ -21,6 +23,7 @@ from app.main import (  # type: ignore[import]
 from app.db import (
     get_session as db_get_session,
     load_app_settings,
+    load_llm_settings,
     save_app_settings,
     save_session,
 )
@@ -30,6 +33,10 @@ import base64
 
 
 client = TestClient(app)
+
+
+def _admin_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {_create_admin_access_token()}"}
 
 
 def _create_finalized_patient_summary_session(
@@ -316,7 +323,10 @@ def test_default_template_contains_items() -> None:
 def test_llm_chat() -> None:
     """チャットエンドポイントが応答を返すことを確認する。"""
     on_startup()
-    res = client.post("/llm/chat", json={"message": "こんにちは"})
+    assert client.post("/llm/chat", json={"message": "こんにちは"}).status_code == 401
+    res = client.post(
+        "/llm/chat", json={"message": "こんにちは"}, headers=_admin_headers()
+    )
     assert res.status_code == 200
     assert res.json()["reply"].startswith("LLM応答")
 
@@ -353,6 +363,7 @@ def test_llm_settings_get_and_update() -> None:
 
     res = client.put(
         "/llm/settings",
+        headers=_admin_headers(),
         json={
             "provider": "ollama",
             "enabled": True,
@@ -361,7 +372,7 @@ def test_llm_settings_get_and_update() -> None:
         },
     )
     assert res.status_code == 200
-    res = client.get("/llm/settings")
+    res = client.get("/llm/settings", headers=_admin_headers())
     assert res.status_code == 200
     data = res.json()
     assert data["provider"] == "ollama"
@@ -380,6 +391,7 @@ def test_llm_settings_get_and_update() -> None:
     }
     res = client.put(
         "/llm/settings",
+        headers=_admin_headers(),
         json={
             "provider": "lm_studio",
             "enabled": True,
@@ -388,7 +400,7 @@ def test_llm_settings_get_and_update() -> None:
         },
     )
     assert res.status_code == 200
-    res = client.get("/llm/settings")
+    res = client.get("/llm/settings", headers=_admin_headers())
     updated = res.json()
     assert updated["provider"] == "lm_studio"
     assert updated["enabled"] is True
@@ -397,7 +409,9 @@ def test_llm_settings_get_and_update() -> None:
     assert updated["provider_profiles"]["ollama"]["followup_timeout_seconds"] == 30
     assert updated["followup_timeout_seconds"] == 45
     assert updated["provider_profiles"]["lm_studio"]["followup_timeout_seconds"] == 45
-    chat_res = client.post("/llm/chat", json={"message": "hi"})
+    chat_res = client.post(
+        "/llm/chat", json={"message": "hi"}, headers=_admin_headers()
+    )
     assert chat_res.json()["reply"].startswith("LLM応答[lm_studio:test-model")
 
     # OpenAI 互換エンドポイントに切り替え、プロバイダごとの設定保持を確認
@@ -411,6 +425,7 @@ def test_llm_settings_get_and_update() -> None:
     }
     res = client.put(
         "/llm/settings",
+        headers=_admin_headers(),
         json={
             "provider": "openai",
             "enabled": True,
@@ -419,35 +434,138 @@ def test_llm_settings_get_and_update() -> None:
         },
     )
     assert res.status_code == 200
-    res = client.get("/llm/settings")
+    res = client.get("/llm/settings", headers=_admin_headers())
     openai_settings = res.json()
     assert openai_settings["provider"] == "openai"
     assert openai_settings["model"] == "gpt-4.1-mini"
     assert openai_settings["base_url"] == "https://api.openai.com"
     assert openai_settings["provider_profiles"]["ollama"]["model"] == "llama2"
     assert openai_settings["provider_profiles"]["lm_studio"]["model"] == "test-model"
-    assert openai_settings["provider_profiles"]["openai"]["api_key"] == "sk-test"
+    assert "api_key" not in openai_settings
+    assert "api_key" not in openai_settings["provider_profiles"]["openai"]
+    assert openai_settings["api_key_configured"] is True
+    assert openai_settings["provider_profiles"]["openai"]["api_key_configured"] is True
     assert openai_settings["followup_timeout_seconds"] == 60
     assert openai_settings["provider_profiles"]["ollama"]["followup_timeout_seconds"] == 30
     assert openai_settings["provider_profiles"]["lm_studio"]["followup_timeout_seconds"] == 45
     assert openai_settings["provider_profiles"]["openai"]["followup_timeout_seconds"] == 60
-    openai_chat = client.post("/llm/chat", json={"message": "hello"})
+    stored_settings = load_llm_settings() or {}
+    assert stored_settings.get("api_key") == "sk-test"
+    openai_chat = client.post(
+        "/llm/chat", json={"message": "hello"}, headers=_admin_headers()
+    )
     assert openai_chat.json()["reply"].startswith("LLM応答[openai:gpt-4.1-mini")
+
+    # provider切替時はOpenAI keyをOpenAI profileに残しつつ、
+    # GCPのトップレベル設定へ混入させない。
+    profiles["gcp_vertex"] = {
+        "model": "gemini-3.1-flash-lite",
+        "temperature": 0.2,
+        "system_prompt": "",
+        "project_id": "synthetic-project",
+        "location": "global",
+        "max_output_tokens": 8192,
+        "followup_timeout_seconds": 30,
+    }
+    switched = client.put(
+        "/llm/settings",
+        headers=_admin_headers(),
+        json={
+            "provider": "gcp_vertex",
+            "enabled": True,
+            **profiles["gcp_vertex"],
+            "provider_profiles": profiles,
+        },
+    )
+    assert switched.status_code == 200
+    switched_storage = load_llm_settings() or {}
+    assert not switched_storage.get("api_key")
+    assert (
+        switched_storage["provider_profiles"]["openai"]["api_key"] == "sk-test"
+    )
+    assert not switched_storage["provider_profiles"]["gcp_vertex"].get("api_key")
+
+
+def test_llm_configuration_endpoints_require_admin_authentication() -> None:
+    settings_payload = {
+        "provider": "ollama",
+        "model": "llama2",
+        "temperature": 0.2,
+        "system_prompt": "",
+        "enabled": False,
+    }
+
+    assert client.get("/llm/settings").status_code == 401
+    assert client.put("/llm/settings", json=settings_payload).status_code == 401
+    assert client.post("/llm/settings/test").status_code == 401
+    assert client.post(
+        "/llm/list-models", json={"provider": "ollama"}
+    ).status_code == 401
+    assert client.get("/llm/providers").status_code == 401
+    assert client.get("/system/llm-status").status_code == 401
+    providers = client.get("/llm/providers", headers=_admin_headers())
+    assert providers.status_code == 200
+    assert all("api_key" not in item["default_profile"] for item in providers.json())
 
 
 def test_llm_settings_test_endpoint() -> None:
     """疎通テストエンドポイントがステータスを返すことを確認する。"""
     on_startup()
-    res = client.post("/llm/settings/test")
+    assert client.post("/llm/settings/test").status_code == 401
+    res = client.post("/llm/settings/test", headers=_admin_headers())
     assert res.status_code == 200
     assert res.json()["status"] == "ng"
+
+
+def test_llm_settings_response_and_storage_exclude_secret_fields(caplog) -> None:
+    on_startup()
+    caplog.set_level(logging.INFO)
+    secrets = {
+        "service_account_json": "SYNTHETIC_SERVICE_ACCOUNT_JSON",
+        "future_private_key": "SYNTHETIC_FUTURE_PRIVATE_KEY",
+        "future_secret_key": "SYNTHETIC_FUTURE_SECRET_KEY",
+        "auth_token": "SYNTHETIC_AUTH_TOKEN",
+        "id_token": "SYNTHETIC_ID_TOKEN",
+    }
+    payload = {
+        "provider": "gcp_vertex",
+        "model": "gemini-3.1-flash-lite",
+        "temperature": 0.2,
+        "system_prompt": "",
+        "enabled": True,
+        "followup_timeout_seconds": 30,
+        "provider_profiles": {
+            "gcp_vertex": {
+                "model": "gemini-3.1-flash-lite",
+                "project_id": "synthetic-project",
+                "location": "global",
+                **secrets,
+            }
+        },
+    }
+
+    response = client.put(
+        "/llm/settings", json=payload, headers=_admin_headers()
+    )
+
+    assert response.status_code == 200
+    serialized_response = response.text
+    serialized_storage = json.dumps(load_llm_settings(), ensure_ascii=False)
+    for field, secret in secrets.items():
+        assert field not in serialized_response
+        assert secret not in serialized_response
+        assert field not in serialized_storage
+        assert secret not in serialized_storage
+        assert secret not in caplog.text
 
 
 def test_llm_settings_test_with_body() -> None:
     """疎通テストでリクエストの設定が利用されることを確認する。"""
     on_startup()
     payload = {"provider": "ollama", "model": "dummy", "enabled": True}
-    res = client.post("/llm/settings/test", json=payload)
+    res = client.post(
+        "/llm/settings/test", json=payload, headers=_admin_headers()
+    )
     assert res.status_code == 200
     assert res.json()["status"] == "ng"
 
@@ -455,7 +573,9 @@ def test_llm_settings_test_with_body() -> None:
 def test_llm_status_snapshot_endpoint() -> None:
     """LLM 状態スナップショットが取得できる。"""
     on_startup()
-    res = client.get("/system/llm-status")
+    assert client.get("/system/llm-status").status_code == 401
+    assert client.get("/system/llm-availability").status_code == 200
+    res = client.get("/system/llm-status", headers=_admin_headers())
     assert res.status_code == 200
     data = res.json()
     assert data["status"] in {"disabled", "pending", "ng", "ok"}
@@ -472,13 +592,15 @@ def test_llm_status_updates_after_settings_change() -> None:
         "enabled": True,
         "base_url": "http://127.0.0.1:9",
     }
-    res = client.put("/llm/settings", json=payload)
+    res = client.put("/llm/settings", json=payload, headers=_admin_headers())
     assert res.status_code == 200
-    snapshot = client.get("/system/llm-status").json()
+    snapshot = client.get("/system/llm-status", headers=_admin_headers()).json()
     assert snapshot["status"] in {"ng", "pending"}
     assert snapshot.get("checked_at") is not None
-    client.post("/llm/settings/test")
-    snapshot_after = client.get("/system/llm-status").json()
+    client.post("/llm/settings/test", headers=_admin_headers())
+    snapshot_after = client.get(
+        "/system/llm-status", headers=_admin_headers()
+    ).json()
     assert snapshot_after["status"] in {"ng", "disabled", "ok"}
     assert snapshot_after.get("checked_at") is not None
 
@@ -731,7 +853,11 @@ def test_llm_disabled() -> None:
     """LLM 無効設定時は追加質問を行わないことを確認する。"""
     on_startup()
     # LLM を無効化
-    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": False})
+    client.put(
+        "/llm/settings",
+        json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": False},
+        headers=_admin_headers(),
+    )
     payload = {
         "patient_name": "無効太郎",
         "dob": "1990-01-01",
@@ -745,7 +871,11 @@ def test_llm_disabled() -> None:
     assert q_res.status_code == 200
     assert q_res.json()["questions"] == []
     # 後片付け：LLM を有効化に戻す
-    client.put("/llm/settings", json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True})
+    client.put(
+        "/llm/settings",
+        json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True},
+        headers=_admin_headers(),
+    )
 
 
 def test_admin_session_list_and_detail() -> None:

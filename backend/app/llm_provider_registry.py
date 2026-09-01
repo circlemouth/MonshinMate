@@ -32,6 +32,8 @@ class ProviderFieldSchema(BaseModel):
     max: float | None = None
     step: float | None = None
     accept: str | None = None
+    # 未指定の拡張 field は秘密情報として扱い、設定取得 API へ返さない。
+    sensitive: bool = True
 
 
 class ProviderMetaSchema(BaseModel):

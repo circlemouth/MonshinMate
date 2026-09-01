@@ -1,3 +1,5 @@
+import { adminFetch, getAdminAccessToken } from './adminApi';
+
 /**
  * LLM 接続状態のユーティリティ。
  * - ステータススナップショットの取得（/system/llm-status）
@@ -22,7 +24,9 @@ function normalizeStatus(raw: string | null | undefined, enabled: boolean): LlmS
 
 async function fetchSnapshot(): Promise<LlmStatusSnapshot> {
   try {
-    const res = await fetch('/system/llm-status');
+    const hasAdminToken = Boolean(getAdminAccessToken());
+    const endpoint = hasAdminToken ? '/system/llm-status' : '/system/llm-availability';
+    const res = hasAdminToken ? await adminFetch(endpoint) : await fetch(endpoint);
     if (!res.ok) {
       throw new Error('failed to load status');
     }
@@ -73,4 +77,3 @@ export async function refreshLlmStatus(): Promise<LlmStatusSnapshot> {
 export async function fetchLlmStatusSnapshot(): Promise<LlmStatusSnapshot> {
   return fetchSnapshot();
 }
-

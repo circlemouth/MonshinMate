@@ -56,9 +56,9 @@
 - **ヘルスチェック**: `/health`, `/healthz`, `/readyz`。
 - **テンプレート管理**: `GET/POST/DELETE /questionnaires`, `/questionnaires/{id}/duplicate|rename|reset`, `/questionnaires/{id}/summary-prompt`, `/questionnaires/{id}/followup-prompt`。
 - **テンプレート入出力**: `/admin/questionnaires/export|import`。テンプレート・LLM設定・システム設定をまとめて転送でき、エクスポート時に PBKDF2+Fernet で暗号化可。
-- **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UI で未保存の `project_id` やアップロード済みの `service_account_json`（サービスアカウント JSON キー）といった入力値を一時的に反映して疎通確認できる（ただし Vertex AI は Google 側の制約でモデル一覧 UI を表示せず、手入力＋疎通テストのみ提供）。
+- **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。これらはログイン時に発行する管理者JWTを `Authorization: Bearer` で送る必要がある。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UIで未保存の `project_id` などを一時的に反映できる。Vertex AIはモデル名を手入力して疎通を確認する。
 - **LLM プロバイダメタ情報**: `/llm/providers` で利用可能なプロバイダ一覧と UI 向けメタデータを返す。`ollama` / `lm_studio` / `openai` に加えて、Vertex AI を利用する `gcp_vertex` プロバイダが常に含まれる。メタデータには追加設定項目や既定値を含め、管理画面での入力欄が自動的に構成される。
-- **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。
+- **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。`/system/llm-status` は管理者専用であり、患者画面は詳細を含まない `/system/llm-availability` を使う。
 - **郵便番号辞書**: `GET /postal-code/{postal_code}` で住所候補を返す。`GET/POST /system/postal-code-dictionary` で辞書状態確認とCSVアップロード更新を行う。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
 - **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers[/batch]`、`/sessions/{id}/finalize`。
@@ -76,17 +76,35 @@
 
 ### 4.4 LLM 連携（通信仕様）
 - **デフォルトプロンプト**: 追加質問用 `DEFAULT_SYSTEM_PROMPT` / `DEFAULT_FOLLOWUP_PROMPT`、サマリー用 `DEFAULT_SUMMARY_PROMPT` を `llm_gateway.py` / `main.py` に定義。管理画面の「LLM 設定」「テンプレート詳細」からテンプレート単位で上書きでき、プレースホルダ `{max_questions}` を埋め込む。
-- **設定保持**: `LLMSettings` はプロバイダごとのプロファイルを `provider_profiles` に保持し、UI 保存時に `sync_from_active_profile`/`sync_to_active_profile` でトップレベル値と同期。`followup_timeout_seconds` は 5〜120 秒にクランプ。
+- **設定保持**: 更新用の `LLMSettingsUpdate` と読み取り用の `LLMSettingsRead` を分離した。読み取り応答はallowlist方式で組み立て、API key、認証token、秘密鍵、`service_account_json` を含めない。`provider_profiles` の拡張fieldはプロバイダが `sensitive=false` と宣言したものだけを返す。`followup_timeout_seconds` は5秒から120秒に制限する。
 - **追加質問生成**: `SessionFSM.next_questions()` → `LLMGateway.generate_followups()` を呼び出し、セッション ID 単位でロック。  
   - `provider="ollama"`: `POST {base_url}/api/chat` に `format` で JSON Schema（配列）を渡し、`message.content` または `response` の文字列を `json.loads`。
   - `provider="lm_studio"`（OpenAI 互換）: `POST {base_url}/v1/chat/completions` に `response_format.json_schema` を指定し、`choices[0].message.content` の文字列 JSON をパース。
-  - `provider="gcp_vertex"`: `POST https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` で Gemini モデルを呼び出す。サービスアカウント JSON キーファイルをアップロードするか、ADC を利用して Bearer トークンを取得する。レスポンスは `candidates[0].content.parts[].text` を優先して抽出し、JSON 解析に失敗した場合は行分割でフォールバック。
+  - `provider="gcp_vertex"`: `POST https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` でGeminiを呼び出す。`location=global` の場合は `https://aiplatform.googleapis.com` を使う。認証はADCだけを使い、Cloud Runでは割り当てたサービスアカウントが資格情報になる。JSONキーファイルの入力、保存、利用は行わない。
+  - Vertex AIの各呼び出しは、`contents` に1件の `role=user` だけを入れる単発要求である。モデル応答を次の要求へ含めず、function callは応答の構造化データとして終端処理する。この構造では `thoughtSignature` を再送する後続要求が存在しない。将来、`role=model` の応答またはfunction responseを次の `contents` へ追加する場合は、応答partを順序と署名を変えずに保存して再送する実装が必要になる。
+  - Gemini 3系ではサンプリング温度を送らず、モデル既定値を使う。最大出力tokenは設定値を32から65,536へ制限し、HTTPタイムアウトは5秒から120秒へ制限する。構造化JSONの `responseMimeType` と `responseSchema`、function call引数の抽出は従来どおり維持する。
   - パース失敗・HTTP エラー時は警告ログとともにスタブへフォールバックし、追加質問フェーズを即終了（空配列）。成功時は `llm_question_texts` に記録し `llm_1..n` の ID を採番。
 - **単一項目用フォールバック質問**: `generate_question()` は未回答項目向けに個別問い合わせを行う実装で、同様に Ollama / LM Studio のチャット API を呼び分ける。失敗時・ローカルモードではスタブの汎用質問を返す（現行フローでは未使用だが残置）。
 - **サマリー生成**: `summarize_with_prompt()` がリモート LLM に同様のチャットリクエストを送信。失敗時は `summarize()` の簡易結合文にフォールバック。バックエンドで `summary_prompts` に保存されたプロンプトを使用し、UI から有効化フラグを制御。
-- **疎通状態管理**: すべてのリモート呼び出しで成功/失敗を `_record_status()` に報告。`/system/llm-status` が直近結果（`status`, `detail`, `source`, `checked_at`）を返し、フロントは `llmStatusUpdated` イベントで購読。
+- **疎通状態管理**: すべてのリモート呼び出しで成功または失敗を `_record_status()` に報告する。管理者専用の `/system/llm-status` は `status`, `detail`, `source`, `checked_at` を返す。匿名利用できる `/system/llm-availability` は `status` だけを返す。
 - **チャット API**: `/llm/chat` はサイドバー用軽量チャット。リモート有効時は上記と同じ経路で呼び出し、失敗時はスタブ応答。呼び出し数は `METRIC_LLM_CHATS` で計測。
 - **スタブモード**: `enabled=False` または `base_url` 未設定時はローカルスタブが動作し、追加質問は生成せず、サマリーは簡易結合文を返す。UI フッターには「既定はローカルLLMで外部送信なし」と表示。
+
+#### 4.4.1 Gemini 2.5 Flashの移行候補
+
+2026-09-01にGoogle Cloud公式文書を確認した結果、候補のmodel IDと利用条件は次のとおりである。
+
+- `gemini-3.5-flash-lite`：GA。Standard PayGoは `global`、`us`、`eu` で利用できる。GlobalのStandard料金は入力100万tokenあたり0.30米ドル、テキスト出力100万tokenあたり2.50米ドルである。
+- `gemini-3.1-flash-lite`：GA。Standard PayGoは `global`、`us`、`eu` で利用できる。GlobalのStandard料金は入力100万tokenあたり0.25米ドル、テキスト出力100万tokenあたり1.50米ドルである。
+- `gemini-3.5-flash`：GA。モデル提供地域には `asia-northeast1` が含まれるが、同リージョンでは単一ゾーンProvisioned Throughputだけを利用できる。Standard PayGoは `global`、`us`、`eu` に限られる。GlobalのStandard料金は入力100万tokenあたり1.50米ドル、テキスト出力100万tokenあたり9.00米ドルである。
+
+現行の `asia-northeast1` とStandard PayGoを同時に維持できる候補は確認できなかった。
+本番設定はこのリポジトリ変更では上書きしない。
+新規環境で生成するGCPプロファイルだけは、確認済みGAモデルの `gemini-3.1-flash-lite` と `global` を既定値にする。
+保存済みプロファイルがある既存環境では、そのmodelとlocationを継続して読み込む。
+
+確認に使用した一次情報は、[モデルのライフサイクル](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)、[Gemini 3.5 Flash](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash)、[Gemini 3.5 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite)、[Gemini 3.1 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite)、[料金表](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)である。
+`thoughtSignature` の再送条件は、[Google Cloudのthought signatures仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking/thought-signatures)と[GenerateContentのPart仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/Content)で確認した。
 
 ### 4.5 テンプレート・プロンプト管理
 - テンプレートは `questionnaire_templates` テーブルに `items_json` と LLM 追質問設定（有効フラグ・上限件数）を保存。
@@ -160,7 +178,7 @@
 
 ## 9. 運用・監視
 - ヘルスチェック: `curl http://localhost:8001/healthz` → `{"status":"ok"}`。`/readyz` は DB 接続確認を含む。
-- LLM ステータス: `/system/llm-status` を参照。UI から手動疎通テスト（`/llm/settings/test`）を実行可。
+- LLMステータス: 管理画面は管理者JWT付きで `/system/llm-status` を参照し、患者画面は `/system/llm-availability` を参照する。管理画面から手動疎通テスト（`/llm/settings/test`）を実行できる。
 - DB ステータス: `/system/database-status` が `sqlite` / `couchdb` / `error` を返す。管理ダッシュボードでバッジ表示。
 - バックアップ: SQLite はファイルコピー、CouchDB は `_all_dbs` ダンプ（`docker/tools/` に想定スクリプト）。エクスポート API は暗号化 ZIP での退避用途に使う。
 - ログ点検: `backend/app/logs/api.log`, `llm.log`, `security.log`。必要に応じて logrotate や外部集中管理へ転送。
@@ -169,7 +187,7 @@
 - LLM 問い合わせは同期呼び出しで、タイムアウト時は患者フローがベース問診のみで進行。追加質問が 0 件の場合でも finalize を呼び出す。
 - `/metrics` はプロセス内カウンタであり、マルチプロセスで共有されない。Gunicorn ワーカー増設時は Prometheus ライブラリへの置換が必要。
 - CouchDB 無効時はセッション回答が SQLite の JSON カラムに保存されるため、サイズ増に注意。大量データ運用時は CouchDB か PostgreSQL への移行を推奨。
-- `AuthContext.login` は現時点でダミーのまま。実際のログインは `AdminLogin` ページが直に API を呼び、`sessionStorage` のフラグで状態管理している点に留意。
+- `AuthContext.login` は現時点でダミーのままであり、実際のログインは `AdminLogin` が直接APIを呼ぶ。ログイン成功時の管理者JWTは `sessionStorage` に保持し、保護対象APIへBearer tokenとして送る。Bearer認証はCookieのようにブラウザから自動送信されないため、今回の保護対象に独立したCSRF tokenは追加していない。
 - `frontend` 側のルータはブラウザリロード時に `/` へ強制移動する実装のため、管理ページへ直接ブックマークするとログイン前提の導線になる。
 
 ## 11. 関連資料

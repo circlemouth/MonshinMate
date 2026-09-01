@@ -65,6 +65,13 @@ def test_admin_auth_flow():
     assert login_data["message"] == "Login successful"
     assert login_data["token_type"] == "bearer"
     assert login_data["access_token"]
+    admin_headers = {
+        "Authorization": f"Bearer {login_data['access_token']}"
+    }
+    assert client.get("/llm/settings", headers=admin_headers).status_code == 200
+    assert client.get("/admin/auth/status", headers=admin_headers).json()[
+        "is_authenticated"
+    ] is True
 
     # === Step 6: パスワードリセット ===
     # 不正なTOTPコードでリセット要求 → 失敗

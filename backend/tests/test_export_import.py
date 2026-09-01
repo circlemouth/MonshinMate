@@ -18,11 +18,15 @@ def _reset_database() -> None:
 
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
-from app.main import app, IMAGE_DIR, LOGO_DIR  # noqa: E402
-from app.db import init_db, get_session as db_get_session, get_template as db_get_template  # noqa: E402
+from app.main import app, IMAGE_DIR, LOGO_DIR, _create_admin_access_token  # noqa: E402
+from app.db import init_db, get_session as db_get_session, get_template as db_get_template, load_llm_settings  # noqa: E402
 
 
 client = TestClient(app)
+
+
+def _admin_headers() -> dict[str, str]:
+    return {"Authorization": f"Bearer {_create_admin_access_token()}"}
 
 
 def _clean_images() -> None:
@@ -71,7 +75,7 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     _clean_logos()
     _prepare_sample_template()
 
-    initial_llm = client.get("/llm/settings")
+    initial_llm = client.get("/llm/settings", headers=_admin_headers())
     assert initial_llm.status_code == 200
     original_llm_settings = initial_llm.json()
 
@@ -99,11 +103,36 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
         "base_url": "http://localhost",  # pragma: allowlist secret
         "api_key": "dummy-key",  # pragma: allowlist secret
         "followup_timeout_seconds": 45,
+        "provider_profiles": {
+            "openai": {
+                "model": "gpt-test",
+                "temperature": 0.2,
+                "system_prompt": "test",
+                "base_url": "http://localhost",
+                "api_key": "dummy-key",  # pragma: allowlist secret
+                "followup_timeout_seconds": 45,
+            },
+            "gcp_vertex": {
+                "model": "gemini-2.5-flash",
+                "project_id": "synthetic-project",
+                "location": "asia-northeast1",
+                "service_account_json": "SYNTHETIC_PRIVATE_KEY_MATERIAL",
+            },
+        },
     }
-    llm_res = client.put("/llm/settings", json=llm_payload)
+    llm_res = client.put(
+        "/llm/settings", json=llm_payload, headers=_admin_headers()
+    )
     assert llm_res.status_code == 200
+    assert "SYNTHETIC_PRIVATE_KEY_MATERIAL" not in llm_res.text
+    assert "service_account_json" not in json.dumps(load_llm_settings())
 
-    export_res = client.post("/admin/questionnaires/export", json={"password": "secret"})
+    assert client.post("/admin/questionnaires/export", json={}).status_code == 401
+    export_res = client.post(
+        "/admin/questionnaires/export",
+        json={"password": "secret"},
+        headers=_admin_headers(),
+    )
     assert export_res.status_code == 200
     envelope = json.loads(export_res.content)
     assert envelope["encryption"] is not None
@@ -119,6 +148,10 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     assert "export-test.png" in payload["images"]
     assert payload.get("app_settings", {}).get("display_name") == "テスト医院"
     assert payload.get("llm_settings", {}).get("model") == "gpt-test"
+    serialized_payload = json.dumps(payload, ensure_ascii=False)
+    assert "service_account_json" not in serialized_payload
+    assert "dummy-key" not in serialized_payload
+    assert "SYNTHETIC_PRIVATE_KEY_MATERIAL" not in serialized_payload
     logo_files = payload.get("logo_files", {})
     assert logo_files
     logo_filename = next(iter(logo_files.keys()))
@@ -142,6 +175,7 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     # 誤ったパスワードでは復号できない
     bad_import = client.post(
         "/admin/questionnaires/import",
+        headers=_admin_headers(),
         data={"password": "wrong", "mode": "replace"},
         files={"file": ("settings.json", export_res.content, "application/json")},
     )
@@ -149,6 +183,7 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
 
     good_import = client.post(
         "/admin/questionnaires/import",
+        headers=_admin_headers(),
         data={"password": "secret", "mode": "replace"},
         files={"file": ("settings.json", export_res.content, "application/json")},
     )
@@ -168,12 +203,14 @@ def test_questionnaire_export_import_roundtrip_with_password() -> None:
     logo_after = client.get("/system/logo")
     assert logo_after.status_code == 200
     assert logo_after.json()["url"].endswith(logo_filename)
-    llm_after = client.get("/llm/settings")
+    llm_after = client.get("/llm/settings", headers=_admin_headers())
     assert llm_after.status_code == 200
     assert llm_after.json()["model"] == "gpt-test"
 
     # 後続テストに影響しないよう LLM 設定を初期値へ戻す
-    client.put("/llm/settings", json=original_llm_settings)
+    client.put(
+        "/llm/settings", json=original_llm_settings, headers=_admin_headers()
+    )
 
 
 def test_questionnaire_export_normalizes_absolute_image_url() -> None:
@@ -201,7 +238,9 @@ def test_questionnaire_export_normalizes_absolute_image_url() -> None:
     }
     assert client.post("/questionnaires", json=payload).status_code == 200
 
-    export_res = client.post("/admin/questionnaires/export", json={})
+    export_res = client.post(
+        "/admin/questionnaires/export", json={}, headers=_admin_headers()
+    )
     assert export_res.status_code == 200
     envelope = json.loads(export_res.content)
     assert envelope["encryption"] is None
@@ -221,6 +260,7 @@ def test_questionnaire_export_normalizes_absolute_image_url() -> None:
 
     import_res = client.post(
         "/admin/questionnaires/import",
+        headers=_admin_headers(),
         data={"mode": "replace"},
         files={"file": ("settings.json", export_res.content, "application/json")},
     )

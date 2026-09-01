@@ -54,6 +54,7 @@ import {
 } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
+import { adminFetch } from '../utils/adminApi';
 import SystemStatusCard from '../components/SystemStatusCard';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
@@ -384,7 +385,7 @@ export default function AdminMain() {
     setLlmError(null);
     try {
       const [res, snapshot] = await Promise.all([
-        fetch('/llm/settings'),
+        adminFetch('/llm/settings'),
         refreshLlmStatus(),
       ]);
       if (!res.ok) {

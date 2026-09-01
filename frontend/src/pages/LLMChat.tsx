@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { VStack, HStack, Input, Button, Box, Text, Flex, Avatar, Icon } from '@chakra-ui/react';
 import { FiSend } from 'react-icons/fi';
 import { refreshLlmStatus } from '../utils/llmStatus';
+import { adminFetch } from '../utils/adminApi';
 
 interface Message {
   from: 'user' | 'bot';
@@ -31,7 +32,7 @@ export default function LLMChat() {
     setIsLoading(true);
 
     try {
-      const res = await fetch('/llm/chat', {
+      const res = await adminFetch('/llm/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: input }),

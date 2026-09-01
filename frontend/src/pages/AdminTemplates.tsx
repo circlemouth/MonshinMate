@@ -60,6 +60,7 @@ import { BiGitBranch } from 'react-icons/bi';
 import DateSelect from '../components/DateSelect';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, checkLlmStatus } from '../utils/llmStatus';
+import { adminFetch } from '../utils/adminApi';
 import { useNotify } from '../contexts/NotificationContext';
 import { useDialog } from '../contexts/DialogContext';
 // removed: postal-code address lookup logic
@@ -837,7 +838,7 @@ type FollowupState = {
   useEffect(() => {
     let mounted = true;
     // 設定のみ取得（疎通はしない）
-    fetch('/llm/settings')
+    adminFetch('/llm/settings')
       .then((r) => r.json())
       .then((s) => {
         if (!mounted) return;

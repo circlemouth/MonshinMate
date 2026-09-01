@@ -1249,3 +1249,36 @@
 - [x] 本番疎通: 独自ドメインの`/readyz`は200、合成患者による`/patient-summaries`は200と空配列、未認証は401、無効カーソルは400、旧`/patient-summary`と存在しないPDFは404だった。
 - [x] 本番ログ: 新しいbackendとfrontendの直近ERRORログは0件であり、旧`clinic-hermes-read`タグも維持されていることを確認した。
 - [x] 院内配布: owner-onlyの問診メイトAPIキーを読み込んで院内専用ディレクトリへ拡張機能を再ビルドした。
+
+## 150. LLM設定保護とGemini後継モデル移行準備（2026-09-01）
+
+- [x] 根本原因: LLM設定APIと設定エクスポートが保存モデルをそのまま返し、認証も求めていなかった。
+- [x] 認証: ログイン時の管理者JWTに `admin` scopeを付与し、`/llm/settings`、`/llm/settings/test`、`/llm/list-models`、`/llm/providers`、`/system/llm-status`、`/llm/chat`、問診設定入出力で共用した。
+- [x] CSRF判定: 認証情報はCookieではなく、フロントエンドが明示的に付与するBearer tokenである。
+  このため、保護対象に独自のCSRF tokenは追加せず、既存JWTを再利用した。
+- [x] 応答保護: 更新用 `LLMSettingsUpdate` と読み取り用 `LLMSettingsRead` を分離した。
+  読み取り応答はallowlistで組み立て、`service_account_json`、API key、認証token、秘密鍵を返さない。
+  プロバイダ固有fieldは `sensitive=false` と明示した値だけを返す。
+- [x] 保存保護: SQLiteとFirestoreの保存境界で旧fieldと秘密鍵系fieldを再帰的に除外した。
+  Firestoreの読み取りはinclude-only field maskを使い、旧 `service_account_json` 本文を通常運用で取得しない。
+  保存は安全なfield pathだけを部分更新し、旧fieldの削除は別承認にrunbookで残した。
+- [x] Vertex AI認証: 管理画面のJSONキー入力とパース処理を削除し、`google.auth.default()` によるApplication Default Credentialsだけを使う構成へ変更した。
+- [x] Vertex AI通信: `global` では `aiplatform.googleapis.com` を使い、regional locationでは従来のregional hostを使う。
+  タイムアウトは5秒から120秒、最大出力tokenは32から65,536へ制限した。
+  Gemini 3系には温度を送らず、構造化JSONとfunction callの従来応答解析は維持した。
+- [x] 秘密ログ対策: 問診文、構造化応答、response bodyのpreviewをVertex AIログから削除した。
+  HTTP例外はstatus codeだけを返し、response bodyを例外とログへ流さない。
+- [x] Gemini移行調査: 2026-09-01のGoogle Cloud公式情報で `gemini-3.5-flash`、`gemini-3.5-flash-lite`、`gemini-3.1-flash-lite` のGA、提供領域、料金を確認した。
+  Standard PayGoでは3候補とも `global`、`us`、`eu` で利用できる。
+  `gemini-3.5-flash` の `asia-northeast1` は単一ゾーンProvisioned Throughputに限られるため、現行locationとStandard PayGoを同時に維持できる候補はない。
+- [x] 既存設定への影響: 既存Firestore設定は書き換えない。
+  新規GCPプロファイルだけは `gemini-3.1-flash-lite` と `global` を既定値にした。
+- [x] `thoughtSignature` 判定: 現行のVertex AI要求は `role=user` を1件送る単発呼び出しであり、model応答を後続要求へ含めない。
+  そのため現行経路に保存と再送は不要と判定した。
+  将来multi-turn化して `role=model`、function call、function responseを後続 `contents` へ含める場合は、Googleが返したpartの順序と署名を改変せず再送する実装とtestを必須とする。
+- [x] runbook: `private/cloud-run-adapter/docs/llm-settings-security-gemini-migration-runbook.md` に最小IAM role、ADC確認、旧field削除、旧key無効化、ステージング比較、rollback、スモークテスト、正常値を記載した。
+- [x] 関連テスト: 認証、応答・エクスポートの秘密除外、SQLite・Firestore保存、ADC mock、後継model path、構造化応答、function call、単発要求、秘密ログ除外の回帰テストを追加した。
+- [x] UI回帰確認: ローカルで管理者ログインからLLM設定へ遷移し、保護APIがBearer token付きで200、Vertex AIのJSONキー入力が非表示、対象画面の新規console errorが0件であることを確認した。
+- [x] 検証: `./venv/bin/python -m pytest -q backend/tests` は92件、`private/cloud-run-adapter` の `../../venv/bin/python -m pytest -q tests` は6件すべて成功した。
+  `frontend` の `npm run build` はchunk size警告のみで成功し、rootとsubmoduleの `git diff --check` も成功した。
+- [ ] 本番適用: 本実装、Firestore旧fieldの削除、旧service account keyの無効化、IAM変更、モデル切替、pushを実行せず、すべて別承認待ちとした。

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Tag } from '@chakra-ui/react';
 import { LlmStatus, fetchLlmStatusSnapshot } from '../utils/llmStatus';
+import { adminFetch } from '../utils/adminApi';
 
 /**
  * 管理画面ヘッダー用の LLM 接続状態バッジ（小さめ）。
@@ -17,7 +18,7 @@ export default function LlmStatusBadge() {
     // 設定値（特に base_url の有無）を取得して表示文言の補助に用いる
     const fetchSettings = async () => {
       try {
-        const r = await fetch('/llm/settings');
+        const r = await adminFetch('/llm/settings');
         if (!mounted) return;
         if (r.ok) {
           const s = await r.json();

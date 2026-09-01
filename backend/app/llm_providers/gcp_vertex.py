@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any, TYPE_CHECKING
 import json
-import base64
 import logging
 import re
 
@@ -12,11 +11,9 @@ import httpx
 try:  # pragma: no cover
     import google.auth as google_auth
     from google.auth.transport.requests import Request as GoogleAuthRequest
-    from google.oauth2 import service_account
 except ImportError:  # pragma: no cover
     google_auth = None  # type: ignore[assignment]
     GoogleAuthRequest = None  # type: ignore[assignment]
-    service_account = None  # type: ignore[assignment]
 
 if TYPE_CHECKING:  # pragma: no cover
     from google.auth.credentials import Credentials as GoogleCredentials
@@ -27,10 +24,10 @@ else:  # pragma: no cover
 
 _LOGGER = logging.getLogger("llm.gcp_vertex")
 _GCP_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
-_DEFAULT_MODEL = "publishers/google/models/gemini-1.5-pro-001"
-_DEFAULT_LOCATION = "us-central1"
+_DEFAULT_MODEL = "gemini-3.1-flash-lite"
+_DEFAULT_LOCATION = "global"
 _DEFAULT_MAX_OUTPUT_TOKENS = 8192
-_MAX_OUTPUT_TOKENS_LIMIT = 8192
+_MAX_OUTPUT_TOKENS_LIMIT = 65536
 _MIN_OUTPUT_TOKENS = 32
 
 
@@ -38,7 +35,7 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
     "key": "gcp_vertex",
     "label": "Google Cloud Vertex AI",
     "description": "Google Cloud Vertex AI の Gemini モデルを利用します。",
-    "helper": "サービスアカウントの JSON キーを入力するか、Google ADC が利用できる環境で実行してください。",
+    "helper": "Cloud Run のサービスアカウントまたは開発環境の ADC を利用します。JSON キーは保存しません。",
     "use_base_url": False,
     "use_api_key": False,
     "default_profile": {
@@ -47,7 +44,6 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
         "system_prompt": "",
         "project_id": "",
         "location": _DEFAULT_LOCATION,
-        "service_account_json": "",
         "max_output_tokens": _DEFAULT_MAX_OUTPUT_TOKENS,
     },
     "extra_fields": [
@@ -57,6 +53,7 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
             "type": "text",
             "required": True,
             "helper": "Vertex AI を利用するプロジェクトの ID を入力してください。",
+            "sensitive": False,
         },
         {
             "key": "location",
@@ -65,24 +62,18 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
             "required": True,
             "helper": "例: us-central1 / asia-northeast1 など",
             "placeholder": _DEFAULT_LOCATION,
-        },
-        {
-            "key": "service_account_json",
-            "label": "サービスアカウントJSONファイル",
-            "type": "file",
-            "required": False,
-            "helper": "サービスアカウントの JSON キーファイルをアップロードしてください。空欄の場合は GOOGLE_APPLICATION_CREDENTIALS など ADC を利用します。",
-            "accept": "application/json,.json",
+            "sensitive": False,
         },
         {
             "key": "max_output_tokens",
             "label": "最大出力トークン",
             "type": "number",
             "required": False,
-            "helper": "レスポンスの最大トークン数 (32〜8192 程度)。",
+            "helper": "レスポンスの最大トークン数 (32〜65536)。",
             "min": 32,
-            "max": 8192,
+            "max": 65536,
             "step": 32,
+            "sensitive": False,
         },
     ],
 }
@@ -115,39 +106,15 @@ class GcpVertexProvider:
 
     # --- 認証処理 ---
     def _load_credentials(self, profile: dict[str, Any]) -> GoogleCredentials:
-        if GoogleAuthRequest is None or google_auth is None or service_account is None:
+        if GoogleAuthRequest is None or google_auth is None:
             raise RuntimeError(
                 "google-auth ライブラリがインストールされていません。`pip install google-auth` を実行してください。"
             )
         scopes = [_GCP_SCOPE]
-        raw_json = profile.get("service_account_json")
-        credentials: GoogleCredentials
-        if raw_json:
-            info = self._parse_service_account_json(raw_json)
-            credentials = service_account.Credentials.from_service_account_info(info, scopes=scopes)
-        else:
-            credentials, _ = google_auth.default(scopes=scopes)
+        credentials, _ = google_auth.default(scopes=scopes)
         if not credentials.valid:
             credentials.refresh(GoogleAuthRequest())
         return credentials
-
-    def _parse_service_account_json(self, raw: Any) -> dict[str, Any]:
-        if isinstance(raw, dict):
-            return raw
-        text = str(raw or "").strip()
-        if not text:
-            raise ValueError("サービスアカウントJSONが空です")
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            try:
-                decoded = base64.b64decode(text)
-            except Exception as exc:  # noqa: BLE001
-                raise ValueError("サービスアカウントJSONの形式が不正です") from exc
-            try:
-                return json.loads(decoded)
-            except Exception as exc:  # noqa: BLE001
-                raise ValueError("サービスアカウントJSONを解析できませんでした") from exc
 
     def _get_auth_headers(self, profile: dict[str, Any]) -> dict[str, str]:
         if GoogleAuthRequest is None:
@@ -166,6 +133,8 @@ class GcpVertexProvider:
     # --- API 呼び出し ---
     def _build_base_url(self, profile: dict[str, Any]) -> str:
         location = profile.get("location") or _DEFAULT_LOCATION
+        if location == "global":
+            return "https://aiplatform.googleapis.com"
         return f"https://{location}-aiplatform.googleapis.com"
 
     def _build_model_path(self, profile: dict[str, Any], *, model: str | None = None) -> str:
@@ -200,12 +169,9 @@ class GcpVertexProvider:
             return response
 
     def _extract_error_message(self, response: httpx.Response) -> str:
-        try:
-            data = response.json()
-        except Exception:  # noqa: BLE001
-            return f"HTTP {response.status_code}: {response.text}"
-        message = data.get("error", {}).get("message") if isinstance(data, dict) else None
-        return message or f"HTTP {response.status_code}"
+        # サーバーのerror bodyが要求値をechoする可能性を考慮し、
+        # 例外とログにresponse bodyを流さない。
+        return f"Vertex AI request failed (HTTP {response.status_code})"
 
     def list_models(self, settings: LLMSettings, profile: dict[str, Any], *, source: str | None = None) -> list[str]:
         profile = self.normalize_profile(profile)
@@ -230,9 +196,9 @@ class GcpVertexProvider:
                 location,
             )
             models = [
-                "gemini-1.5-flash-001",
-                "gemini-1.5-pro-001",
-                "text-bison@001",
+                "gemini-3.1-flash-lite",
+                "gemini-3.5-flash-lite",
+                "gemini-3.5-flash",
             ]
         return sorted(set(models))
 
@@ -366,11 +332,13 @@ class GcpVertexProvider:
                     "parts": user_parts,
                 }
             ],
-            "generationConfig": {
-                "temperature": float(profile.get("temperature") or settings.temperature or 0.2),
-                "maxOutputTokens": resolved_max_tokens,
-            },
+            "generationConfig": {"maxOutputTokens": resolved_max_tokens},
         }
+        model_name = str(profile.get("model") or "")
+        if not model_name.startswith("gemini-3"):
+            payload["generationConfig"]["temperature"] = float(
+                profile.get("temperature") or settings.temperature or 0.2
+            )
         system_prompt = profile.get("system_prompt") or settings.system_prompt
         if system_prompt:
             payload["systemInstruction"] = {
@@ -408,7 +376,20 @@ class GcpVertexProvider:
             response_schema=response_schema,
         )
         url = f"{base_url}/v1/{model_path}:generateContent"
-        response = self._perform_request("POST", url, headers, payload)
+        timeout = max(
+            5.0,
+            min(
+                120.0,
+                float(
+                    profile.get("followup_timeout_seconds")
+                    or settings.followup_timeout_seconds
+                    or 30.0
+                ),
+            ),
+        )
+        response = self._perform_request(
+            "POST", url, headers, payload, timeout_seconds=timeout
+        )
         data = response.json()
         self._log_response_metadata(data)
         text = self._extract_text(data)
@@ -454,11 +435,7 @@ class GcpVertexProvider:
         )
         text = base_prompt.format(max_questions=max_questions)
         details = json.dumps(context or {}, ensure_ascii=False)
-        _LOGGER.info(
-            "vertex_followups_request prompt=%s context_chars=%d",
-            text,
-            len(details),
-        )
+        _LOGGER.info("vertex_followups_request context_chars=%d", len(details))
         response_text = self._generate_text(
             settings,
             profile,
@@ -469,12 +446,7 @@ class GcpVertexProvider:
                 "items": {"type": "STRING"},
             },
         )
-        truncated = response_text if len(response_text) <= 2000 else f"{response_text[:2000]}…"
-        _LOGGER.info(
-            "vertex_followups_response_raw length=%d preview=%s",
-            len(response_text),
-            truncated,
-        )
+        _LOGGER.info("vertex_followups_response length=%d", len(response_text))
         try:
             data = json.loads(response_text)
             if isinstance(data, list):
@@ -485,7 +457,7 @@ class GcpVertexProvider:
                 return [str(item) for item in data if isinstance(item, (str, int, float))]
         except Exception as exc:  # noqa: BLE001
             _LOGGER.warning("vertex_followups_json_parse_failed: %s", exc)
-        _LOGGER.warning("vertex_followups_response_raw: %s", response_text)
+        _LOGGER.warning("vertex_followups_response_unparseable length=%d", len(response_text))
         repaired = self._extract_strings_from_text(response_text)
         if repaired:
             _LOGGER.info("vertex_followups_repaired count=%d", len(repaired))
@@ -531,14 +503,12 @@ class GcpVertexProvider:
                             safety.append(f"{category}:{probability}")
             usage = data.get("usageMetadata")
             prompt_feedback = data.get("promptFeedback")
-            preview = json.dumps(data, ensure_ascii=False)[:1000]
             _LOGGER.info(
-                "vertex_response_meta finish=%s prompt_feedback=%s usage=%s safety=%s json_preview=%s",
+                "vertex_response_meta finish=%s prompt_feedback=%s usage=%s safety=%s",
                 finish or None,
                 prompt_feedback,
                 usage,
                 safety or None,
-                preview,
             )
         except Exception as exc:  # noqa: BLE001
             _LOGGER.debug("vertex_response_meta_error: %s", exc)

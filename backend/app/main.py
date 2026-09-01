@@ -33,7 +33,7 @@ _BASE_DIR = Path(__file__).resolve().parents[1]
 _PROJECT_ROOT = _BASE_DIR.parent
 load_dotenv(_PROJECT_ROOT / ".env")
 
-from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form, Header
+from fastapi import FastAPI, HTTPException, Response, Request, BackgroundTasks, Query, UploadFile, File, Form, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import sqlite3
@@ -50,7 +50,15 @@ from .llm_gateway import (
     DEFAULT_FOLLOWUP_PROMPT,
     DEFAULT_SYSTEM_PROMPT,
 )
-from .llm_provider_registry import get_provider_meta_list, ProviderMetaSchema
+from .llm_provider_registry import (
+    get_provider_meta_list,
+    get_provider_registry,
+    ProviderMetaSchema,
+)
+from .llm_settings_security import (
+    sanitize_llm_settings_for_read,
+    sanitize_llm_settings_for_storage,
+)
 from cryptography.fernet import Fernet, InvalidToken
 
 from .config import get_settings
@@ -157,6 +165,42 @@ SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
 ADMIN_PUSH_TOKEN_EXPIRE_MINUTES = 8 * 60
+
+
+def _create_admin_access_token() -> str:
+    """管理画面とPush購読管理に共通の短期JWTを発行する。"""
+
+    expires_at = datetime.now(UTC) + timedelta(minutes=ADMIN_PUSH_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode(
+        {"sub": "admin", "scope": "admin push:manage", "exp": expires_at},
+        SECRET_KEY,
+        algorithm=ALGORITHM,
+    )
+
+
+def _decode_admin_access_token(authorization: str | None) -> dict[str, Any]:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="authentication required")
+    token = authorization.split(" ", 1)[1].strip()
+    try:
+        claims = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="invalid access token") from exc
+    if claims.get("sub") != "admin":
+        raise HTTPException(status_code=403, detail="insufficient scope")
+    return claims
+
+
+def require_admin_access(
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """管理者JWTを検証するFastAPI dependency。"""
+
+    claims = _decode_admin_access_token(authorization)
+    scopes = set(str(claims.get("scope") or "").split())
+    if "admin" not in scopes:
+        raise HTTPException(status_code=403, detail="insufficient scope")
+    return claims
 
 init_db()
 app = FastAPI(title="MonshinMate API")
@@ -1022,7 +1066,9 @@ def on_startup() -> None:
     try:
         stored = load_llm_settings()
         if stored:
-            llm_gateway.update_settings(LLMSettings(**stored))
+            llm_gateway.update_settings(
+                LLMSettings(**sanitize_llm_settings_for_storage(stored))
+            )
     except Exception:
         logging.getLogger(__name__).exception("failed to load stored llm settings; using defaults")
     llm_gateway.sync_status(reason="startup")
@@ -1476,7 +1522,10 @@ def reset_default_template() -> dict:
 
 
 @app.post("/admin/questionnaires/export")
-def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingResponse:
+def export_questionnaire_settings_api(
+    payload: ExportRequest,
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> StreamingResponse:
     """問診テンプレート設定一式をエクスポートする。"""
 
     data = export_questionnaire_settings()
@@ -1492,6 +1541,11 @@ def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingRespon
     normalized_app_settings, logo_payloads = _normalize_app_settings_for_transfer(app_settings)
     export_payload["app_settings"] = normalized_app_settings
     export_payload["logo_files"] = logo_payloads
+    raw_llm_settings = export_payload.get("llm_settings")
+    if isinstance(raw_llm_settings, dict) and raw_llm_settings:
+        export_payload["llm_settings"] = _sanitize_llm_settings_for_read(
+            raw_llm_settings
+        ).model_dump()
     envelope = _build_export_envelope(export_payload, "questionnaire_settings", payload.password or None)
     content = json.dumps(envelope, ensure_ascii=False, indent=2).encode("utf-8")
     filename = f"questionnaire-settings-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
@@ -1504,7 +1558,10 @@ def export_questionnaire_settings_api(payload: ExportRequest) -> StreamingRespon
 
 @app.post("/admin/questionnaires/import")
 async def import_questionnaire_settings_api(
-    file: UploadFile = File(...), password: str | None = Form(None), mode: str = Form("merge")
+    file: UploadFile = File(...),
+    password: str | None = Form(None),
+    mode: str = Form("merge"),
+    _admin: dict[str, Any] = Depends(require_admin_access),
 ) -> dict[str, Any]:
     """問診テンプレート設定一式をインポートする。"""
 
@@ -1543,7 +1600,9 @@ async def import_questionnaire_settings_api(
     try:
         stored_llm = load_llm_settings()
         if stored_llm:
-            llm_gateway.update_settings(LLMSettings(**stored_llm))
+            llm_gateway.update_settings(
+                LLMSettings(**sanitize_llm_settings_for_storage(stored_llm))
+            )
             llm_gateway.settings.sync_from_active_profile()
     except Exception:
         logger.exception("apply_imported_llm_settings_failed")
@@ -1704,7 +1763,10 @@ class ChatResponse(BaseModel):
 
 
 @app.post("/llm/chat", response_model=ChatResponse)
-def llm_chat(req: ChatRequest) -> ChatResponse:
+def llm_chat(
+    req: ChatRequest,
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> ChatResponse:
     """LLM との対話を行う。"""
 
     global METRIC_LLM_CHATS
@@ -1713,14 +1775,105 @@ def llm_chat(req: ChatRequest) -> ChatResponse:
 
 
 @app.get("/llm/providers", response_model=list[ProviderMetaSchema])
-def list_llm_providers() -> list[ProviderMetaSchema]:
+def list_llm_providers(
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> list[ProviderMetaSchema]:
     """利用可能な LLM プロバイダの一覧を返す。"""
 
-    return get_provider_meta_list()
+    safe_meta: list[ProviderMetaSchema] = []
+    for meta in get_provider_meta_list():
+        raw = meta.model_dump()
+        default_profile = raw.get("default_profile") or {}
+        allowed_default_fields = {
+            "model",
+            "temperature",
+            "system_prompt",
+            "base_url",
+            "followup_timeout_seconds",
+        } | {
+            field.key for field in meta.extra_fields if not field.sensitive
+        }
+        raw["default_profile"] = {
+            key: value
+            for key, value in default_profile.items()
+            if key in allowed_default_fields
+        }
+        safe_meta.append(ProviderMetaSchema(**raw))
+    return safe_meta
 
 
-@app.get("/llm/settings", response_model=LLMSettings)
-def get_llm_settings() -> LLMSettings:
+class LLMSettingsUpdate(LLMSettings):
+    """管理者が更新できるLLM設定。"""
+
+
+class LLMSettingsRead(BaseModel):
+    """秘密情報を含まない管理者向けLLM設定。"""
+
+    provider: str
+    model: str
+    temperature: float
+    system_prompt: str = ""
+    enabled: bool
+    base_url: str | None = None
+    followup_timeout_seconds: float
+    api_key_configured: bool = False
+    provider_profiles: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+def _safe_provider_extra_fields() -> dict[str, set[str]]:
+    safe_fields: dict[str, set[str]] = {}
+    for provider, registration in get_provider_registry().items():
+        safe_fields[provider] = {
+            field.key
+            for field in registration.meta.extra_fields
+            if not field.sensitive
+        }
+    return safe_fields
+
+
+def _sanitize_llm_settings_for_read(value: dict[str, Any]) -> LLMSettingsRead:
+    safe = sanitize_llm_settings_for_read(
+        value,
+        safe_extra_fields=_safe_provider_extra_fields(),
+    )
+    return LLMSettingsRead(**safe)
+
+
+def _merge_preserved_api_keys(settings: LLMSettingsUpdate) -> LLMSettings:
+    """読み取り応答に含めないAPI keyを未入力の更新で消さない。"""
+
+    incoming = sanitize_llm_settings_for_storage(settings.model_dump())
+    current = sanitize_llm_settings_for_storage(llm_gateway.settings.model_dump())
+
+    incoming_profiles = incoming.get("provider_profiles")
+    current_profiles = current.get("provider_profiles")
+    if isinstance(incoming_profiles, dict) and isinstance(current_profiles, dict):
+        for provider, current_profile in current_profiles.items():
+            incoming_profile = incoming_profiles.get(provider)
+            if not isinstance(incoming_profile, dict) or not isinstance(
+                current_profile, dict
+            ):
+                continue
+            if not incoming_profile.get("api_key") and current_profile.get("api_key"):
+                incoming_profile["api_key"] = current_profile["api_key"]
+
+    # トップレベルのkeyは現在選択中のprofileとだけ同期する。
+    # provider切替時に、別providerのkeyを混入させない。
+    active_provider = str(incoming.get("provider") or "")
+    active_profile = (
+        incoming_profiles.get(active_provider)
+        if isinstance(incoming_profiles, dict)
+        else None
+    )
+    if not incoming.get("api_key") and isinstance(active_profile, dict):
+        incoming["api_key"] = active_profile.get("api_key")
+    return LLMSettings(**incoming)
+
+
+@app.get("/llm/settings", response_model=LLMSettingsRead)
+def get_llm_settings(
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> LLMSettingsRead:
     """現在の LLM 設定を取得する。
 
     原則としてDBに永続化された値を優先し、存在しない場合はメモリ上の設定を返す。
@@ -1731,19 +1884,26 @@ def get_llm_settings() -> LLMSettings:
         stored = load_llm_settings()
         if stored:
             # DB 側が真ならメモリへも反映して返す
-            s = LLMSettings(**stored)
+            s = LLMSettings(**sanitize_llm_settings_for_storage(stored))
             llm_gateway.update_settings(s)
             llm_gateway.settings.sync_from_active_profile()
-            return llm_gateway.settings
+            return _sanitize_llm_settings_for_read(
+                llm_gateway.settings.model_dump()
+            )
     except Exception:
         logger.exception("failed_to_load_llm_settings_on_get")
     llm_gateway.settings.sync_from_active_profile()
-    return llm_gateway.settings
+    return _sanitize_llm_settings_for_read(llm_gateway.settings.model_dump())
 
 
-@app.put("/llm/settings", response_model=LLMSettings)
-def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> LLMSettings:
+@app.put("/llm/settings", response_model=LLMSettingsRead)
+def update_llm_settings(
+    submitted: LLMSettingsUpdate,
+    background: BackgroundTasks,
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> LLMSettingsRead:
     """LLM 設定を更新する。必要条件を満たす場合は既存セッションのサマリーをBG再生成。"""
+    settings = _merge_preserved_api_keys(submitted)
     # バリデーション: LLM を使用する場合はモデル名が必須
     if settings.enabled and (not settings.model or not str(settings.model).strip()):
         raise HTTPException(status_code=400, detail="LLM有効時はモデル名が必須です")
@@ -1752,7 +1912,9 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
     llm_gateway.update_settings(settings)
     try:
         # DB にも保存（永続化）
-        save_llm_settings(settings.model_dump())
+        save_llm_settings(
+            sanitize_llm_settings_for_storage(settings.model_dump())
+        )
     except Exception:
         logger.exception("failed to persist llm settings")
 
@@ -1870,7 +2032,7 @@ def update_llm_settings(settings: LLMSettings, background: BackgroundTasks) -> L
     except Exception:
         logger.exception("llm_settings_post_update_check_failed")
     llm_gateway.settings.sync_from_active_profile()
-    return llm_gateway.settings
+    return _sanitize_llm_settings_for_read(llm_gateway.settings.model_dump())
 
 
 def build_markdown_lines(s: dict, rows: list[tuple[str, str]], vt_label: str) -> list[str]:
@@ -2331,7 +2493,10 @@ class LLMTestRequest(BaseModel):
 
 
 @app.post("/llm/settings/test")
-def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
+def test_llm_connection(
+    req: LLMTestRequest | None = None,
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> dict[str, str]:
     """現在の設定または指定された設定でLLM疎通テストを実行する。"""
 
     if req:
@@ -2352,7 +2517,9 @@ def test_llm_connection(req: LLMTestRequest | None = None) -> dict[str, str]:
                 key: (profile.copy(deep=True) if isinstance(profile, ProviderProfile) else ProviderProfile(**profile))
                 for key, profile in current_profiles.items()
             }
-        _apply_provider_profile_payload(temp, req.provider_profiles)
+        _apply_provider_profile_payload(
+            temp, sanitize_llm_settings_for_storage(req.provider_profiles)
+        )
         gateway = LLMGateway(temp)
         return gateway.test_connection()
     return llm_gateway.test_connection(source="manual_test")
@@ -2367,7 +2534,10 @@ class ListModelsRequest(BaseModel):
 
 
 @app.post("/llm/list-models")
-def list_llm_models(req: ListModelsRequest) -> list[str]:
+def list_llm_models(
+    req: ListModelsRequest,
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> list[str]:
     """指定された設定で利用可能なLLMモデルの一覧を返す。"""
     # リクエストから一時的な設定でゲートウェイを作成
     temp_settings = LLMSettings(
@@ -2379,7 +2549,9 @@ def list_llm_models(req: ListModelsRequest) -> list[str]:
         temperature=0,
         enabled=True,  # 有効化しないと空リストが返る
     )
-    _apply_provider_profile_payload(temp_settings, req.provider_profiles)
+    _apply_provider_profile_payload(
+        temp_settings, sanitize_llm_settings_for_storage(req.provider_profiles)
+    )
     gateway = LLMGateway(temp_settings)
     return gateway.list_models()
 
@@ -3047,6 +3219,12 @@ class LLMStatusResponse(BaseModel):
     checked_at: datetime | None = None
 
 
+class LLMAvailabilityResponse(BaseModel):
+    """患者画面でも利用できる非機密のLLM可用状態。"""
+
+    status: str
+
+
 @app.get("/system/database-status", response_model=DatabaseStatus)
 def get_database_status() -> DatabaseStatus:
     """データベースの使用状況を返す。"""
@@ -3069,7 +3247,9 @@ def get_database_status() -> DatabaseStatus:
 
 
 @app.get("/system/llm-status", response_model=LLMStatusResponse)
-def get_llm_status_snapshot() -> LLMStatusResponse:
+def get_llm_status_snapshot(
+    _admin: dict[str, Any] = Depends(require_admin_access),
+) -> LLMStatusResponse:
     """LLM 通信状態を返す。"""
 
     snapshot = llm_gateway.get_status_snapshot()
@@ -3082,6 +3262,17 @@ def get_llm_status_snapshot() -> LLMStatusResponse:
         source=snapshot.get("source"),
         checked_at=snapshot.get("checked_at"),
     )
+
+
+@app.get("/system/llm-availability", response_model=LLMAvailabilityResponse)
+def get_llm_availability() -> LLMAvailabilityResponse:
+    """秘密情報や診断詳細を含めず、患者画面に必要な状態だけを返す。"""
+
+    snapshot = llm_gateway.get_status_snapshot()
+    status = snapshot.get("status")
+    if status not in {"ok", "ng", "disabled", "pending"}:
+        status = "disabled" if not llm_gateway.settings.enabled else "pending"
+    return LLMAvailabilityResponse(status=str(status))
 
 
 # --- 管理者認証 API ---
@@ -3111,26 +3302,13 @@ class AdminAuthStatus(BaseModel):
     totp_mode: str | None = None
     # 非常用リセット用の環境変数が構成されているか
     emergency_reset_available: bool | None = None
-
-
-def _create_admin_push_access_token() -> str:
-    expires_at = datetime.now(UTC) + timedelta(minutes=ADMIN_PUSH_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode(
-        {"sub": "admin", "scope": "push:manage", "exp": expires_at},
-        SECRET_KEY,
-        algorithm=ALGORITHM,
-    )
+    is_authenticated: bool = False
 
 
 def _require_admin_push_access(authorization: str | None) -> None:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="authentication required")
-    token = authorization.split(" ", 1)[1].strip()
-    try:
-        claims = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail="invalid access token") from exc
-    if claims.get("sub") != "admin" or claims.get("scope") != "push:manage":
+    claims = _decode_admin_access_token(authorization)
+    scopes = set(str(claims.get("scope") or "").split())
+    if "push:manage" not in scopes:
         raise HTTPException(status_code=403, detail="insufficient scope")
 
 
@@ -3162,7 +3340,9 @@ class EmergencyPasswordResetRequest(BaseModel):
 
 
 @app.get("/admin/auth/status", response_model=AdminAuthStatus)
-def get_admin_auth_status() -> AdminAuthStatus:
+def get_admin_auth_status(
+    authorization: str | None = Header(default=None),
+) -> AdminAuthStatus:
     """管理者の認証状態（初期パスワードか、TOTPが有効か）を返す。"""
     admin_user = get_user_by_username("admin")
     if not admin_user:
@@ -3180,11 +3360,22 @@ def get_admin_auth_status() -> AdminAuthStatus:
     except Exception:
         is_default_now = False
 
+    authenticated = False
+    if authorization:
+        try:
+            claims = _decode_admin_access_token(authorization)
+            authenticated = "admin" in set(
+                str(claims.get("scope") or "").split()
+            )
+        except HTTPException:
+            authenticated = False
+
     result = AdminAuthStatus(
         is_initial_password=is_default_now,
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
         totp_mode=get_totp_mode("admin"),
         emergency_reset_available=bool(os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")),
+        is_authenticated=authenticated,
     )
     try:
         logging.getLogger("security").info(
@@ -3275,7 +3466,7 @@ def admin_login(payload: AdminLoginRequest) -> dict:
             pass
         return {"status": "totp_required"}
 
-    # Push購読管理専用の短期JWTを発行する。既存の画面認証方式は互換のため維持する。
+    # 管理者APIとPush購読管理で共用する短期JWTを発行する。
     try:
         logging.getLogger("security").info("admin_login_success")
     except Exception:
@@ -3283,7 +3474,7 @@ def admin_login(payload: AdminLoginRequest) -> dict:
     return {
         "status": "ok",
         "message": "Login successful",
-        "access_token": _create_admin_push_access_token(),
+        "access_token": _create_admin_access_token(),
         "token_type": "bearer",
         "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
     }
@@ -3311,7 +3502,7 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
     return {
         "status": "ok",
         "message": "Login successful",
-        "access_token": _create_admin_push_access_token(),
+        "access_token": _create_admin_access_token(),
         "token_type": "bearer",
         "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
     }

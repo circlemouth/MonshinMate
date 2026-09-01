@@ -169,16 +169,22 @@
 ※ セッションと回答は既定で CouchDB に保存される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象。環境変数 `COUCHDB_URL` を設定しない場合は従来通り SQLite に保存される。`COUCHDB_URL` に認証情報を含めない場合は、`COUCHDB_USER` と `COUCHDB_PASSWORD` を併せて設定する。CouchDB が設定されているにもかかわらず保存に失敗した場合、SQLite へは保存されずエラーとなる。サンプル `.env` では `COUCHDB_URL=http://couchdb:5984/` などが設定されており、Docker Compose で構築した CouchDB とそのまま連携できる。
 
 ## GET /llm/settings
-- 概要: 現在の LLM 設定を取得する。
+
+- 概要: 現在のLLM設定を取得する。
+- 認証: `POST /admin/login` またはTOTP完了後に受け取るJWTを `Authorization: Bearer <token>` で送る。未認証は401、管理者scopeがなければ403を返す。
 - レスポンス:
   - `provider` (str)
   - `model` (str)
   - `temperature` (float)
   - `system_prompt` (str)
   - `enabled` (bool): LLM を利用するかどうか
+  - `api_key_configured` (bool): API keyが保存済みかどうか。値そのものは返さない。
+  - `provider_profiles` (object): プロバイダ別の非機密設定。`service_account_json`、API key、認証token、秘密鍵fieldは含まれない。
 
 ## PUT /llm/settings
-- 概要: LLM 設定を更新し、保存時に疎通テストを行う。失敗時は 400 エラーを返す。
+
+- 概要: LLM設定を更新する。未認証は401、管理者scopeがなければ403を返す。
+- 認証: 管理者JWTを `Authorization: Bearer <token>` で送る。
 - リクエストボディ:
   - `provider` (str)
   - `model` (str)
@@ -186,19 +192,44 @@
   - `system_prompt` (str)
   - `enabled` (bool)
 - レスポンス:
-  - 更新後の同項目
+  - 更新後の非機密設定。読み取り応答と同じく秘密値を含まない。
+- 備考: `gcp_vertex` はApplication Default Credentialsを使う。`service_account_json` を送っても利用または保存しない。
 
 ## POST /llm/settings/test
-- 概要: LLM 接続の疎通テストを行う。管理画面では保存時に自動実行されるが、個別に呼び出すことも可能。
+
+- 概要: LLM接続の疎通テストを行う。管理画面では保存時に自動実行されるが、個別に呼び出すこともできる。
+- 認証: 管理者JWTが必要。
 - レスポンス:
   - `status` (str): 疎通状態。`ok` で成功。
+
+## GET /llm/providers
+
+- 概要: 管理画面を構成するプロバイダ情報を返す。
+- 認証: 管理者JWTが必要。
+- 備考: GCPプロバイダはJSONキーファイル入力を公開せず、ADC利用を案内する。
+
+## POST /llm/list-models
+
+- 概要: 指定したプロバイダのモデル候補を取得する。
+- 認証: 管理者JWTが必要。
+
+## GET /system/llm-status
+
+- 概要: 直近のLLM通信結果、更新契機、確認時刻を返す。
+- 認証: 管理者JWTが必要。
+
+## GET /system/llm-availability
+
+- 概要: 患者画面に必要な `status` だけを返す。
+- 認証: 不要。
+- 備考: 設定値、エラー詳細、更新契機、確認時刻は返さない。
 
 ## POST /admin/login
 - 概要: 管理画面へのログインを行う。
 - リクエストボディ:
   - `password` (str): 管理者パスワード
 - レスポンス:
-  - `{ status: "ok" }`（成功時）
+  - `{ status: "ok", access_token: "...", token_type: "bearer", expires_in: 28800 }`（成功時）
 
 ## GET /admin/password/status
 - 概要: 管理者パスワードが初期状態かどうかを確認する。

@@ -20,6 +20,8 @@ from passlib.context import CryptContext
 from cryptography.fernet import Fernet, InvalidToken
 import logging
 
+from ..llm_settings_security import sanitize_llm_settings_for_storage
+
 
 logger = logging.getLogger(__name__)
 
@@ -702,6 +704,7 @@ def get_summary_prompt(
 
 def save_llm_settings(settings: dict[str, Any], db_path: str = DEFAULT_DB_PATH) -> None:
     """LLM 設定を JSON として保存（単一行: id='global'）。"""
+    sanitized = sanitize_llm_settings_for_storage(settings)
     conn = get_conn(db_path)
     try:
         conn.execute(
@@ -710,7 +713,7 @@ def save_llm_settings(settings: dict[str, Any], db_path: str = DEFAULT_DB_PATH) 
             VALUES ('global', ?)
             ON CONFLICT(id) DO UPDATE SET json=excluded.json
             """,
-            (json.dumps(settings, ensure_ascii=False),),
+            (json.dumps(sanitized, ensure_ascii=False),),
         )
         conn.commit()
     finally:
@@ -725,7 +728,8 @@ def load_llm_settings(db_path: str = DEFAULT_DB_PATH) -> dict[str, Any] | None:
         if not row:
             return None
         try:
-            return json.loads(row["json"]) or None
+            value = json.loads(row["json"]) or None
+            return sanitize_llm_settings_for_storage(value) if value else None
         except Exception:
             return None
     finally:

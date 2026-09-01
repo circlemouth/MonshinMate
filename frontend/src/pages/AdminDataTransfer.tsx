@@ -27,6 +27,7 @@ import { FiDownload, FiUpload } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
+import { adminFetch } from '../utils/adminApi';
 
 interface SessionSummary {
   id: string;
@@ -282,7 +283,7 @@ export default function AdminDataTransfer() {
   const handleTemplateExport = async () => {
     try {
       setTemplateExporting(true);
-      const res = await fetch('/admin/questionnaires/export', {
+      const res = await adminFetch('/admin/questionnaires/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: templateExportPassword || null }),
@@ -323,7 +324,7 @@ export default function AdminDataTransfer() {
     if (templateImportPassword) formData.append('password', templateImportPassword);
     try {
       setTemplateImporting(true);
-      const res = await fetch('/admin/questionnaires/import', {
+      const res = await adminFetch('/admin/questionnaires/import', {
         method: 'POST',
         body: formData,
       });

@@ -1,10 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo } from 'react';
+import { adminFetch } from '../utils/adminApi';
 
 // APIレスポンスの型定義
 interface AuthStatus {
   is_initial_password: boolean;
   is_totp_enabled: boolean;
   emergency_reset_available?: boolean;
+  is_authenticated?: boolean;
 }
 
 // Contextが提供する値の型定義
@@ -39,11 +41,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!suppressLoading) setIsLoading(true);
     try {
       const loggedIn = sessionStorage.getItem('adminLoggedIn') === '1';
-      setIsAuthenticated(loggedIn);
-
-      const response = await fetch('/admin/auth/status');
+      const response = await adminFetch('/admin/auth/status');
       if (response.ok) {
         const data: AuthStatus = await response.json();
+        setIsAuthenticated(loggedIn && Boolean(data.is_authenticated));
         setIsInitialPassword(data.is_initial_password);
         setIsTotpEnabled(data.is_totp_enabled);
         setEmergencyResetAvailable(Boolean(data.emergency_reset_available));
