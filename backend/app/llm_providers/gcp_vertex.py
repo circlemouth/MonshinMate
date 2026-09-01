@@ -60,7 +60,7 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
             "label": "ロケーション",
             "type": "text",
             "required": True,
-            "helper": "例: us-central1 / asia-northeast1 など",
+            "helper": "Standard PayGoでGemini 3.1 Flash-Liteを使う場合は global を指定します。",
             "placeholder": _DEFAULT_LOCATION,
             "sensitive": False,
         },

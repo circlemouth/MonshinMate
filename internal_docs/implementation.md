@@ -1273,6 +1273,9 @@
   `gemini-3.5-flash` の `asia-northeast1` は単一ゾーンProvisioned Throughputに限られるため、現行locationとStandard PayGoを同時に維持できる候補はない。
 - [x] 既存設定への影響: 既存Firestore設定は書き換えない。
   新規GCPプロファイルだけは `gemini-3.1-flash-lite` と `global` を既定値にした。
+- [x] 暫定移行先: 費用を優先する移行先を `gemini-3.1-flash-lite` と `global` に固定した。
+  Cloud RunとFirestoreの `asia-northeast1` は変更対象に含めない。
+  本番のmodelとlocationの保存値は、公式情報の再確認、グローバル処理の承認、ステージング合格、明示的なGoがそろうまで更新しない。
 - [x] `thoughtSignature` 判定: 現行のVertex AI要求は `role=user` を1件送る単発呼び出しであり、model応答を後続要求へ含めない。
   そのため現行経路に保存と再送は不要と判定した。
   将来multi-turn化して `role=model`、function call、function responseを後続 `contents` へ含める場合は、Googleが返したpartの順序と署名を改変せず再送する実装とtestを必須とする。

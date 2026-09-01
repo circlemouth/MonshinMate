@@ -36,6 +36,13 @@ def _response_from_parts(parts, *, as_content_list=False):
     }
 
 
+def test_new_gcp_profile_defaults_to_lowest_cost_confirmed_successor():
+    default_profile = GcpVertexProvider().meta["default_profile"]
+
+    assert default_profile["model"] == "gemini-3.1-flash-lite"
+    assert default_profile["location"] == "global"
+
+
 def test_extract_text_returns_plain_text():
     provider = GcpVertexProvider()
     response = _response_from_parts([
