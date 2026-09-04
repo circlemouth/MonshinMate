@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { ChakraProvider } from '@chakra-ui/react';
 import { createThemeArtifacts, AccentPalette } from '../theme';
+import { loadSystemBootstrap, patchSystemBootstrap } from '../systemBootstrap';
 
 interface ThemeColorContextType {
   color: string;
@@ -11,22 +12,26 @@ interface ThemeColorContextType {
 const ThemeColorContext = createContext<ThemeColorContextType | undefined>(undefined);
 
 export function ThemeColorProvider({ children }: { children: ReactNode }) {
-  const [color, setColor] = useState('#1e88e5');
+  const [color, setColorState] = useState('#1e88e5');
 
   const artifacts = useMemo(() => createThemeArtifacts(color), [color]);
 
   useEffect(() => {
-    fetch('/system/theme-color')
-      .then((r) => r.json())
-      .then((d) => {
-        if (d?.color) setColor(d.color);
+    loadSystemBootstrap()
+      .then((settings) => {
+        setColorState(settings.theme_color);
       })
       .catch(() => {});
   }, []);
 
+  const setColor = useCallback((nextColor: string) => {
+    setColorState(nextColor);
+    patchSystemBootstrap({ theme_color: nextColor });
+  }, []);
+
   const contextValue = useMemo(
     () => ({ color, setColor, palette: artifacts.accentPalette }),
-    [color, artifacts.accentPalette]
+    [color, setColor, artifacts.accentPalette]
   );
 
   return (

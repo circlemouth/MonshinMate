@@ -2,7 +2,6 @@ import { useEffect } from 'react';
 import { VStack, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
-import { refreshLlmStatus } from '../utils/llmStatus';
 import { useNotify } from '../contexts/NotificationContext';
 
 /** LLM 追質問の要否判定待機画面。 */
@@ -37,7 +36,6 @@ export default function LlmWait() {
         },
       });
     }
-    refreshLlmStatus().catch(() => {});
     navigate('/done');
   };
 
@@ -65,7 +63,6 @@ export default function LlmWait() {
       } catch {}
       await finalize();
     }
-    refreshLlmStatus().catch(() => {});
   };
     check();
   }, [sessionId, navigate]);

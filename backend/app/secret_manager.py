@@ -90,7 +90,7 @@ def _load_secret_loader() -> Optional[Callable[[List[str], list[str] | None], Di
     return None
 
 
-_secret_loader = _load_secret_loader()
+_secret_loader: Optional[Callable[[List[str], list[str] | None], Dict[str, str]]] = None
 
 
 def load_secrets(extra_keys: list[str] | None = None) -> Dict[str, str]:
@@ -99,6 +99,9 @@ def load_secrets(extra_keys: list[str] | None = None) -> Dict[str, str]:
     settings = get_settings()
     if not settings.secret_manager.enabled:
         return {}
+    global _secret_loader
+    if _secret_loader is None:
+        _secret_loader = _load_secret_loader()
     if _secret_loader is None:
         logger.info(
             "Secret Manager が有効化されていますが、実装プラグインがロードできませんでした。"

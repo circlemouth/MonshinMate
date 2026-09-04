@@ -1,42 +1,27 @@
-import { ReactNode, useMemo, useEffect, useState } from 'react';
-import { Box, Flex, VStack, Button, Text, Spacer } from '@chakra-ui/react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
-import { LlmStatus } from '../utils/llmStatus';
+import { useMemo, useEffect } from 'react';
+import { Box, Center, Flex, VStack, Button, Text, Spacer, Spinner } from '@chakra-ui/react';
+import { Link as RouterLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useSessionCompletionWatcher } from '../hooks/useSessionCompletionWatcher';
+import { useAuth } from '../contexts/AuthContext';
 
 /**
  * 管理画面用レイアウト。
  * 左側にナビゲーションメニューを配置し、右側に各管理画面の内容を表示する。
  * 本コンポーネントはルーティング上のレイアウトとして使用されることを想定。
  */
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const current = location.pathname;
-  const [llmStatus, setLlmStatus] = useState<LlmStatus>('disabled');
+  const { isAuthenticated, isLoading } = useAuth();
 
-  useSessionCompletionWatcher();
+  useSessionCompletionWatcher(!isLoading && isAuthenticated);
 
   useEffect(() => {
-    if (!sessionStorage.getItem('adminLoggedIn')) {
+    if (!isLoading && !isAuthenticated) {
       navigate('/admin/login');
     }
-  }, [navigate]);
-
-  useEffect(() => {
-    let mounted = true;
-    const onUpdated = (e: any) => {
-      if (!mounted) return;
-      const payload = e?.detail as { status?: LlmStatus } | undefined;
-      if (!payload?.status) return;
-      setLlmStatus(payload.status);
-    };
-    window.addEventListener('llmStatusUpdated' as any, onUpdated);
-    return () => {
-      mounted = false;
-      window.removeEventListener('llmStatusUpdated' as any, onUpdated);
-    };
-  }, []);
+  }, [isAuthenticated, isLoading, navigate]);
 
   const navItems = useMemo(
     () => [
@@ -56,11 +41,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     []
   );
 
-  const logout = () => {
-    sessionStorage.removeItem('adminLoggedIn');
-    sessionStorage.removeItem('adminAccessToken');
-    navigate('/admin/login');
-  };
+  if (isLoading || !isAuthenticated) {
+    return (
+      <Center minH="50vh">
+        <Spinner size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <Flex direction="column" height="100vh">
@@ -104,7 +91,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </VStack>
         </Box>
         <Box flex="1" minW={0}>
-          {children}
+          <Outlet />
         </Box>
       </Flex>
     </Flex>

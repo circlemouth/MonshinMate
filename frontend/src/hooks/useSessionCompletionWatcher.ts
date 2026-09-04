@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNotify } from '../contexts/NotificationContext';
 
@@ -18,10 +18,12 @@ const STORAGE_KEY_PROMPTED = 'monshin.admin.desktopNotificationPrompted';
 const STORAGE_KEY_NATIVE_NOTIFICATIONS = 'monshin.admin.nativeNotificationsEnabled';
 const POLL_INTERVAL_MS = 60_000;
 
-export function useSessionCompletionWatcher() {
+export function useSessionCompletionWatcher(enabled = true) {
   const { notify } = useNotify();
   const navigate = useNavigate();
   const location = useLocation();
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
   const [nativeEnabled, setNativeEnabled] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>(() =>
     typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'unsupported',
@@ -49,13 +51,15 @@ export function useSessionCompletionWatcher() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
+
     let disposed = false;
     let pollTimer: number | undefined;
     let unsubscribeMessage: (() => void) | undefined;
     let lastSince = sessionStorage.getItem(STORAGE_KEY_LATEST) || new Date().toISOString();
 
     const openSessions = () => {
-      if (location.pathname !== '/admin/sessions') navigate('/admin/sessions');
+      if (pathnameRef.current !== '/admin/sessions') navigate('/admin/sessions');
       else window.dispatchEvent(new CustomEvent('adminSessionsRefreshRequested'));
     };
 
@@ -157,5 +161,5 @@ export function useSessionCompletionWatcher() {
       if (pollTimer !== undefined) window.clearInterval(pollTimer);
       unsubscribeMessage?.();
     };
-  }, [location.pathname, nativeEnabled, navigate, notify, permission]);
+  }, [enabled, nativeEnabled, navigate, notify, permission]);
 }

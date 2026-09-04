@@ -7,7 +7,6 @@ from __future__ import annotations
 import io
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
 from typing import Any, Mapping, Sequence, TYPE_CHECKING
 
 from reportlab.lib import colors
@@ -34,16 +33,10 @@ from .personal_info import (
     EMPTY_PLACEHOLDER as PERSONAL_INFO_EMPTY,
     NORMALIZED_EMPTY as PERSONAL_INFO_NORMALIZED,
 )
+from .pdf_layout import PDFLayoutMode
 
 if TYPE_CHECKING:  # pragma: no cover - 型チェック専用
     from .main import QuestionnaireItem
-
-
-class PDFLayoutMode(str, Enum):
-    """PDFレイアウトの切り替えモード。"""
-
-    STRUCTURED = "structured"
-    LEGACY = "legacy"
 
 
 @dataclass

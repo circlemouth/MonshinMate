@@ -18,7 +18,6 @@ RUN python -m venv /venv \
     && if [ "$ENABLE_GCP" = "1" ]; then \
          pip install --no-cache-dir \
            google-cloud-firestore \
-           google-cloud-secret-manager \
            google-cloud-storage \
            firebase-admin; \
        fi

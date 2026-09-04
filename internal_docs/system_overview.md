@@ -22,7 +22,7 @@
 4. 追加質問フェーズ `/questions` では `POST /sessions/{id}/llm-questions` → `POST /sessions/{id}/llm-answers` をまとめて呼び出し、上限に達するか LLM が質問を返さなくなるまで繰り返す。
 5. `POST /sessions/{id}/finalize` で要約を生成し、完了画面 `/done` に表示。エクスポートや管理画面から PDF/CSV/Markdown を取得可能。
 6. 管理画面 `/admin/*` からテンプレート、セッション、LLM 設定、外観設定、セキュリティ（パスワード/TOTP）、データ入出力を操作。
-7. `/metrics` で OpenMetrics テキスト、`/metrics/ui` でクライアントイベントを受け、`backend/app/logs/` 配下と SQLite `audit_logs` に監査情報を記録。
+7. `/metrics` で OpenMetrics テキストを公開し、`backend/app/logs/` 配下と SQLite `audit_logs` に監査情報を記録。
 
 ## 3. デプロイと実行環境
 - **Docker Compose（推奨）**: `docker-compose.yml` で `backend`（FastAPI/Uvicorn）、`frontend`（Nginx 配信）、`couchdb` を起動。`FRONTEND_HTTP_PORT` でホストポート変更可。
@@ -35,11 +35,12 @@
 ### 3.5 Cloud Run / Firestore 拡張
 - Cloud Run + Firestore 向けの永続化アダプタおよび Secret Manager 連携は、`private/` 配下に配置する非公開サブモジュールで提供する。
 - プライベートモジュールが提供する `FirestoreAdapter` を利用する場合は、`MONSHINMATE_FIRESTORE_ADAPTER` 環境変数に `モジュール:クラス` 形式で指定する（例: `monshinmate_cloud.firestore_adapter:FirestoreAdapter`）。
-- Secret Manager 連携を有効化する際は `MONSHINMATE_SECRET_MANAGER_ADAPTER` を設定し、プラグイン側の `load_secrets` をロードさせる。
+- Cloud Run の標準デプロイスクリプトは Secret Manager の値を Cloud Run のシークレット参照として環境変数へ注入し、アプリ起動時の Secret Manager SDK 呼び出しを行わない。ローカルや独自環境で実行時ローダーを使う場合だけ `MONSHINMATE_SECRET_MANAGER_ADAPTER` と `SECRET_MANAGER_ENABLED=1` を設定する。
 - 本リポジトリのみで運用する場合は `PERSISTENCE_BACKEND=sqlite` を既定とし、Cloud Run 向け設定値は読み込まれない。
 - Cloud Run 部署時に利用する `.env` サンプルはサブモジュール側の `.env.cloudrun.example` を参照する。
 - Firestore の `sessions`、`auditLogs`、`pushSubscriptions` は `expires_at` を TTL フィールドとして使う。既定保持期間は、確定済み問診365日、中断問診24時間、監査ログ365日、Pushトークン90日。
 - Cloud Run はリクエスト課金、最小インスタンス0、最大インスタンス数付きで配備する。予算アラートは月額3,000円の50%・80%・100%到達時と100%到達予測時に通知するが、サービスは自動停止しない。
+- Firestoreアダプタの初期化はプロセス内で冪等にし、モジュール読込時とFastAPI startup時に同じクライアント作成・管理者seedを繰り返さない。既存環境のCloud Runでは `MIGRATE_LEGACY_ASSETS_ON_STARTUP=0` とし、移行済み同梱画像をコールドスタートごとに照合しない。
 
 ## 4. バックエンド（FastAPI）
 ### 4.1 主要モジュール
@@ -50,7 +51,8 @@
 - `postal_code_lookup.py`: 郵便番号CSVのインポート、住所検索、辞書メタ情報管理。
 - `structured_context.py`: 回答値の正規化（空回答→`該当なし` など）とセッション辞書更新。
 - `llm_gateway.py`: LLM 設定の正規化、HTTP 呼び出し、状態キャッシュ、直列化ロック。
-- `pdf_renderer.py`: A4 縦構成／structured/legacy レイアウト切替、質問ツリーのフラット化、ReportLab スタイル適用。
+- `pdf_layout.py`: ReportLab 非依存のレイアウトモード定義。通常起動ではこちらだけを読み込む。
+- `pdf_renderer.py`: A4 縦構成／structured/legacy レイアウト切替、質問ツリーのフラット化、ReportLab スタイル適用。PDF要求時に遅延ロードする。
 
 ### 4.2 API グルーピング（抜粋）
 - **ヘルスチェック**: `/health`, `/healthz`, `/readyz`。
@@ -58,13 +60,13 @@
 - **テンプレート入出力**: `/admin/questionnaires/export|import`。テンプレート・LLM設定・システム設定をまとめて転送でき、エクスポート時に PBKDF2+Fernet で暗号化可。
 - **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。これらはログイン時に発行する管理者JWTを `Authorization: Bearer` で送る必要がある。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UIで未保存の `project_id` などを一時的に反映できる。Vertex AIはモデル名を手入力して疎通を確認する。
 - **LLM プロバイダメタ情報**: `/llm/providers` で利用可能なプロバイダ一覧と UI 向けメタデータを返す。`ollama` / `lm_studio` / `openai` に加えて、Vertex AI を利用する `gcp_vertex` プロバイダが常に含まれる。メタデータには追加設定項目や既定値を含め、管理画面での入力欄が自動的に構成される。
-- **システム設定**: `/system/timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。`/system/llm-status` は管理者専用であり、患者画面は詳細を含まない `/system/llm-availability` を使う。
+- **システム設定**: `/system/bootstrap|timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。`/system/bootstrap` は初期描画に必要な公開設定を永続層1読取で返す。`/system/llm-status` は管理者専用であり、患者画面から定期照会しない。
 - **郵便番号辞書**: `GET /postal-code/{postal_code}` で住所候補を返す。`GET/POST /system/postal-code-dictionary` で辞書状態確認とCSVアップロード更新を行う。
 - **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
 - **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers[/batch]`、`/sessions/{id}/finalize`。
-- **管理セッション**: `GET /admin/sessions`（フィルタ検索）、`/admin/sessions/page`（通常一覧のカーソルページング）、`/admin/sessions/completed`（Push非対応時の低頻度ポーリング）、`/admin/sessions/{id}`、旧クライアント互換の `/admin/sessions/stream`（SSE）、出力・削除 API。
+- **管理セッション**: `GET /admin/sessions`（フィルタ検索）、`/admin/sessions/page`（通常一覧のカーソルページング）、`/admin/sessions/completed`（Push非対応時の低頻度ポーリング）、`/admin/sessions/{id}`、出力・削除 API。常時接続の旧SSEは廃止した。
 - **完了通知**: 管理画面は FCM Push を優先し、設定不足または通知未許可の場合だけ画面表示中に60秒間隔でポーリングする。Push購読操作には管理者ログイン時に発行する8時間の用途限定JWTを使い、Push本文には患者情報を含めない。
-- **メトリクス**: `GET /metrics`（OpenMetrics テキスト）、`POST /metrics/ui`（UI 追跡イベント）。
+- **メトリクス**: `GET /metrics`（OpenMetrics テキスト）。利用されていなかったUIイベント送信は廃止した。
 
 ### 4.3 セッションライフサイクル
 - `POST /sessions` はテンプレ ID、回答ドラフト、最大追加質問数を返す。作成時に `METRIC_SESSIONS_CREATED` をインクリメント。
@@ -115,12 +117,11 @@
 ### 4.6 エクスポートとファイル処理
 - **セッション**: `/admin/sessions/export|import` は JSON エンベロープ（`version`, `type`, `exported_at`, `payload`）でやり取りし、オプションパスワードで PBKDF2+Fernet 暗号化。CSV/Markdown/PDF ダウンロード API を併設。
 - **テンプレート**: `/admin/questionnaires/export|import` でテンプレート・LLM設定・ブランド設定・関連画像をまとめてエクスポート。インポート時は mode=`merge|replace` を指定。
-- **PDF**: `pdf_renderer.render_session_pdf` が構造化テーブル、Followup 条件表示、個人情報ブロックを描画。施設名やレイアウトモードは `/system/pdf-layout` で設定。
+- **PDF**: `pdf_renderer.render_session_pdf` が構造化テーブル、Followup 条件表示、個人情報ブロックを描画。施設名やレイアウトモードは `/system/pdf-layout` で設定し、ReportLabはPDF出力要求時だけ読み込む。
 
 ### 4.7 ロギング・監査・メトリクス
 - Python 標準 `logging` で API ログ・LLM ログ・セキュリティログ（`security.log`）を出力。主要イベントは `audit_logs` テーブルにも記録（ユーザー変更・パスワード更新・TOTP 状態変更など）。
 - メトリクスは整数カウンタの簡易実装（Prometheus 互換書式）。追加要求があれば `prometheus_client` への置換で拡張可能。
-- `/metrics/ui` は匿名イベントを受信しログ記録（現状 DB 永続化はしていない）。
 
 ## 5. フロントエンド（React + Vite）
 ### 5.1 ルーティングと画面
@@ -128,9 +129,10 @@
 - 管理フロー: `/admin/login`（モーダル実装あり）→ `/admin/main`（ダッシュボード）→ 各種設定・データページ。
 - 管理ページ一覧: `AdminMain`, `AdminTemplates`, `AdminTemplateEditor`（コンポーネント構成）、`AdminSessions`, `AdminSessionDetail`, `AdminDataTransfer`, `AdminLlm`, `AdminPostalCode`, `AdminAppearance`, `AdminTimezone`, `AdminManual`, `AdminLicense`, `AdminLicenseDeps`, `AdminSecurity`, `AdminInitialPassword`, `AdminTotpSetup`, `AdminPasswordReset`, `LLMChat`, `LlmWait` 等。
 - すべて `App.tsx` 内の `Routes` で定義し、ヘッダー右上の「管理画面」ボタンからモーダルログインを起動。
+- 管理ページはルート単位で遅延ロードし、患者向け初期JSに管理機能を同梱しない。管理画面ボタン押下時にダッシュボードのchunkを先読みする。
 
 ### 5.2 状態管理とユーティリティ
-- **コンテキスト**: `AuthContext`（TOTP 状態と adminLoggedIn フラグ）、`NotificationContext`（Chakra Toast を患者/管理で出し分け）、`TimezoneContext`（`/system/timezone` と連動）、`LLMStatus` ユーティリティ（疎通情報の購読）。
+- **コンテキスト**: `AuthContext`（管理ルートまたはログイン操作時だけ認証状態を確認）、`NotificationContext`（Chakra Toast を患者/管理で出し分け）、`TimezoneContext` と `ThemeColorContext`（`systemBootstrap.ts` の一括設定キャッシュと連動）、`LLMStatus` ユーティリティ（管理画面の明示的な疎通確認）。
 - **保存戦略**: 患者回答はブラウザ `sessionStorage` に保存。`retryQueue.ts` でネットワーク断時の POST をキューし、`flushQueue()` がページ遷移時に再送。
 - **フォーム補助**: `utils/personalInfo` で個人情報入力（かな等）をフォーマット。`BasicInfo` は郵便番号を全角/半角数字から7桁へ正規化し、住所自動入力に失敗した場合は手入力を維持する。`QuestionnaireForm` はテンプレート JSON から Chakra コンポーネントを動的生成し、条件表示（`when`）、年齢/性別制限、複数選択、自由入力を扱う。
 - **スタイル**: `theme/` で色・タイポグラフィを定義。`FontSizeControl` と `useAutoFontSize` でロゴ・システム名称の自動縮小を実装。
@@ -138,8 +140,8 @@
 ### 5.3 通信とエラー処理
 - `fetch` ベースで API と通信。`NotificationContext` を通じてリトライ案内やエラー通知を表示。患者向け通知は画面下部（8 秒）、管理向けは右上（5 秒）。
 - LLM 追加質問画面ではすべての回答をまとめて送信し、失敗時は `postWithRetry` でキューに退避した後 `finalize` を試みる設計。`sessionStorage` に `llm_error` を保存し、バックエンドへ送っておく。
-- `metrics.ts` の `track` で UI イベントを `/metrics/ui` に送信（例: 入力検証エラー回数）。
-- 管理ダッシュボードの LLM ステータス・DB ステータスは `/system/llm-status` / `/system/database-status` をポーリングし、Chakra `Tag` で状態表示。
+- 患者フローの表示名、案内文、テーマ、タイムゾーン、ロゴ、既定テンプレートは `/system/bootstrap` を同時実行時も含めて1回だけ取得し、管理画面で保存した値はキャッシュへ即時反映する。
+- 管理ダッシュボードの LLM ステータス・DB ステータスは画面表示時に `/system/llm-status` / `/system/database-status` のスナップショットを取得し、Chakra `Tag` で状態表示する。患者画面では表示に使わない状態照会を行わない。
 
 ## 6. データストア
 ### 6.1 SQLite スキーマ（`db.py`）
@@ -162,7 +164,7 @@
 - ログ: `backend/app/logs/` に API/LLM/セキュリティログ（ローテーション付き）を生成。
 
 ## 7. セキュリティと認証
-- 管理者ユーザーは `admin` 固定。初回パスワードは `ADMIN_PASSWORD`（既定 `admin`）。`/admin/auth/status` で実際に既定パスワードと一致するかを検査し、`is_initial_password` を算出。
+- 管理者ユーザーは `admin` 固定。初回パスワードは `ADMIN_PASSWORD`（既定 `admin`）。パスワード更新と同時に永続化する `users.is_initial_password` を `/admin/auth/status` が返し、状態表示のたびにbcrypt検証を繰り返さない。
 - TOTP（二段階認証）は `AdminSecurity` 画面で有効化。`/admin/totp/setup`（QR 生成）、`/admin/totp/verify`、`/admin/totp/disable`、`/admin/totp/regenerate` を利用。モード（`off` / `reset_only` / `login_and_reset`）は `/admin/totp/mode` で制御し、`users.totp_mode` に保存。
 - 非常用リセット: `ADMIN_EMERGENCY_RESET_PASSWORD` を設定した場合、TOTP 無効時のみ `/admin/password/reset/emergency` で初期化可能。CLI からは `backend/tools/reset_admin_password.py` を使用。
 - TOTP シークレットは `TOTP_ENC_KEY` 環境変数を設定すると Fernet で暗号化保存。`backend/tools/encrypt_totp_secrets.py` が移行ツール。
@@ -178,7 +180,7 @@
 
 ## 9. 運用・監視
 - ヘルスチェック: `curl http://localhost:8001/healthz` → `{"status":"ok"}`。`/readyz` は DB 接続確認を含む。
-- LLMステータス: 管理画面は管理者JWT付きで `/system/llm-status` を参照し、患者画面は `/system/llm-availability` を参照する。管理画面から手動疎通テスト（`/llm/settings/test`）を実行できる。
+- LLMステータス: 管理画面は画面表示時または設定更新時に、管理者JWT付きで `/system/llm-status` を参照する。患者画面は別途ステータスを照会せず、実処理のフォールバックで問診を継続する。管理画面から手動疎通テスト（`/llm/settings/test`）を実行できる。
 - DB ステータス: `/system/database-status` が `sqlite` / `couchdb` / `error` を返す。管理ダッシュボードでバッジ表示。
 - バックアップ: SQLite はファイルコピー、CouchDB は `_all_dbs` ダンプ（`docker/tools/` に想定スクリプト）。エクスポート API は暗号化 ZIP での退避用途に使う。
 - ログ点検: `backend/app/logs/api.log`, `llm.log`, `security.log`。必要に応じて logrotate や外部集中管理へ転送。
@@ -187,7 +189,7 @@
 - LLM 問い合わせは同期呼び出しで、タイムアウト時は患者フローがベース問診のみで進行。追加質問が 0 件の場合でも finalize を呼び出す。
 - `/metrics` はプロセス内カウンタであり、マルチプロセスで共有されない。Gunicorn ワーカー増設時は Prometheus ライブラリへの置換が必要。
 - CouchDB 無効時はセッション回答が SQLite の JSON カラムに保存されるため、サイズ増に注意。大量データ運用時は CouchDB か PostgreSQL への移行を推奨。
-- `AuthContext.login` は現時点でダミーのままであり、実際のログインは `AdminLogin` が直接APIを呼ぶ。ログイン成功時の管理者JWTは `sessionStorage` に保持し、保護対象APIへBearer tokenとして送る。Bearer認証はCookieのようにブラウザから自動送信されないため、今回の保護対象に独立したCSRF tokenは追加していない。
+- 実際のログインは `AdminLogin` がAPIを呼ぶ。ログイン成功時の管理者JWTは `sessionStorage` に保持し、保護対象APIへBearer tokenとして送る。Bearer認証はCookieのようにブラウザから自動送信されないため、今回の保護対象に独立したCSRF tokenは追加していない。
 - `frontend` 側のルータはブラウザリロード時に `/` へ強制移動する実装のため、管理ページへ直接ブックマークするとログイン前提の導線になる。
 
 ## 11. 関連資料

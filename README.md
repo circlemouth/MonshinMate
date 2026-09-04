@@ -22,7 +22,7 @@ Dockerコンテナで簡単にセットアップできます。
 - 管理画面（設定）: タイムゾーン、施設表示名、導入文/完了文のカスタマイズ、テーマカラー、ロゴ/アイコンのアップロード、PDF レイアウト（構造化/レガシー）、既定テンプレートの切替を提供します。状態カードで DB 種別・LLM 疎通状況を表示します。
 - 二段階認証（Authenticator/TOTP）: 管理者ログインに TOTP を導入できます。TOTP シークレットの暗号化保存（`TOTP_ENC_KEY`）や非常用リセット（`ADMIN_EMERGENCY_RESET_PASSWORD`）、適用モード（off/reset_only/login_and_reset）を備えます。
 - データ永続化: 既定は SQLite。環境変数で CouchDB を有効化するとセッション/回答のみを CouchDB に保存します。
-- 運用補助: ヘルスチェック（/health, /healthz, /readyz）、メトリクス（/metrics, /metrics/ui）、監査ログ（パスワード/TOTP変更・ログイン試行）を提供します。
+- 運用補助: ヘルスチェック（/health, /healthz, /readyz）、OpenMetrics（/metrics）、監査ログ（パスワード/TOTP変更・ログイン試行）を提供します。
 
 ## システム構成
 - バックエンド: FastAPI（`backend/app/main.py`）。Uvicorn でポート `8001` を公開。
@@ -135,13 +135,13 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
   - `POST /admin/sessions/export` / `POST /admin/sessions/import`
 
 ## 主な API（抜粋）
-- ライフチェック/状態: `GET /health` `GET /healthz` `GET /readyz` `GET /metrics` `POST /metrics/ui` `GET /system/llm-status` `GET /system/database-status`
+- ライフチェック/状態: `GET /health` `GET /healthz` `GET /readyz` `GET /metrics` `GET /system/llm-status` `GET /system/database-status`
 - テンプレート: `GET /questionnaires` `POST /questionnaires` `DELETE /questionnaires/{id}` `POST /questionnaires/{id}/duplicate` `POST /questionnaires/{id}/rename` `POST /questionnaires/{id}/reset` `POST /questionnaires/default/reset` `GET /questionnaires/{id}/template`
 - プロンプト: `GET/POST /questionnaires/{id}/summary-prompt` `GET/POST /questionnaires/{id}/followup-prompt`
 - 項目画像/ロゴ: `POST /questionnaire-item-images` `DELETE /questionnaire-item-images/{filename}` `POST /system-logo` `GET /system/logo`
-- システム設定: `GET/PUT /system/timezone` `GET/PUT /system/display-name` `GET/PUT /system/entry-message` `GET/PUT /system/completion-message` `GET/PUT /system/theme-color` `GET/PUT /system/pdf-layout` `GET/PUT /system/default-questionnaire`
+- システム設定: `GET /system/bootstrap`（初期描画用の一括取得） `GET/PUT /system/timezone` `GET/PUT /system/display-name` `GET/PUT /system/entry-message` `GET/PUT /system/completion-message` `GET/PUT /system/theme-color` `GET/PUT /system/pdf-layout` `GET/PUT /system/default-questionnaire`
 - セッション: `POST /sessions` `POST /sessions/{id}/answers` `POST /sessions/{id}/llm-questions` `POST /sessions/{id}/llm-answers` `POST /sessions/{id}/finalize`
-- 管理/セッション一覧: `GET /admin/sessions`（検索クエリ: `patient_name`/`dob`/`start_date`/`end_date`） `GET /admin/sessions/{id}` `GET /admin/sessions/stream`（SSE）
+- 管理/セッション一覧: `GET /admin/sessions`（検索クエリ: `patient_name`/`dob`/`start_date`/`end_date`） `GET /admin/sessions/{id}` `GET /admin/sessions/completed`（Push非対応時の低頻度フォールバック）
 - ダウンロード/入出力: `GET /admin/sessions/{id}/download/{fmt}` `GET /admin/sessions/bulk/download/{fmt}` `POST /admin/sessions/export` `POST /admin/sessions/import`
 - 削除: `DELETE /admin/sessions/{id}` `POST /admin/sessions/bulk/delete`
 - LLM 設定/テスト: `GET/PUT /llm/settings` `POST /llm/settings/test` `POST /llm/list-models`

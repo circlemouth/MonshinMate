@@ -39,9 +39,7 @@ from fastapi.responses import StreamingResponse
 import sqlite3
 from pydantic import BaseModel, Field
 import pyotp
-import qrcode
 from jose import JWTError, jwt
-import httpx
 
 from .llm_gateway import (
     LLMGateway,
@@ -113,7 +111,7 @@ from .db import (
 from .validator import Validator
 from .session_fsm import SessionFSM
 from .structured_context import StructuredContextManager
-from .pdf_renderer import PDFLayoutMode, render_session_pdf
+from .pdf_layout import PDFLayoutMode
 from .personal_info import (
     format_lines as format_personal_info_lines,
     format_multiline as format_personal_info_multiline,
@@ -127,7 +125,14 @@ from .postal_code_lookup import (
 from .secret_manager import load_secrets
 import logging
 from logging.handlers import RotatingFileHandler
-from .notifications import SessionEventBroker
+
+
+def _render_session_pdf(*args: Any, **kwargs: Any) -> bytes:
+    """PDF機能を使う時だけReportLabを読み込み、通常起動を軽くする。"""
+
+    from .pdf_renderer import render_session_pdf
+
+    return render_session_pdf(*args, **kwargs)
 
 load_secrets()
 _settings = get_settings()
@@ -1024,7 +1029,13 @@ def make_default_followup_items() -> list[dict[str, Any]]:
 def on_startup() -> None:
     """アプリ起動時の初期化処理。DB 初期化とデフォルトテンプレ投入。"""
     init_db()
-    _migrate_legacy_assets()
+    if os.getenv("MIGRATE_LEGACY_ASSETS_ON_STARTUP", "1").lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        _migrate_legacy_assets()
     # 監査ログ（security）をファイルにも出力
     try:
         log_dir = Path(__file__).resolve().parent / "logs"
@@ -1075,27 +1086,6 @@ def on_startup() -> None:
 
     logging.basicConfig(level=logging.INFO)
     logging.getLogger(__name__).info("startup completed")
-    # 参考情報: adminユーザーの存在と初期パスワード判定を監査出力（ハッシュや平文は出さない）
-    try:
-        admin_user = get_user_by_username("admin")
-        default_pw = os.getenv("ADMIN_PASSWORD", "admin")
-        is_default_now = False
-        try:
-            if admin_user and admin_user.get("hashed_password"):
-                is_default_now = verify_password(default_pw, admin_user.get("hashed_password"))
-        except Exception:
-            is_default_now = False
-        logging.getLogger("security").info(
-            "startup_admin_status exists=%s is_initial=%s default_pw_match=%s totp_enabled=%s totp_mode=%s db=%s",
-            bool(admin_user),
-            bool(admin_user.get("is_initial_password") if admin_user else None),
-            bool(is_default_now),
-            bool(admin_user.get("is_totp_enabled") if admin_user else None),
-            (admin_user.get("totp_mode") if admin_user else None),
-            DEFAULT_DB_PATH,
-        )
-    except Exception:
-        logging.getLogger(__name__).exception("failed to log startup admin status")
     return
 
 
@@ -1113,7 +1103,6 @@ llm_gateway = LLMGateway(default_llm_settings)
 
 # メモリ上でセッションを保持する簡易ストア
 sessions: dict[str, "Session"] = {}
-session_events = SessionEventBroker()
 
 
 @app.get("/health")
@@ -2611,6 +2600,18 @@ class LogoSettings(BaseModel):
     crop: LogoCrop | None = None
 
 
+class SystemBootstrapSettings(BaseModel):
+    """初回描画に必要な公開設定を1回で返す。"""
+
+    timezone: str
+    display_name: str
+    completion_message: str
+    entry_message: str
+    theme_color: str
+    logo: LogoSettings
+    default_questionnaire_id: str
+
+
 class PostalCodeCandidate(BaseModel):
     postal_code: str
     prefecture: str
@@ -2822,6 +2823,42 @@ def get_system_logo() -> LogoSettings:
     except Exception:
         logger.exception("get_system_logo_failed")
         return LogoSettings(url=None, crop=None)
+
+
+@app.get("/system/bootstrap", response_model=SystemBootstrapSettings)
+def get_system_bootstrap() -> SystemBootstrapSettings:
+    """画面初期化用の公開設定を、永続層1読取でまとめて返す。"""
+
+    try:
+        stored = load_app_settings() or {}
+    except Exception:
+        logger.exception("get_system_bootstrap_failed")
+        stored = {}
+
+    timezone_value = str(stored.get("timezone") or DEFAULT_TIMEZONE)
+    try:
+        ZoneInfo(timezone_value)
+    except (ZoneInfoNotFoundError, ValueError):
+        timezone_value = DEFAULT_TIMEZONE
+
+    crop = None
+    crop_raw = stored.get("logo_crop")
+    if isinstance(crop_raw, dict):
+        try:
+            crop = LogoCrop(**crop_raw)
+        except Exception:
+            crop = None
+
+    logo_url = stored.get("logo_url")
+    return SystemBootstrapSettings(
+        timezone=timezone_value,
+        display_name=str(stored.get("display_name") or "問診メイト"),
+        completion_message=str(stored.get("completion_message") or "ご回答ありがとうございました。"),
+        entry_message=str(stored.get("entry_message") or "不明点があれば受付にお知らせください"),
+        theme_color=str(stored.get("theme_color") or "#1e88e5"),
+        logo=LogoSettings(url=str(logo_url) if logo_url else None, crop=crop),
+        default_questionnaire_id=str(stored.get("default_questionnaire_id") or "default"),
+    )
 
 
 @app.put("/system/logo", response_model=LogoSettings)
@@ -3178,7 +3215,7 @@ def get_patient_summary_pdf(payload: PatientSummaryPdfApiRequest, request: Reque
         raise HTTPException(status_code=404, detail="問診がありません。")
     rows, vt_label, items = build_session_rows_and_items(session)
     layout_mode, facility_name = _resolve_pdf_render_config()
-    pdf_bytes = render_session_pdf(
+    pdf_bytes = _render_session_pdf(
         session=session,
         rows=rows,
         template_items=items,
@@ -3305,6 +3342,17 @@ class AdminAuthStatus(BaseModel):
     is_authenticated: bool = False
 
 
+def _totp_mode_from_user(user: dict[str, Any] | None) -> str:
+    """取得済みユーザーからTOTPモードを判定し、DBの再読取を避ける。"""
+
+    if not user or not user.get("totp_secret"):
+        return "off"
+    mode = str(user.get("totp_mode") or "off")
+    if mode in {"off", "reset_only", "login_and_reset"}:
+        return mode
+    return "login_and_reset" if user.get("is_totp_enabled") else "off"
+
+
 def _require_admin_push_access(authorization: str | None) -> None:
     claims = _decode_admin_access_token(authorization)
     scopes = set(str(claims.get("scope") or "").split())
@@ -3347,19 +3395,6 @@ def get_admin_auth_status(
     admin_user = get_user_by_username("admin")
     if not admin_user:
         raise HTTPException(status_code=500, detail="Admin user not found")
-    # フラグの信頼性に加えて、実際に現在のパスワードが 'admin' と一致するかも検査する。
-    # これによりフラグの取り違え・移行漏れがあっても初期パスワード状態を確実に検出できる。
-    try:
-        hashed = admin_user.get("hashed_password")
-        is_default_now = False
-        if hashed:
-            # 既定初期パスワードは 'admin'。必要に応じて環境変数で上書きする設計に拡張可能。
-            # 環境変数が設定されていない場合は 'admin' を既定とする。
-            default_pw = os.getenv("ADMIN_PASSWORD", "admin")
-            is_default_now = verify_password(default_pw, hashed)
-    except Exception:
-        is_default_now = False
-
     authenticated = False
     if authorization:
         try:
@@ -3371,9 +3406,9 @@ def get_admin_auth_status(
             authenticated = False
 
     result = AdminAuthStatus(
-        is_initial_password=is_default_now,
+        is_initial_password=bool(admin_user.get("is_initial_password")),
         is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
-        totp_mode=get_totp_mode("admin"),
+        totp_mode=_totp_mode_from_user(admin_user),
         emergency_reset_available=bool(os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")),
         is_authenticated=authenticated,
     )
@@ -3448,7 +3483,7 @@ def admin_login(payload: AdminLoginRequest) -> dict:
             pass
         raise HTTPException(status_code=401, detail="パスワードが間違っています")
 
-    mode = get_totp_mode("admin")
+    mode = _totp_mode_from_user(admin_user)
     if admin_user.get("is_totp_enabled") and not admin_user.get("totp_secret"):
         # シークレットが存在しないのにフラグだけ有効な場合は自動的に無効化
         set_totp_status("admin", enabled=False)
@@ -3511,6 +3546,8 @@ def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
 @app.get("/admin/totp/setup")
 def admin_totp_setup() -> StreamingResponse:
     """TOTP設定用のQRコードを生成して返す。"""
+    import qrcode
+
     admin_user = get_user_by_username("admin")
     if not admin_user:
         raise HTTPException(status_code=500, detail="Admin user not found")
@@ -3612,7 +3649,7 @@ def request_password_reset(payload: PasswordResetRequest) -> dict:
     """TOTPを検証し、パスワードリセット用のトークンを発行する。"""
     admin_user = get_user_by_username("admin")
     # TOTPの利用モードが 'off' の場合はリセット要求不可
-    mode = get_totp_mode("admin")
+    mode = _totp_mode_from_user(admin_user)
     if not admin_user or mode == "off" or not admin_user["totp_secret"]:
         raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
 
@@ -3673,7 +3710,7 @@ def emergency_password_reset(payload: EmergencyPasswordResetRequest) -> dict:
         raise HTTPException(status_code=500, detail="Admin user not found")
 
     # TOTP が無効であることを確認
-    mode = get_totp_mode("admin")
+    mode = _totp_mode_from_user(admin_user)
     if admin_user.get("is_totp_enabled") or mode != "off":
         raise HTTPException(status_code=403, detail="Emergency reset is allowed only when TOTP is disabled")
 
@@ -4286,10 +4323,6 @@ async def finalize_session(
     logger.info("session_finalized id=%s", session_id)
     save_session(session)
     event = _build_finalize_event_from_session(session)
-    try:
-        await session_events.publish(event.dict(), event_id=event.finalized_at)
-    except Exception:
-        logger.exception("session_finalize_event_publish_failed id=%s", session_id)
     # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
     def _bg_summary_task(s: Session) -> None:
         labels = {it.id: it.label for it in s.template_items}
@@ -4384,58 +4417,6 @@ async def import_sessions_api(
         "mode": mode_value,
         "count": len(sessions_payload),
     }
-
-
-@app.get("/admin/sessions/stream")
-async def admin_session_stream(
-    request: Request,
-    since: str | None = Query(None),
-    limit: int = Query(200, ge=1, le=500),
-) -> StreamingResponse:
-    """問診完了イベントを Server-Sent Events で配信する。"""
-
-    last_event_id = request.headers.get("last-event-id")
-    since_candidate = last_event_id or since or None
-    since_dt: datetime | None = None
-    if since_candidate:
-        try:
-            since_dt = datetime.fromisoformat(since_candidate)
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_since")
-
-    backlog_messages: list[bytes] = []
-    if since_dt is not None:
-        events, _ = list_sessions_finalized_after(since_dt, limit=limit)
-        for event in events:
-            finalized = event.get("finalized_at")
-            session_id = event.get("id")
-            if not finalized or not session_id:
-                continue
-            payload = SessionFinalizeEvent(
-                id=str(session_id),
-                patient_name=event.get("patient_name"),
-                dob=event.get("dob"),
-                visit_type=event.get("visit_type"),
-                started_at=_ensure_isoformat(event.get("started_at")),
-                finalized_at=str(finalized),
-            )
-            backlog_messages.append(
-                session_events.serialize(payload.dict(), event_id=payload.finalized_at)
-            )
-
-    async def event_generator() -> Iterable[bytes]:
-        for message in backlog_messages:
-            yield message
-        stream = session_events.stream()
-        try:
-            async for message in stream:
-                if await request.is_disconnected():
-                    break
-                yield message
-        finally:
-            await stream.aclose()
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @app.get("/admin/sessions", response_model=list[SessionSummary])
@@ -4575,7 +4556,7 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
                 content = "\n".join(lines).encode("utf-8")
                 zf.writestr(f"{base}.md", content)
             elif fmt == "pdf":
-                pdf_bytes = render_session_pdf(
+                pdf_bytes = _render_session_pdf(
                     session=s,
                     rows=rows,
                     template_items=items,
@@ -4626,7 +4607,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
         )
     if fmt == "pdf":
         layout_mode, facility_name = _resolve_pdf_render_config()
-        pdf_bytes = render_session_pdf(
+        pdf_bytes = _render_session_pdf(
             session=s,
             rows=rows,
             template_items=items,
@@ -4694,23 +4675,3 @@ def metrics() -> Response:
     ]
     body = "\n".join(lines)
     return Response(content=body, media_type="text/plain; version=0.0.4")
-
-
-# --- UI メトリクス受け口（匿名・院内向け） ---
-class UiMetricEvents(BaseModel):
-    events: list[dict]
-
-
-@app.post("/metrics/ui")
-def metrics_ui(payload: UiMetricEvents) -> dict:
-    """UI 側の匿名イベントを受け取り、ログに記録する。
-
-    -個人特定情報は送らない前提。
-    - 必要に応じてファイルやDBへ積む設計に拡張可能。
-    """
-    try:
-        count = len(payload.events)
-    except Exception:
-        count = 0
-    logger.info("ui_metrics received=%d", count)
-    return {"status": "ok", "received": count}

@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
+import { loadSystemBootstrap, patchSystemBootstrap } from '../systemBootstrap';
 
 const DEFAULT_TIMEZONE = 'Asia/Tokyo';
 
@@ -41,18 +42,13 @@ export function TimezoneProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    (async () => {
-      try {
-        const r = await fetch('/system/timezone');
-        if (!r.ok) return;
-        const d = await r.json();
-        if (mounted && d?.timezone) {
-          setTimezoneState(d.timezone);
-        }
-      } catch {
+    loadSystemBootstrap()
+      .then((settings) => {
+        if (mounted) setTimezoneState(settings.timezone);
+      })
+      .catch(() => {
         // ignore network errors; fallback to default timezone
-      }
-    })();
+      });
     const handler = (event: any) => {
       if (!mounted) return;
       const tz = event?.detail;
@@ -67,11 +63,12 @@ export function TimezoneProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const setTimezone = (tz: string) => {
+  const setTimezone = useCallback((tz: string) => {
     const next = tz || DEFAULT_TIMEZONE;
     setTimezoneState(next);
+    patchSystemBootstrap({ timezone: next });
     window.dispatchEvent(new CustomEvent('systemTimezoneUpdated', { detail: next }));
-  };
+  }, []);
 
   const value = useMemo<TimezoneContextValue>(
     () => ({
@@ -80,7 +77,7 @@ export function TimezoneProvider({ children }: { children: ReactNode }) {
       formatDateTime: (iso, options) => formatWithTimezone(iso, timezone, options),
       formatDate: (iso) => formatWithTimezone(iso, timezone, { includeTime: false }),
     }),
-    [timezone]
+    [setTimezone, timezone]
   );
 
   return <TimezoneContext.Provider value={value}>{children}</TimezoneContext.Provider>;

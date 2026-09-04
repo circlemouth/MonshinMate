@@ -11,8 +11,7 @@ import {
 } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { track } from '../metrics';
-import { refreshLlmStatus } from '../utils/llmStatus';
+import { loadSystemBootstrap } from '../systemBootstrap';
 
 const VISIT_OPTIONS = [
   {
@@ -51,13 +50,9 @@ export default function Entry() {
   }, []);
 
   useEffect(() => {
-    refreshLlmStatus();
-  }, []);
-
-  useEffect(() => {
-    fetch('/system/entry-message')
-      .then((r) => r.json())
-      .then((d) => setEntryMessage(d.message || '不明点があれば受付にお知らせください'));
+    loadSystemBootstrap()
+      .then((settings) => setEntryMessage(settings.entry_message))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -74,7 +69,6 @@ export default function Entry() {
   const handleStart = () => {
     setAttempted(true);
     if (!visitType) {
-      track('validation_failed', { page: 'Entry', count: 1 });
       return;
     }
 

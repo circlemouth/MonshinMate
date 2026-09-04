@@ -56,6 +56,7 @@ import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
 import { adminFetch } from '../utils/adminApi';
 import SystemStatusCard from '../components/SystemStatusCard';
+import { loadSystemBootstrap } from '../systemBootstrap';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
 import {
@@ -338,21 +339,16 @@ export default function AdminMain() {
     setTemplatesLoading(true);
     setTemplateError(null);
     try {
-      const [tplRes, defaultRes] = await Promise.all([
+      const [tplRes, bootstrap] = await Promise.all([
         fetch('/questionnaires'),
-        fetch('/system/default-questionnaire'),
+        loadSystemBootstrap(),
       ]);
       if (!tplRes.ok) {
         throw new Error('failed to load templates');
       }
       const tplData: TemplateEntry[] = await tplRes.json();
       setTemplates(tplData || []);
-      if (defaultRes.ok) {
-        const def = await defaultRes.json();
-        setDefaultTemplateId(def?.questionnaire_id ?? null);
-      } else {
-        setDefaultTemplateId(null);
-      }
+      setDefaultTemplateId(bootstrap.default_questionnaire_id ?? null);
     } catch (err) {
       console.error(err);
       setTemplates([]);

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Container,
   VStack,
@@ -27,6 +27,10 @@ export default function AdminLogin({ inModal = false, onSuccess }: Props) {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const navigate = useNavigate();
   const { checkAuthStatus, isTotpEnabled, emergencyResetAvailable } = useAuth();
+
+  useEffect(() => {
+    if (inModal) void checkAuthStatus(true);
+  }, [checkAuthStatus, inModal]);
 
   const handleLogin = async () => {
     setError('');

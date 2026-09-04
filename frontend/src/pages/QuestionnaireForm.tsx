@@ -22,8 +22,6 @@ import {
 } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
-import { refreshLlmStatus } from '../utils/llmStatus';
-import { track } from '../metrics';
 import DateSelect from '../components/DateSelect';
 import ImageAnnotator from '../components/ImageAnnotator';
 import { useNotify } from '../contexts/NotificationContext';
@@ -217,7 +215,6 @@ export default function QuestionnaireForm() {
         },
       });
     }
-    refreshLlmStatus().catch(() => {});
     navigate('/done');
   };
 
@@ -229,7 +226,6 @@ export default function QuestionnaireForm() {
       .filter((item) => item.required)
       .filter((item) => isMissingValue(item, answers[item.id]));
     if (requiredErrors.length > 0) {
-      track('validation_failed', { page: 'Questionnaire', count: requiredErrors.length });
       return;
     }
     const flag = sessionStorage.getItem('llm_followup_enabled');

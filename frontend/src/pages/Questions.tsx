@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { VStack, Box, Input, Button, Heading, Divider } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
-import { refreshLlmStatus } from '../utils/llmStatus';
 import { useNotify } from '../contexts/NotificationContext';
 
 interface LlmQuestion { id: string; text: string }
@@ -45,7 +44,6 @@ export default function Questions() {
         },
       });
     }
-    refreshLlmStatus().catch(() => {});
     navigate('/done');
   };
 
@@ -78,7 +76,6 @@ export default function Questions() {
       sessionStorage.removeItem('pending_llm_questions');
       await finalize(answers);
     }
-    refreshLlmStatus().catch(() => {});
   };
 
   useEffect(() => {
@@ -150,7 +147,6 @@ export default function Questions() {
       sessionStorage.removeItem('pending_llm_questions');
       await finalize(merged);
     }
-    refreshLlmStatus().catch(() => {});
   };
 
   return (

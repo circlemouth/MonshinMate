@@ -14,7 +14,6 @@ import {
 } from '@chakra-ui/react';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { track } from '../metrics';
 import { useNotify } from '../contexts/NotificationContext';
 import {
   createPersonalInfoValue,
@@ -204,7 +203,6 @@ export default function BasicInfo() {
     }
 
     if (errs.length > 0) {
-      track('validation_failed', { page: 'BasicInfo', count: errs.length });
       return;
     }
 

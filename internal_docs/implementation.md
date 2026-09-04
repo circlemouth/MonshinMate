@@ -1285,3 +1285,16 @@
 - [x] 検証: `./venv/bin/python -m pytest -q backend/tests` は92件、`private/cloud-run-adapter` の `../../venv/bin/python -m pytest -q tests` は6件すべて成功した。
   `frontend` の `npm run build` はchunk size警告のみで成功し、rootとsubmoduleの `git diff --check` も成功した。
 - [ ] 本番適用: 本実装、Firestore旧fieldの削除、旧service account keyの無効化、IAM変更、モデル切替、pushを実行せず、すべて別承認待ちとした。
+
+## 151. Cloud Run不要消費の削減（2026-09-04）
+
+- [x] 本番観測（読み取り専用）: 直近7日間のCloud Runリクエストログを集計した。backend 4,569件のうち、`/system/llm-status` 1,020件、外観・初期表示設定6経路の合計1,267件、`/admin/auth/status` 244件、`/metrics/ui` 88件を確認した。これら4群で全backendリクエストの57%を占めていた。
+- [x] 初期設定取得: 表示名、導入文、完了文、テーマ、タイムゾーン、ロゴ、既定テンプレートを `GET /system/bootstrap` の永続層1読取へ集約した。フロントエンドは同時要求を共有してSPA内キャッシュを使い、管理画面の保存成功時にキャッシュを即時更新する。
+- [x] 不要な状態通信: 患者画面と共通ヘッダーから表示に使わないLLM状態照会を削除した。管理画面の必要なカードと設定画面では、表示時または明示的な更新時の状態確認を維持した。患者ルートでは `/admin/auth/status` を呼ばず、管理ルートまたはログイン操作時だけ確認する。
+- [x] 完了通知のUX維持: FCM Push、通知未許可・設定不足時の画面表示中60秒ポーリング、再送キューを維持した。管理ルート間の遷移では通知初期化をやり直さず、未認証時は完了通知を起動しない。現行フロントから未使用で直近7日間の利用もなかった旧SSEとプロセス内brokerを削除した。
+- [x] 起動処理: Firestoreアダプタ初期化を冪等化し、同一プロセス内のクライアント生成と管理者seedの二重実行を防いだ。Cloud Runでは移行済み同梱画像の起動時照合を停止し、監査表示だけの管理者読取を削除した。ReportLabはPDF出力時、qrcodeはTOTP QR生成時だけ読み込む。
+- [x] シークレット: デプロイ時に既存Secret ManagerシークレットをCloud Runの環境変数参照へ割り当て、アプリ起動時のSDK読取を無効化した。任意環境向けの実行時ローダーは遅延ロードの互換経路として残した。
+- [x] 配信量: 管理画面をルート単位で遅延ロードし、管理画面ボタン押下時にダッシュボードを先読みする。患者向け初期JSは895.81KB（gzip 289.25KB）から636.82KB（gzip 210.59KB）へ減少した。Cloud Runの最大インスタンス数は、費用を減らさず混雑時UXだけを悪化させるため変更していない。
+- [x] 検証: backend全pytest 94件、Cloud Run adapter全pytest 7件、frontend本番ビルド、GCP依存込みbackendコンテナとfrontendコンテナのビルド、shell構文、遅延import、root/submoduleの差分検査が成功した。通常importは変更前の約0.96秒・71,044KBから約0.59秒・63,648KBへ改善した。ブラウザでは患者トップから基本情報画面、管理ログインモーダル、未認証管理URLのガードを確認し、患者トップのbackend通信は `/system/bootstrap` 1件だけ、ログインモーダルの `/admin/auth/status` は1件だけだった。新規console errorはなく、既知のReact Router v7移行警告だけを確認した。
+- [x] 本番適用: Cloud Build `4135c858-8b63-4ad0-9d65-8a9ae83a2abf` で `cloudrun-prune-20260904-005051` タグのbackend/frontendイメージをArtifact Registryへpushした。backendは `monshinmate-backend-00014-449`、frontendは `monshinmate-frontend-00013-sj6` へ順番にローリング更新し、いずれもReady確認後に100%のトラフィックを切り替えた。最大インスタンス20・同時実行80を維持し、Secret Managerの旧バージョンは破棄していない。ロールバック先はbackend `monshinmate-backend-00013-pxz`、frontend `monshinmate-frontend-00012-xcl`。
+- [x] 本番確認: backendの `/health`、`/readyz`、`/system/bootstrap`、旧フロント互換の初期設定APIが正常応答し、独自ドメインのトップ、bootstrap、配信JSも200だった。実ブラウザで患者入口の表示と初診選択、管理者ログインモーダルを確認し、新規console errorは0件だった。更新開始後のbackend/frontendでHTTP 5xxおよび新リビジョンのERRORログは0件だった。

@@ -1,9 +1,8 @@
 import { Container, Heading, Box, Flex, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { flushQueue } from './retryQueue';
 import FlowProgress from './components/FlowProgress';
-import { track } from './metrics';
 import { useAuth } from './contexts/AuthContext';
 
 // Pages
@@ -13,32 +12,34 @@ import QuestionnaireForm from './pages/QuestionnaireForm';
 import Questions from './pages/Questions';
 import Done from './pages/Done';
 import AdminLogin from './pages/AdminLogin';
-import AdminTemplates from './pages/AdminTemplates';
-import AdminLlm from './pages/AdminLlm';
-import AdminSessions from './pages/AdminSessions';
-import AdminSessionDetail from './pages/AdminSessionDetail';
-import LLMChat from './pages/LLMChat';
 import LlmWait from './pages/LlmWait';
-import AdminAppearance from './pages/AdminAppearance';
-import AdminTimezone from './pages/AdminTimezone';
-import AdminManual from './pages/AdminManual';
-import AdminLicense from './pages/AdminLicense';
-import AdminLicenseDeps from './pages/AdminLicenseDeps';
-import AdminDataTransfer from './pages/AdminDataTransfer';
-import AdminInitialPassword from './pages/AdminInitialPassword';
-import AdminTotpSetup from './pages/AdminTotpSetup';
-import AdminPasswordReset from './pages/AdminPasswordReset';
-import AdminSecurity from './pages/AdminSecurity';
-import AdminMain from './pages/AdminMain';
-import AdminApi from './pages/AdminApi';
-import AdminPostalCode from './pages/AdminPostalCode';
 
 
 // Layouts
 import AdminLayout from './components/AdminLayout';
 import FontSizeControl from './components/FontSizeControl';
-import { refreshLlmStatus } from './utils/llmStatus';
 import { useAutoFontSize } from './hooks/useAutoFontSize';
+import { loadSystemBootstrap, patchSystemBootstrap } from './systemBootstrap';
+
+const loadAdminMain = () => import('./pages/AdminMain');
+const AdminMain = lazy(loadAdminMain);
+const AdminTemplates = lazy(() => import('./pages/AdminTemplates'));
+const AdminLlm = lazy(() => import('./pages/AdminLlm'));
+const AdminSessions = lazy(() => import('./pages/AdminSessions'));
+const AdminSessionDetail = lazy(() => import('./pages/AdminSessionDetail'));
+const LLMChat = lazy(() => import('./pages/LLMChat'));
+const AdminAppearance = lazy(() => import('./pages/AdminAppearance'));
+const AdminTimezone = lazy(() => import('./pages/AdminTimezone'));
+const AdminManual = lazy(() => import('./pages/AdminManual'));
+const AdminLicense = lazy(() => import('./pages/AdminLicense'));
+const AdminLicenseDeps = lazy(() => import('./pages/AdminLicenseDeps'));
+const AdminDataTransfer = lazy(() => import('./pages/AdminDataTransfer'));
+const AdminInitialPassword = lazy(() => import('./pages/AdminInitialPassword'));
+const AdminTotpSetup = lazy(() => import('./pages/AdminTotpSetup'));
+const AdminPasswordReset = lazy(() => import('./pages/AdminPasswordReset'));
+const AdminSecurity = lazy(() => import('./pages/AdminSecurity'));
+const AdminApi = lazy(() => import('./pages/AdminApi'));
+const AdminPostalCode = lazy(() => import('./pages/AdminPostalCode'));
 
 export default function App() {
   const location = useLocation();
@@ -49,10 +50,6 @@ export default function App() {
     flushQueue();
     // ページ遷移時に認証状態をチェック（セッションが切れている場合などに対応）
     // checkAuthStatus(); // AuthProvider内で初回実行済み。必要に応じて追加。
-    // 疎通チェックは初期画面（エントリ）表示時のみ行う
-    if (location.pathname === '/') {
-      refreshLlmStatus();
-    }
     // サブページをリロードした場合はトップページへリダイレクト
     try {
       const navs: any = (performance as any).getEntriesByType?.('navigation') || [];
@@ -63,14 +60,6 @@ export default function App() {
       }
     } catch {}
   }, []);
-
-  useEffect(() => {
-    track('page_view', { path: location.pathname });
-    // 疎通チェックは初期画面に戻ったときのみ行う
-    if (location.pathname === '/') {
-      refreshLlmStatus();
-    }
-  }, [location.pathname]);
 
   // 管理画面以外へ遷移したら自動的にログアウト（セッションストレージのフラグのみクリア）
   useEffect(() => {
@@ -87,27 +76,24 @@ export default function App() {
   useEffect(() => {
     const fetchName = async () => {
       try {
-        const r = await fetch('/system/display-name');
-        if (r.ok) {
-          const d = await r.json();
-          if (d?.display_name) setDisplayName(d.display_name);
-        }
-        const lr = await fetch('/system/logo');
-        if (lr.ok) {
-          const ld = await lr.json();
-          setLogo({ url: ld?.url ?? null, crop: ld?.crop ?? null });
-        }
+        const settings = await loadSystemBootstrap();
+        setDisplayName(settings.display_name);
+        setLogo(settings.logo);
       } catch {}
     };
     fetchName();
     const onUpdated = (e: any) => {
       const name = e?.detail;
-      if (typeof name === 'string' && name) setDisplayName(name);
+      if (typeof name === 'string' && name) {
+        setDisplayName(name);
+        patchSystemBootstrap({ display_name: name });
+      }
     };
     window.addEventListener('systemDisplayNameUpdated' as any, onUpdated);
     const onLogoUpdated = (e: any) => {
       const d = e?.detail || {};
       setLogo({ url: d.url ?? null, crop: d.crop ?? null });
+      patchSystemBootstrap({ logo: { url: d.url ?? null, crop: d.crop ?? null } });
     };
     window.addEventListener('systemLogoUpdated' as any, onLogoUpdated);
     return () => {
@@ -120,6 +106,7 @@ export default function App() {
 
   // 管理画面ボタン押下時にログイン用モーダルを開く
   const handleAdminClick = () => {
+    void loadAdminMain();
     if (isAuthenticated) {
       navigate('/admin/main');
     } else {
@@ -229,35 +216,39 @@ export default function App() {
 
       <Box flex="1" overflowY={isAdminPage ? 'visible' : 'auto'}>
         {!isChatPage && <FlowProgress />}
-        <Routes>
-          <Route path="/" element={<Entry />} />
-          <Route path="/basic-info" element={<BasicInfo />} />
-          <Route path="/questionnaire" element={<QuestionnaireForm />} />
-          <Route path="/llm-wait" element={<LlmWait />} />
-          <Route path="/questions" element={<Questions />} />
-          <Route path="/done" element={<Done />} />
-          <Route path="/chat" element={<LLMChat />} />
+        <Suspense fallback={<Center minH="40vh"><Spinner size="lg" /></Center>}>
+          <Routes>
+            <Route path="/" element={<Entry />} />
+            <Route path="/basic-info" element={<BasicInfo />} />
+            <Route path="/questionnaire" element={<QuestionnaireForm />} />
+            <Route path="/llm-wait" element={<LlmWait />} />
+            <Route path="/questions" element={<Questions />} />
+            <Route path="/done" element={<Done />} />
+            <Route path="/chat" element={<LLMChat />} />
 
-          {/* 管理者系 */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin/initial-password" element={<AdminInitialPassword />} />
-          <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
-          <Route path="/admin" element={<Navigate to="/admin/main" replace />} />
-          <Route path="/admin/main" element={<AdminLayout><AdminMain /></AdminLayout>} />
-          <Route path="/admin/appearance" element={<AdminLayout><AdminAppearance /></AdminLayout>} />
-          <Route path="/admin/timezone" element={<AdminLayout><AdminTimezone /></AdminLayout>} />
-          <Route path="/admin/data-transfer" element={<AdminLayout><AdminDataTransfer /></AdminLayout>} />
-          <Route path="/admin/templates" element={<AdminLayout><AdminTemplates /></AdminLayout>} />
-          <Route path="/admin/sessions" element={<AdminLayout><AdminSessions /></AdminLayout>} />
-          <Route path="/admin/sessions/:id" element={<AdminLayout><AdminSessionDetail /></AdminLayout>} />
-          <Route path="/admin/llm" element={<AdminLayout><AdminLlm /></AdminLayout>} />
-          <Route path="/admin/api" element={<AdminLayout><AdminApi /></AdminLayout>} />
-          <Route path="/admin/postal-code" element={<AdminLayout><AdminPostalCode /></AdminLayout>} />
-          <Route path="/admin/security" element={<AdminLayout><AdminSecurity /></AdminLayout>} />
-          <Route path="/admin/manual" element={<AdminLayout><AdminManual /></AdminLayout>} />
-          <Route path="/admin/license" element={<AdminLayout><AdminLicense /></AdminLayout>} />
-          <Route path="/admin/license/dependencies" element={<AdminLayout><AdminLicenseDeps /></AdminLayout>} />
-        </Routes>
+            {/* 管理者系 */}
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/initial-password" element={<AdminInitialPassword />} />
+            <Route path="/admin/password/reset" element={<AdminPasswordReset />} />
+            <Route path="/admin" element={<Navigate to="/admin/main" replace />} />
+            <Route element={<AdminLayout />}>
+              <Route path="/admin/main" element={<AdminMain />} />
+              <Route path="/admin/appearance" element={<AdminAppearance />} />
+              <Route path="/admin/timezone" element={<AdminTimezone />} />
+              <Route path="/admin/data-transfer" element={<AdminDataTransfer />} />
+              <Route path="/admin/templates" element={<AdminTemplates />} />
+              <Route path="/admin/sessions" element={<AdminSessions />} />
+              <Route path="/admin/sessions/:id" element={<AdminSessionDetail />} />
+              <Route path="/admin/llm" element={<AdminLlm />} />
+              <Route path="/admin/api" element={<AdminApi />} />
+              <Route path="/admin/postal-code" element={<AdminPostalCode />} />
+              <Route path="/admin/security" element={<AdminSecurity />} />
+              <Route path="/admin/manual" element={<AdminManual />} />
+              <Route path="/admin/license" element={<AdminLicense />} />
+              <Route path="/admin/license/dependencies" element={<AdminLicenseDeps />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </Box>
 
       {isAdditionalQuestionPage && (

@@ -42,6 +42,11 @@ import { useThemeColor } from '../contexts/ThemeColorContext';
 import { useAutoSave } from '../hooks/useAutoSave';
 import { readErrorMessage } from '../utils/http';
 import { useNotify } from '../contexts/NotificationContext';
+import {
+  DEFAULT_SYSTEM_BOOTSTRAP,
+  loadSystemBootstrap,
+  patchSystemBootstrap,
+} from '../systemBootstrap';
 
 const colorPresets = [
   { value: '#D32F2F', label: 'レッド' },
@@ -183,6 +188,7 @@ export default function AdminAppearance() {
       const data = await res.json().catch(() => ({}));
       const savedName = data.display_name || payload.display_name;
       setName(savedName);
+      patchSystemBootstrap({ display_name: savedName });
       try {
         window.dispatchEvent(new CustomEvent('systemDisplayNameUpdated', { detail: savedName }));
       } catch {
@@ -208,6 +214,7 @@ export default function AdminAppearance() {
       const data = await res.json().catch(() => ({}));
       const savedMessage = data.message || payload.message;
       setCompletionMessage(savedMessage);
+      patchSystemBootstrap({ completion_message: savedMessage });
       return savedMessage;
     },
     []
@@ -228,6 +235,7 @@ export default function AdminAppearance() {
       const data = await res.json().catch(() => ({}));
       const savedMessage = data.message || payload.message;
       setEntryMessage(savedMessage);
+      patchSystemBootstrap({ entry_message: savedMessage });
       return savedMessage;
     },
     []
@@ -254,6 +262,7 @@ export default function AdminAppearance() {
         setCustomColor(savedColor);
       }
       setColor(savedColor);
+      patchSystemBootstrap({ theme_color: savedColor });
       return savedColor;
     },
     [setColor]
@@ -275,6 +284,7 @@ export default function AdminAppearance() {
       if (!res.ok) {
         throw new Error(await readErrorMessage(res, 'ロゴの保存に失敗しました'));
       }
+      patchSystemBootstrap({ logo: config });
       try {
         window.dispatchEvent(new CustomEvent('systemLogoUpdated', { detail: config }));
       } catch {
@@ -378,71 +388,32 @@ export default function AdminAppearance() {
   });
   useEffect(() => {
     let canceled = false;
-    const load = async () => {
-      try {
-        const res = await fetch('/system/display-name');
+    loadSystemBootstrap()
+      .catch(() => DEFAULT_SYSTEM_BOOTSTRAP)
+      .then((settings) => {
         if (canceled) return;
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const initial = data.display_name || '問診メイト';
-          setName(initial);
-          markNameSynced(initial);
-        } else {
-          throw new Error();
-        }
-      } catch {
-        if (!canceled) {
-          const fallback = '問診メイト';
-          setName(fallback);
-          markNameSynced(fallback);
-        }
-      }
+        setName(settings.display_name);
+        markNameSynced(settings.display_name);
+        setCompletionMessage(settings.completion_message);
+        markCompletionSynced(settings.completion_message);
+        setEntryMessage(settings.entry_message);
+        markEntrySynced(settings.entry_message);
 
-      try {
-        const res = await fetch('/system/completion-message');
-        if (canceled) return;
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const initial = data.message || 'ご回答ありがとうございました。';
-          setCompletionMessage(initial);
-          markCompletionSynced(initial);
-        } else {
-          throw new Error();
-        }
-      } catch {
-        if (!canceled) {
-          const fallback = 'ご回答ありがとうございました。';
-          setCompletionMessage(fallback);
-          markCompletionSynced(fallback);
-        }
-      }
-
-      try {
-        const res = await fetch('/system/entry-message');
-        if (canceled) return;
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const initial = data.message || '不明点があれば受付にお知らせください';
-          setEntryMessage(initial);
-          markEntrySynced(initial);
-        } else {
-          throw new Error();
-        }
-      } catch {
-        if (!canceled) {
-          const fallback = '不明点があれば受付にお知らせください';
-          setEntryMessage(fallback);
-          markEntrySynced(fallback);
-        }
-      }
-
-    };
-
-    load();
+        const nextCrop = {
+          x: settings.logo.crop?.x ?? defaultCropState.x,
+          y: settings.logo.crop?.y ?? defaultCropState.y,
+          w: settings.logo.crop?.w ?? defaultCropState.w,
+          h: settings.logo.crop?.h ?? defaultCropState.h,
+        };
+        setLogoUrl(settings.logo.url);
+        setCrop(nextCrop);
+        markLogoSynced({ url: settings.logo.url, crop: nextCrop });
+        setLogoLoaded(true);
+      });
     return () => {
       canceled = true;
     };
-  }, [markNameSynced, markCompletionSynced, markEntrySynced]);
+  }, [markNameSynced, markCompletionSynced, markEntrySynced, markLogoSynced]);
 
   useEffect(() => {
     const nextColor = color || '#1976D2';
@@ -454,45 +425,6 @@ export default function AdminAppearance() {
     }
     markColorSynced(nextColor);
   }, [color, markColorSynced]);
-
-  useEffect(() => {
-    let canceled = false;
-    (async () => {
-      try {
-        const res = await fetch('/system/logo');
-        if (canceled) return;
-        if (res.ok) {
-          const data = await res.json().catch(() => ({}));
-          const nextUrl = typeof data?.url === 'string' ? data.url : null;
-          const nextCrop = {
-            x: data?.crop?.x ?? defaultCropState.x,
-            y: data?.crop?.y ?? defaultCropState.y,
-            w: data?.crop?.w ?? defaultCropState.w,
-            h: data?.crop?.h ?? defaultCropState.h,
-          };
-          setLogoUrl(nextUrl);
-          setCrop(nextCrop);
-          markLogoSynced({ url: nextUrl, crop: nextCrop });
-        } else {
-          throw new Error();
-        }
-      } catch {
-        if (!canceled) {
-          const fallbackCrop = { ...defaultCropState };
-          setLogoUrl(null);
-          setCrop(fallbackCrop);
-          markLogoSynced({ url: null, crop: fallbackCrop });
-        }
-      } finally {
-        if (!canceled) {
-          setLogoLoaded(true);
-        }
-      }
-    })();
-    return () => {
-      canceled = true;
-    };
-  }, [markLogoSynced]);
 
   useEffect(() => {
     if (!logoUrl) {
@@ -635,6 +567,7 @@ export default function AdminAppearance() {
         throw new Error(await readErrorMessage(res, 'ロゴの保存に失敗しました'));
       }
       markLogoSynced({ url, crop: defaultCrop });
+      patchSystemBootstrap({ logo: { url, crop: defaultCrop } });
       try {
         window.dispatchEvent(new CustomEvent('systemLogoUpdated', { detail: { url, crop: defaultCrop } }));
       } catch {

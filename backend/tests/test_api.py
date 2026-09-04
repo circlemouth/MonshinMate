@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+import app.main as main_module  # type: ignore[import]
 from app.main import (  # type: ignore[import]
     PATIENT_SUMMARY_RATE_LIMIT,
     SessionCreateRequest,
@@ -37,6 +38,43 @@ client = TestClient(app)
 
 def _admin_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {_create_admin_access_token()}"}
+
+
+def test_system_bootstrap_aggregates_settings_with_one_storage_read(monkeypatch) -> None:
+    calls = 0
+
+    def load_settings_once() -> dict:
+        nonlocal calls
+        calls += 1
+        return {
+            "timezone": "Asia/Tokyo",
+            "display_name": "統合表示名",
+            "completion_message": "完了しました",
+            "entry_message": "受付へお声がけください",
+            "theme_color": "#123456",
+            "logo_url": "/system-logo/test.png",
+            "logo_crop": {"x": 0.1, "y": 0.2, "w": 0.7, "h": 0.6},
+            "default_questionnaire_id": "clinic-default",
+        }
+
+    monkeypatch.setattr(main_module, "load_app_settings", load_settings_once)
+
+    response = client.get("/system/bootstrap")
+
+    assert response.status_code == 200
+    assert calls == 1
+    assert response.json() == {
+        "timezone": "Asia/Tokyo",
+        "display_name": "統合表示名",
+        "completion_message": "完了しました",
+        "entry_message": "受付へお声がけください",
+        "theme_color": "#123456",
+        "logo": {
+            "url": "/system-logo/test.png",
+            "crop": {"x": 0.1, "y": 0.2, "w": 0.7, "h": 0.6},
+        },
+        "default_questionnaire_id": "clinic-default",
+    }
 
 
 def _create_finalized_patient_summary_session(

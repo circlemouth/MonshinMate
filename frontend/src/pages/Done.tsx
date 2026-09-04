@@ -2,6 +2,7 @@ import { VStack, Box, Button, Center, useDisclosure } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopErrorModal from '../components/TopErrorModal';
+import { loadSystemBootstrap } from '../systemBootstrap';
 
 /** 完了メッセージのみを表示するページ（要約や印刷は非表示）。 */
 export default function Done() {
@@ -13,11 +14,8 @@ export default function Done() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch('/system/completion-message');
-        if (r.ok) {
-          const d = await r.json();
-          if (d?.message) setMessage(d.message);
-        }
+        const settings = await loadSystemBootstrap();
+        setMessage(settings.completion_message);
       } catch {}
     };
     load();
