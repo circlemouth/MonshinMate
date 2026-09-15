@@ -1298,3 +1298,22 @@
 - [x] 検証: backend全pytest 94件、Cloud Run adapter全pytest 7件、frontend本番ビルド、GCP依存込みbackendコンテナとfrontendコンテナのビルド、shell構文、遅延import、root/submoduleの差分検査が成功した。通常importは変更前の約0.96秒・71,044KBから約0.59秒・63,648KBへ改善した。ブラウザでは患者トップから基本情報画面、管理ログインモーダル、未認証管理URLのガードを確認し、患者トップのbackend通信は `/system/bootstrap` 1件だけ、ログインモーダルの `/admin/auth/status` は1件だけだった。新規console errorはなく、既知のReact Router v7移行警告だけを確認した。
 - [x] 本番適用: Cloud Build `4135c858-8b63-4ad0-9d65-8a9ae83a2abf` で `cloudrun-prune-20260904-005051` タグのbackend/frontendイメージをArtifact Registryへpushした。backendは `monshinmate-backend-00014-449`、frontendは `monshinmate-frontend-00013-sj6` へ順番にローリング更新し、いずれもReady確認後に100%のトラフィックを切り替えた。最大インスタンス20・同時実行80を維持し、Secret Managerの旧バージョンは破棄していない。ロールバック先はbackend `monshinmate-backend-00013-pxz`、frontend `monshinmate-frontend-00012-xcl`。
 - [x] 本番確認: backendの `/health`、`/readyz`、`/system/bootstrap`、旧フロント互換の初期設定APIが正常応答し、独自ドメインのトップ、bootstrap、配信JSも200だった。実ブラウザで患者入口の表示と初診選択、管理者ログインモーダルを確認し、新規console errorは0件だった。更新開始後のbackend/frontendでHTTP 5xxおよび新リビジョンのERRORログは0件だった。
+
+
+## 152. mainへのブランチ統合（2026-09-16）
+
+- [x] 差分確認: 親リポジトリの `origin/main` 以降の7コミットを確認した。
+  問診履歴連携、課金抑制、LLM設定保護、Cloud Run負荷削減と関連記録を有用と判断し、現在の `7d2bb79` までを履歴を保ったままmainへ統合した。
+- [x] サブモジュール: `private/cloud-run-adapter` のmainも `7f6b86a` までfast-forwardした。
+  `clinic-hermes-read-integration` を含む作業ブランチは、すべてこのコミットの祖先であり、未統合の変更はない。
+- [x] 本番照合: Cloud Runを読み取り専用で確認し、backend `monshinmate-backend-00014-449` とfrontend `monshinmate-frontend-00013-sj6` に100%のトラフィックが割り当てられていることを確認した。
+  両イメージのタグは `cloudrun-prune-20260904-005051` で、151節の適用記録と一致した。
+  150節の「本実装の本番適用待ち」は当時の記録であり、後続の151節で実装を含むデプロイが実施されている。
+  モデル保存値の切替や旧資格情報の削除については、今回確認も変更もしていない。
+- [x] 検証: backendのpytestは94件、Cloud Run adapterは7件成功した。
+  APIテストはhttpxベースのTestClientで実行した。
+  frontendの本番ビルドと両リポジトリの `git diff --check` も成功した。
+  既存の非推奨警告と500kB超のchunk警告は残る。
+  今回はアプリのコードを変更せず、ブラウザ回帰確認とCouchDB実環境試験は再実行していない。
+- [x] 整理方針: 両リポジトリのmainをリモートへ反映してから、mainに包含される作業ブランチだけをローカルとリモートから削除する。
+  本番デプロイ、環境変数、シークレットの変更は行わない。
