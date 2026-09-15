@@ -82,9 +82,10 @@
 - **追加質問生成**: `SessionFSM.next_questions()` → `LLMGateway.generate_followups()` を呼び出し、セッション ID 単位でロック。  
   - `provider="ollama"`: `POST {base_url}/api/chat` に `format` で JSON Schema（配列）を渡し、`message.content` または `response` の文字列を `json.loads`。
   - `provider="lm_studio"`（OpenAI 互換）: `POST {base_url}/v1/chat/completions` に `response_format.json_schema` を指定し、`choices[0].message.content` の文字列 JSON をパース。
-  - `provider="gcp_vertex"`: `POST https://{location}-aiplatform.googleapis.com/v1/projects/{project}/locations/{location}/publishers/google/models/{model}:generateContent` でGeminiを呼び出す。`location=global` の場合は `https://aiplatform.googleapis.com` を使う。認証はADCだけを使い、Cloud Runでは割り当てたサービスアカウントが資格情報になる。JSONキーファイルの入力、保存、利用は行わない。
+  - `provider="gcp_vertex"`: `generateContent` でGeminiを呼び出す。`location=global` では `https://aiplatform.googleapis.com`、マルチリージョンの `us` と `eu` では `https://aiplatform.{location}.rep.googleapis.com`、個別リージョンでは `https://{location}-aiplatform.googleapis.com` を使う。認証はADCだけを使い、Cloud Runでは割り当てたサービスアカウントが資格情報になる。JSONキーファイルの入力、保存、利用は行わない。
   - Vertex AIの各呼び出しは、`contents` に1件の `role=user` だけを入れる単発要求である。モデル応答を次の要求へ含めず、function callは応答の構造化データとして終端処理する。この構造では `thoughtSignature` を再送する後続要求が存在しない。将来、`role=model` の応答またはfunction responseを次の `contents` へ追加する場合は、応答partを順序と署名を変えずに保存して再送する実装が必要になる。
-  - Gemini 3系ではサンプリング温度を送らず、モデル既定値を使う。最大出力tokenは設定値を32から65,536へ制限し、HTTPタイムアウトは5秒から120秒へ制限する。構造化JSONの `responseMimeType` と `responseSchema`、function call引数の抽出は従来どおり維持する。
+  - Gemini 3系ではサンプリング温度を送らず、モデル既定値を使う。最大出力tokenは設定値を32から65,536へ制限し、HTTPタイムアウトは5秒から120秒へ制限する。追質問、単一質問、要約、管理者チャットは `responseMimeType=application/json` と用途別の固定 `responseSchema` を送る。Grounding用の `tools` は送らない。
+  - 本番はVertex AIのrequest-response loggingとプロジェクト単位のインメモリキャッシュを無効にする。Interactions APIは使わず、単発の `generateContent` だけを使う。Google側の不正利用監視によるprompt loggingの除外は別途の申請が必要であるため、この設定だけでGoogle側の保持を0とは保証しない。
   - パース失敗・HTTP エラー時は警告ログとともにスタブへフォールバックし、追加質問フェーズを即終了（空配列）。成功時は `llm_question_texts` に記録し `llm_1..n` の ID を採番。
 - **単一項目用フォールバック質問**: `generate_question()` は未回答項目向けに個別問い合わせを行う実装で、同様に Ollama / LM Studio のチャット API を呼び分ける。失敗時・ローカルモードではスタブの汎用質問を返す（現行フローでは未使用だが残置）。
 - **サマリー生成**: `summarize_with_prompt()` がリモート LLM に同様のチャットリクエストを送信。失敗時は `summarize()` の簡易結合文にフォールバック。バックエンドで `summary_prompts` に保存されたプロンプトを使用し、UI から有効化フラグを制御。
@@ -101,7 +102,9 @@
 - `gemini-3.5-flash`：GA。モデル提供地域には `asia-northeast1` が含まれるが、同リージョンでは単一ゾーンProvisioned Throughputだけを利用できる。Standard PayGoは `global`、`us`、`eu` に限られる。GlobalのStandard料金は入力100万tokenあたり1.50米ドル、テキスト出力100万tokenあたり9.00米ドルである。
 
 現行の `asia-northeast1` とStandard PayGoを同時に維持できる候補は確認できなかった。
-本番設定はこのリポジトリ変更では上書きしない。
+本番環境は2026年9月16日の承認により、`gemini-3.1-flash-lite` と `us` へ移行する。
+アプリは `asia-northeast1`、FirestoreとGCSは `asia-northeast2` に配置されている。
+この分離により、保存先は日本のままだが、Geminiに送るデータの機械学習処理は米国マルチリージョンで行われる。
 新規環境で生成するGCPプロファイルだけは、確認済みGAモデルの `gemini-3.1-flash-lite` と `global` を既定値にする。
 保存済みプロファイルがある既存環境では、そのmodelとlocationを継続して読み込む。
 

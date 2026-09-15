@@ -60,7 +60,7 @@ GCP_VERTEX_PROVIDER_META: dict[str, Any] = {
             "label": "ロケーション",
             "type": "text",
             "required": True,
-            "helper": "Standard PayGoでGemini 3.1 Flash-Liteを使う場合は global を指定します。",
+            "helper": "global、us、euのどれかを指定します。usとeuはマルチリージョンです。",
             "placeholder": _DEFAULT_LOCATION,
             "sensitive": False,
         },
@@ -135,6 +135,8 @@ class GcpVertexProvider:
         location = profile.get("location") or _DEFAULT_LOCATION
         if location == "global":
             return "https://aiplatform.googleapis.com"
+        if location in {"us", "eu"}:
+            return f"https://aiplatform.{location}.rep.googleapis.com"
         return f"https://{location}-aiplatform.googleapis.com"
 
     def _build_model_path(self, profile: dict[str, Any], *, model: str | None = None) -> str:
@@ -215,8 +217,13 @@ class GcpVertexProvider:
                 }
             ],
             "generationConfig": {
-                "maxOutputTokens": 1,
-                "temperature": 0.0,
+                "maxOutputTokens": 32,
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {"ok": {"type": "BOOLEAN"}},
+                    "required": ["ok"],
+                },
             },
         }
         url = f"{base_url}/v1/{model_path}:generateContent"
@@ -300,6 +307,21 @@ class GcpVertexProvider:
             return serialized
 
         return None
+
+    @staticmethod
+    def _extract_schema_string(raw: str, field: str) -> str:
+        """JSON Schemaで強制した文字列fieldを安全に取り出す。"""
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("Vertex AI structured response is invalid") from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError("Vertex AI structured response is invalid")
+        value = parsed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise RuntimeError("Vertex AI structured response is invalid")
+        return value.strip()
 
     def _build_generation_payload(
         self,
@@ -414,12 +436,19 @@ class GcpVertexProvider:
         if context:
             details.append(f"補足情報: {json.dumps(context, ensure_ascii=False)}")
         text = prompt + "\n" + "\n".join(details)
-        return self._generate_text(
+        response_text = self._generate_text(
             settings,
             profile,
             user_parts=[{"text": text}],
             max_tokens=256,
+            response_mime_type="application/json",
+            response_schema={
+                "type": "OBJECT",
+                "properties": {"question": {"type": "STRING"}},
+                "required": ["question"],
+            },
         )
+        return self._extract_schema_string(response_text, "question")
 
     def generate_followups(
         self,
@@ -519,11 +548,18 @@ class GcpVertexProvider:
         profile: dict[str, Any],
         message: str,
     ) -> str:
-        return self._generate_text(
+        response_text = self._generate_text(
             settings,
             profile,
             user_parts=[{"text": str(message)}],
+            response_mime_type="application/json",
+            response_schema={
+                "type": "OBJECT",
+                "properties": {"reply": {"type": "STRING"}},
+                "required": ["reply"],
+            },
         )
+        return self._extract_schema_string(response_text, "reply")
 
     def summarize_with_prompt(
         self,
@@ -540,8 +576,15 @@ class GcpVertexProvider:
             "answers": answers,
             "labels": labels or {},
         }, ensure_ascii=False)
-        return self._generate_text(
+        response_text = self._generate_text(
             settings,
             profile,
             user_parts=[{"text": f"{summary_prompt}\n\nデータ: {payload}"}],
+            response_mime_type="application/json",
+            response_schema={
+                "type": "OBJECT",
+                "properties": {"summary": {"type": "STRING"}},
+                "required": ["summary"],
+            },
         )
+        return self._extract_schema_string(response_text, "summary")

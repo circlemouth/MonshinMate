@@ -208,6 +208,20 @@ def test_confirmed_successor_model_ids_build_expected_global_path(model):
     )
 
 
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        ("us", "https://aiplatform.us.rep.googleapis.com"),
+        ("eu", "https://aiplatform.eu.rep.googleapis.com"),
+        ("asia-northeast1", "https://asia-northeast1-aiplatform.googleapis.com"),
+    ],
+)
+def test_build_base_url_supports_multi_region_and_regional_endpoints(location, expected):
+    provider = GcpVertexProvider()
+
+    assert provider._build_base_url({"location": location}) == expected
+
+
 def test_gemini_3_payload_is_single_turn_and_omits_sampling_temperature():
     provider = GcpVertexProvider()
     settings = SimpleNamespace(
@@ -233,6 +247,7 @@ def test_gemini_3_payload_is_single_turn_and_omits_sampling_temperature():
     assert "temperature" not in payload["generationConfig"]
     assert payload["generationConfig"]["responseMimeType"] == "application/json"
     assert "thoughtSignature" not in json.dumps(payload)
+    assert "tools" not in payload
 
 
 def test_response_metadata_log_does_not_include_thought_signature(caplog):
@@ -269,3 +284,74 @@ def test_generate_followups_does_not_force_constant_max_tokens():
 
     assert result == []
     assert captured["max_tokens"] is None
+
+
+@pytest.mark.parametrize(
+    ("method_name", "response_field", "expected"),
+    [
+        ("generate_question", "question", "痛みはいつからですか？"),
+        ("chat", "reply", "承知しました。"),
+        ("summarize_with_prompt", "summary", "腹痛の問診要約です。"),
+    ],
+)
+def test_text_methods_require_fixed_json_schema(method_name, response_field, expected):
+    provider = GcpVertexProvider()
+    settings = SimpleNamespace(temperature=0.2, system_prompt="")
+    captured: dict[str, Any] = {}
+
+    def fake_generate_text(
+        self,
+        settings,
+        profile,
+        *,
+        user_parts,
+        max_tokens=None,
+        response_mime_type=None,
+        response_schema=None,
+    ):
+        captured["response_mime_type"] = response_mime_type
+        captured["response_schema"] = response_schema
+        return json.dumps({response_field: expected}, ensure_ascii=False)
+
+    provider._generate_text = MethodType(fake_generate_text, provider)
+    profile = {"project_id": "dummy", "location": "us", "model": "gemini-3.1-flash-lite"}
+
+    if method_name == "generate_question":
+        result = provider.generate_question(settings, profile, "pain", "痛み", {})
+    elif method_name == "chat":
+        result = provider.chat(settings, profile, "test")
+    else:
+        result = provider.summarize_with_prompt(settings, profile, "", {"pain": "yes"})
+
+    assert result == expected
+    assert captured["response_mime_type"] == "application/json"
+    assert captured["response_schema"] == {
+        "type": "OBJECT",
+        "properties": {response_field: {"type": "STRING"}},
+        "required": [response_field],
+    }
+
+
+def test_test_connection_uses_schema_without_tools(monkeypatch):
+    provider = GcpVertexProvider()
+    settings = SimpleNamespace(temperature=0.2, system_prompt="")
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(provider, "_get_auth_headers", lambda profile: {"Authorization": "Bearer test"})
+
+    def fake_request(method, url, headers, json_payload=None, timeout_seconds=30.0):
+        captured["payload"] = json_payload
+        return httpx.Response(200, json={})
+
+    monkeypatch.setattr(provider, "_perform_request", fake_request)
+
+    result = provider.test_connection(
+        settings,
+        {"project_id": "dummy", "location": "us", "model": "gemini-3.1-flash-lite"},
+    )
+
+    generation_config = captured["payload"]["generationConfig"]
+    assert result["status"] == "ok"
+    assert generation_config["responseMimeType"] == "application/json"
+    assert generation_config["responseSchema"]["required"] == ["ok"]
+    assert "tools" not in captured["payload"]

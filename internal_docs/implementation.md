@@ -1320,3 +1320,32 @@
   今回はアプリのコードを変更せず、ブラウザ回帰確認とCouchDB実環境試験は再実行していない。
 - [x] 整理方針: 両リポジトリのmainをリモートへ反映してから、mainに包含される作業ブランチだけをローカルとリモートから削除する。
   本番デプロイ、環境変数、シークレットの変更は行わない。
+
+## 153. Vertex AI本番移行とSecret Manager世代整理（2026-09-16）
+
+- [x] 公式仕様確認: `gemini-3.1-flash-lite` がGAであり、`us` と `eu` のマルチリージョンで利用できることを確認した。
+  両マルチリージョンは同じNon-global単価のため、承認済みの優先順位に従って `us` を選択した。
+- [x] エンドポイント修正: `us` と `eu` に地域用hostnameを適用する実装ではVertex AIが `Invalid hostname` を返した。
+  マルチリージョン専用の `aiplatform.us.rep.googleapis.com` と `aiplatform.eu.rep.googleapis.com` を使うよう修正した。
+- [x] 出力と外部参照: 追質問に加え、単一質問、要約、管理者チャット、疎通確認にも用途別の固定JSON Schemaを適用した。
+  Groundingの `tools`、Interactions API、セッション再開は使用しない。
+- [x] 医療者判断: 本番の共通プロンプトに、診断と治療方針の最終判断は医療者が行うことと、患者へ診断の断定や治療指示を直接提示しないことを追加した。
+- [x] データ保持抑制: `gemini-3.1-flash-lite` のrequest-response loggingを無効化し、プロジェク単位のインメモリキャッシュは `disableCache=true` を確認した。
+  Google側の不正利用監視によるprompt loggingは別途の除外申請が必要なため、保持が完全に0とは判定していない。
+- [x] 本番適用: Cloud Build `b1fa8c09-6191-4974-9825-30caa1680bc8` で `vertex-us-20260916-0605` イメージを作成した。
+  backend `monshinmate-backend-vertex-us-0916` へ100%のトラフィックを切り替え、Firestoreの保存値を `gemini-3.1-flash-lite` と `us` へ更新した。
+  Cloud Runの配置は `asia-northeast1` から変更していない。
+- [x] 本番検証: Cloud Runの実行サービスアカウントによる疎通確認は `ok`、固定Schemaを使う合成チャットも成功した。
+  backendの `/health` と `/readyz` は200であり、新revisionのERRORログは0件だった。
+- [x] Secret Manager監査: 課金対象の有効または無効バージョンが61世代残っていた。
+  `monshinmate-secret-key`、`monshinmate-totp-enc-key`、`monshinmate-admin-emergency-reset-password` はそれぞれ最新2世代を残し、合51世代を破棄した。
+  整理後の課金対象は全6シークレットの合計10世代である。
+- [x] Secret Manager再発防止: `set -e` 下で後置インクリメントが失敗扱いとなり、旧世代の破棄前に自動整理処理が終了していた。
+  前置インクリメントへ変更し、最新2世代を保持する処理が完走することを本番整理で確認した。
+- [x] 検証: backendのpytestは101件、Cloud Run adapterは7件成功した。
+  frontendの本番ビルドも成功し、既知のchunk size警告だけが残った。
+- [ ] 未解決: 「患者直接アクセスは原則成人のみ」は、現行の匿名患者フローと一致しない。
+  18歳未満を一律に停止するのか、保護者同意などの例外を設けるのかが未定義のため、年齢制限は本番に適用していない。
+- [ ] 配置の不一致: Cloud Runは `asia-northeast1` だが、本番FirestoreとGCSバケットはどちらも `asia-northeast2` である。
+  Firestoreの既存データベースはlocationをその場で変更できないため、`asia-northeast1` への統一には新DBと新バケットへのデータ移行と切替手順が必要である。
+  モデル設定変更の範囲を超えるため、今回は配置変更を行っていない。
