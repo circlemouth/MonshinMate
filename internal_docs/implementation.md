@@ -1305,7 +1305,10 @@
 - [x] 差分確認: 親リポジトリの `origin/main` 以降の7コミットを確認した。
   問診履歴連携、課金抑制、LLM設定保護、Cloud Run負荷削減と関連記録を有用と判断し、現在の `7d2bb79` までを履歴を保ったままmainへ統合した。
 - [x] サブモジュール: `private/cloud-run-adapter` のmainも `7f6b86a` までfast-forwardした。
-  `clinic-hermes-read-integration` を含む作業ブランチは、すべてこのコミットの祖先であり、未統合の変更はない。
+  最終確認で `clinic-hermes-read-integration` の1コミットは別系統と判明した。
+  現行の氏名索引と完全一致照合を維持し、旧来の100件打切り処理と不要な正規化fieldは採用しない。
+  既存Cloud Runへの環境変数注入に加え、互換用Secret Managerローダーの `PATIENT_SUMMARY_API_KEY` 読込だけを取り込んだ。
+  旧ブランチの履歴は選択的なmergeで保持する。
 - [x] 本番照合: Cloud Runを読み取り専用で確認し、backend `monshinmate-backend-00014-449` とfrontend `monshinmate-frontend-00013-sj6` に100%のトラフィックが割り当てられていることを確認した。
   両イメージのタグは `cloudrun-prune-20260904-005051` で、151節の適用記録と一致した。
   150節の「本実装の本番適用待ち」は当時の記録であり、後続の151節で実装を含むデプロイが実施されている。
