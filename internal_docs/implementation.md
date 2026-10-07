@@ -1,6 +1,17 @@
 # 実装履歴と判断メモ
 
-## 最新追補：承認済み更新の準備
+## 最新追補：build・既存保護状態・運用者手順の検証
+
+以下は切替前の経過記録。アプリ版 `177543e` はcommit/pushとCloud Build成功まで完了し、本番trafficはまだ旧版を維持している。
+
+- [x] BuildKitを明示し、private backend contextのignore互換問題を修正。immutable imageの隔離ローカルAPI検証18件成功（合成password-only login/proxy/CORS/保守を含む）。実データ・実鍵は合成環境へ持ち込まない。
+- [x] 既存管理者の読取preflightが保護状態で拒否。ユーザーの既存画面による解除もサーバーエラーとなったため、保守停止・バックアップ・復元確認後のOTPだけのオフライン解除について追加承認を得た。パスワードと鍵は変更しない。
+- [x] private側に厳格なtransaction付き解除CLIとmetadata-only assets照合CLIを追加。既存migration/preflightの拒否条件は緩めない。private隔離164成功/4専用skip、独立レビュー50成功、実SDK/ローカルemulator追加3試験成功。本番適用は別ゲート。
+- [x] GitGuardian指摘の提示箇所を確認。テスト用ダミーと削除された旧固定値を区別し、通知を一括無視しない。旧固定値を実利用している環境は別途対応が必要。
+- [ ] 整合backup/restore証跡、承認済みOTP解除、hash保持移行、協調切替、本人による実パスワードlogin、API移行プロンプト最終化。
+- [ ] 既存の型診断・依存advisory等は下記記録どおり残存。build成功を脆弱性解消や本番動作の保証としない。
+
+## 前段追補：承認済み更新の準備
 
 ユーザーから本番更新・commit/push・更新後のAPI接続変更プロンプトを依頼され、問診/管理操作の保守停止と外部連携の一時停止・旧URLの新版への切替も明示了承された。作業ブランチは `release/password-only-admin-update`。以下は切替前の記録であり、配備完了の宣言ではない。
 
