@@ -3,7 +3,7 @@ FROM node:20 AS build
 WORKDIR /app
 # 依存をインストール
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 # ソースをコピーしてビルド
 COPY frontend ./
 RUN npm run build

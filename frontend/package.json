@@ -2,10 +2,12 @@
   "name": "monshinmate-frontend",
   "version": "0.1.0",
   "private": true,
+  "engines": { "node": "^20.19.0 || >=22.12.0" },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test tests/security.test.cjs"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",
@@ -23,8 +25,8 @@
   "devDependencies": {
     "@types/react": "^18.2.21",
     "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.3.1",
+    "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^5.2.2",
-    "vite": "^4.4.9"
+    "vite": "^7.3.7"
   }
 }

@@ -1,3 +1,4 @@
+import { adminFetch, adminSnapshot } from '../utils/adminApi';
 import { useCallback, useEffect, useState, ChangeEvent } from 'react';
 import {
   Box,
@@ -27,7 +28,6 @@ import { FiDownload, FiUpload } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { useTimezone } from '../contexts/TimezoneContext';
 import { useNotify } from '../contexts/NotificationContext';
-import { adminFetch } from '../utils/adminApi';
 
 interface SessionSummary {
   id: string;
@@ -115,7 +115,7 @@ export default function AdminDataTransfer() {
     const qs = params.toString();
 
     try {
-      const res = await fetch(`/admin/sessions${qs ? `?${qs}` : ''}`);
+      const res = await adminFetch(`/admin/sessions${qs ? `?${qs}` : ''}`);
       if (!res.ok) {
         const raw = await res.text();
         let message = '問診データの取得に失敗しました';
@@ -188,6 +188,7 @@ export default function AdminDataTransfer() {
   };
 
   const handleSessionExport = async () => {
+    const snapshot = adminSnapshot();
     try {
       const targetIds = getTargetIds();
       if (targetIds.length === 0 && !startDate && !endDate) {
@@ -199,7 +200,7 @@ export default function AdminDataTransfer() {
       if (targetIds.length > 0) payload.session_ids = targetIds;
       if (startDate) payload.start_date = startDate;
       if (endDate) payload.end_date = endDate;
-      const res = await fetch('/admin/sessions/export', {
+      const res = await adminFetch('/admin/sessions/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -209,6 +210,7 @@ export default function AdminDataTransfer() {
         throw new Error(text || 'failed to export');
       }
       const blob = await res.blob();
+      snapshot.assertCurrent();
       const disposition = res.headers.get('Content-Disposition') ?? '';
       const match = disposition.match(/filename="?([^";]+)"?/i);
       const filename = match ? decodeURIComponent(match[1]) : `sessions-${Date.now()}.json`;
@@ -222,6 +224,7 @@ export default function AdminDataTransfer() {
       window.URL.revokeObjectURL(url);
       notify({ title: '問診データを出力しました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
+      if (!snapshot.current()) return;
       console.error(err);
       notify({ title: '問診データの出力に失敗しました', status: 'error', channel: 'admin', duration: 4000 });
     } finally {
@@ -245,7 +248,7 @@ export default function AdminDataTransfer() {
     if (sessionImportPassword) formData.append('password', sessionImportPassword);
     try {
       setSessionImporting(true);
-      const res = await fetch('/admin/sessions/import', { method: 'POST', body: formData });
+      const res = await adminFetch('/admin/sessions/import', { method: 'POST', body: formData });
       if (!res.ok) {
         let message = '問診データのインポートに失敗しました';
         const rawText = await res.text();
@@ -281,6 +284,7 @@ export default function AdminDataTransfer() {
   };
 
   const handleTemplateExport = async () => {
+    const snapshot = adminSnapshot();
     try {
       setTemplateExporting(true);
       const res = await adminFetch('/admin/questionnaires/export', {
@@ -293,6 +297,7 @@ export default function AdminDataTransfer() {
         throw new Error(text || 'failed to export');
       }
       const blob = await res.blob();
+      snapshot.assertCurrent();
       const disposition = res.headers.get('Content-Disposition') ?? '';
       const match = disposition.match(/filename="?([^";]+)"?/i);
       const filename = match ? decodeURIComponent(match[1]) : `questionnaire-settings-${Date.now()}.json`;
@@ -306,6 +311,7 @@ export default function AdminDataTransfer() {
       window.URL.revokeObjectURL(url);
       notify({ title: '設定ファイルを出力しました', status: 'success', channel: 'admin', duration: 3000 });
     } catch (err) {
+      if (!snapshot.current()) return;
       console.error(err);
       notify({ title: '設定ファイルの出力に失敗しました', status: 'error', channel: 'admin', duration: 4000 });
     } finally {

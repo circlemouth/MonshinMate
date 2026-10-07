@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   VStack,
@@ -176,7 +177,7 @@ export default function AdminAppearance() {
   const saveDisplayName = useCallback(
     async (current: string, signal: AbortSignal) => {
       const payload = { display_name: current || '問診メイト' };
-      const res = await fetch('/system/display-name', {
+      const res = await adminFetch('/system/display-name', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -202,7 +203,7 @@ export default function AdminAppearance() {
   const saveCompletion = useCallback(
     async (current: string, signal: AbortSignal) => {
       const payload = { message: current || 'ご回答ありがとうございました。' };
-      const res = await fetch('/system/completion-message', {
+      const res = await adminFetch('/system/completion-message', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -223,7 +224,7 @@ export default function AdminAppearance() {
   const saveEntry = useCallback(
     async (current: string, signal: AbortSignal) => {
       const payload = { message: current || '不明点があれば受付にお知らせください' };
-      const res = await fetch('/system/entry-message', {
+      const res = await adminFetch('/system/entry-message', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -244,7 +245,7 @@ export default function AdminAppearance() {
   const saveThemeColor = useCallback(
     async (currentColor: string, signal: AbortSignal) => {
       const payload = { color: currentColor || '#1976D2' };
-      const res = await fetch('/system/theme-color', {
+      const res = await adminFetch('/system/theme-color', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -275,7 +276,7 @@ export default function AdminAppearance() {
       if (!config.url) {
         return config;
       }
-      const res = await fetch('/system/logo', {
+      const res = await adminFetch('/system/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: config.url, crop: config.crop }),
@@ -542,7 +543,7 @@ export default function AdminAppearance() {
     fd.append('file', file);
     const defaultCrop = { ...defaultCropState };
     try {
-      const r = await fetch('/system-logo', { method: 'POST', body: fd });
+      const r = await adminFetch('/system-logo', { method: 'POST', body: fd });
       if (!r.ok) {
         let detail: string | undefined;
         try {
@@ -558,7 +559,7 @@ export default function AdminAppearance() {
       setLogoUrl(url);
       setCrop(defaultCrop);
       openCropModal();
-      const res = await fetch('/system/logo', {
+      const res = await adminFetch('/system/logo', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url, crop: defaultCrop }),

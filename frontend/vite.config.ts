@@ -29,6 +29,9 @@ export default defineConfig(({ mode }) => {
       name: 'spa-admin-fallback',
       configureServer(server) {
         const apiPrefixes = [
+          '/admin/bootstrap',
+          '/admin/recovery',
+          '/admin/reauth',
           '/admin/auth',
           '/admin/login',
           '/admin/totp',
@@ -67,8 +70,8 @@ export default defineConfig(({ mode }) => {
     },
   ],
   server: {
-    // 外部アクセス許可（例: Tailscale 等のドメインからの接続）
-    host: true,
+    // 開発サーバーは既定でローカル限定。公開配信には使用しない。
+    host: env.VITE_DEV_HOST || '127.0.0.1',
     // 環境変数で許可ホストを制御（未設定時は Vite 既定動作）
     allowedHosts,
     proxy: {
@@ -83,6 +86,9 @@ export default defineConfig(({ mode }) => {
       '/readyz': 'http://localhost:8001',
       '/metrics': 'http://localhost:8001',
       '/address': 'http://localhost:8001',
+      '/admin/bootstrap': 'http://localhost:8001',
+      '/admin/recovery': 'http://localhost:8001',
+      '/admin/reauth': 'http://localhost:8001',
       '/admin/auth': 'http://localhost:8001',
       '/admin/password': 'http://localhost:8001',
       '/admin/login': 'http://localhost:8001',

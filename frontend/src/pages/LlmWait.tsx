@@ -1,3 +1,5 @@
+import { finalizePatient } from '../utils/finalizePatient';
+import { patientJson, patientGeneration, isPatientGeneration } from '../utils/patientSession';
 import { useEffect } from 'react';
 import { VStack, Spinner, Text } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
@@ -12,31 +14,18 @@ export default function LlmWait() {
 
   const finalize = async () => {
     if (!sessionId) return;
-    const err = sessionStorage.getItem('llm_error');
-    sessionStorage.removeItem('pending_llm_questions');
     try {
-      const res = await fetch(`/sessions/${sessionId}/finalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ llm_error: err }),
-      });
-      const data = await res.json();
-      sessionStorage.setItem('summary', data.summary);
-    } catch (e) {
-      console.error('finalize failed', e);
-      postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
+      await finalizePatient(sessionId);
+      navigate('/done', { replace: true });
+    } catch {
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({
-        title: 'ネットワークエラーが発生しました。',
-        description: '接続後に再度お試しください。',
-        status: 'error',
-        channel: 'patient',
-        actionLabel: '再試行',
-        onAction: () => {
-          void finalize();
-        },
+        title: '送信完了を確認できませんでした。',
+        description: '回答は消去していません。接続を確認して再試行してください。',
+        status: 'error', channel: 'patient', actionLabel: '再試行', duration: null, isClosable: false,
+        onAction: () => { void finalize(); },
       });
     }
-    navigate('/done');
   };
 
   useEffect(() => {
@@ -46,9 +35,7 @@ export default function LlmWait() {
     }
     const check = async () => {
     try {
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      if (!res.ok) throw new Error('http error');
-      const data = await res.json();
+      const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         navigate('/questions');
@@ -56,6 +43,7 @@ export default function LlmWait() {
         await finalize();
       }
     } catch (e) {
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       console.error('llm question check failed', e);
       try {
         const msg = e instanceof Error ? e.message : String(e);

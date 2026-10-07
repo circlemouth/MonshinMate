@@ -1,207 +1,180 @@
-﻿# MonshinMate システム概要（エージェント向け）
+# システム概要（MonshinMate）
 
-## 1. 文書の目的と対象
-- 本書は MonshinMate（問診メイト）の**現行実装**を俯瞰し、エージェントが安全に運用・拡張判断できるようにするための概要資料である。
-- システム管理者・運用担当・実装エージェントを対象に、主要コンポーネント、データフロー、設定項目、保守導線を整理する。
-- 旧来の「計画書」「設計案」と異なり、リポジトリ `main` ブランチ（2025-10-23 時点）のコードベースに基づく。
+本書はセキュリティ改修後のローカル実装を整理したものです。公開API、患者フロー、管理者認証、永続化の境界を優先して記述します。実DB・実秘密情報の読み書き、本番デプロイ、Cloud Run / Firestore / GCS の実接続確認は今回行っていません。クラウド構成・モデル選定の過去記録は末尾の履歴節に分離し、現在の稼働状態や検証済み保証として扱いません。
 
-## 2. システム全体像
-### 2.1 コンポーネント構成
-- **フロントエンド**（`frontend/`）: React 18 + Vite + Chakra UI。患者フローと管理フローを SPA で提供。
-- **バックエンド API**（`backend/app/main.py`）: FastAPI。テンプレート CRUD、セッション管理、LLM 連携、エクスポート、管理者認証を提供。
-- **郵便番号辞書**（`backend/app/postal_code_lookup.py`）: 同梱または管理画面アップロードの KEN_ALL CSV を SQLite 辞書化し、患者画面の住所自動入力に利用。
-- **LLM ゲートウェイ**（`backend/app/llm_gateway.py`）: OpenAI 互換 API / ollama / LM Studio への疎通を抽象化し、追加質問・要約生成をハンドリング。
-- **永続化層**（`backend/app/db.py`）: SQLite を既定としつつ、環境変数で CouchDB を有効化した場合はセッション回答を CouchDB に保存。監査ログや管理設定は SQLite。
-- **ドキュメント生成**（`backend/app/pdf_renderer.py`）: ReportLab で問診結果の PDF を生成。CSV・Markdown 変換も `main.py` 内で扱う。
-- **補助スクリプト**（`tools/`、`backend/tools/`）: テンプレート/セッションのエクスポート、管理者パスワードリセット、TOTP 秘密鍵暗号化など。
+## 1. 全体アーキテクチャ
 
-### 2.2 主要データフロー
-1. 患者が `/` で受診種別を選択し、`/basic-info` で氏名・生年月日・性別（＋初診時は郵便番号・住所・電話番号等）を入力。郵便番号は7桁入力時に辞書検索し、該当時のみ住所欄へ自動反映する。
-2. `POST /sessions` によりセッションが作成され、テンプレート ID と回答ドラフトが返却。ブラウザ `sessionStorage` に保存。
-3. `/questionnaire` でテンプレート項目を回答し、各回答は `POST /sessions/{id}/answers` 経由で保存。`sessionStorage` のドラフトも同期。
-4. 追加質問フェーズ `/questions` では `POST /sessions/{id}/llm-questions` → `POST /sessions/{id}/llm-answers` をまとめて呼び出し、上限に達するか LLM が質問を返さなくなるまで繰り返す。
-5. `POST /sessions/{id}/finalize` で要約を生成し、完了画面 `/done` に表示。エクスポートや管理画面から PDF/CSV/Markdown を取得可能。
-6. 管理画面 `/admin/*` からテンプレート、セッション、LLM 設定、外観設定、セキュリティ（パスワード/TOTP）、データ入出力を操作。
-7. `/metrics` で OpenMetrics テキストを公開し、`backend/app/logs/` 配下と SQLite `audit_logs` に監査情報を記録。
+- **バックエンド**: FastAPI / Pydantic。[main.py](<../backend/app/main.py>) がAPIを登録し、[api_policy.py](<../backend/app/api_policy.py>) が既定で管理者認証を要求するルート境界とリクエストサイズ制限を提供する。管理者認証処理は専用ルーターでも用途別に検証する。
+- **フロントエンド**: React 18 + TypeScript + Chakra UI。患者用フローと管理画面を分離し、患者情報・管理者資格情報を外部URLへ送らない通信ヘルパーを使う。UIの表示制御だけを認可境界としない。
+- **永続化**: [DB切替ハブ](<../backend/app/db/__init__.py>) と [PersistenceAdapter](<../backend/app/db/interfaces.py>)。SQLiteが既定。CouchDB設定時はセッション保存とセキュリティ状態をCouchDBへ委譲し、障害時にSQLiteへ黙って退避しない。設定・アセット等のSQLite保存もあるため、CouchDB利用時にSQLite全体が不要になるわけではない。
+- **セキュリティ状態**: [security_state.py](<../backend/app/security_state.py>) に集約する永続CAS（compare-and-swap）。管理者の認証状態、患者capability、操作lease、レート制限をプロセスメモリだけに置かない。保存失敗・競合解消不能は503で閉じる。
+- **LLM**: [llm_gateway.py](<../backend/app/llm_gateway.py>) が設定されたプロバイダへ接続。[clinical_context.py](<../backend/app/clinical_context.py>) と [llm_data_security.py](<../backend/app/llm_data_security.py>) が送信項目と宛先を制限する。「既定でローカルLLMなので外部送信なし」とは説明しない。
+- **出力**: 管理者向けのPDF / CSV / Markdown / JSON等。患者の完了応答に要約や回答を返さない。出力ファイルは患者情報を含み得るため、認証と保管管理が必要。
 
-## 3. デプロイと実行環境
-- **Docker Compose（推奨）**: `docker-compose.yml` で `backend`（FastAPI/Uvicorn）、`frontend`（Nginx 配信）、`couchdb` を起動。`FRONTEND_HTTP_PORT` でホストポート変更可。
-- **ローカル開発**: Python 3.11+ と Node.js 18+ が前提。`make dev` / `./dev.sh` でバックエンドと Vite 開発サーバを同時起動。CouchDB を使う場合は別途起動し `.env` に接続設定を記載。
-- **環境変数**: `backend/.env` とリポジトリ直下 `.env`（Docker 用）を読み込む。`MONSHINMATE_DB` を未設定の場合、`backend/app/app.sqlite3` を使用。
-- **CORS 設定**: Cloud Run 等でフロントとバックエンドを別ドメイン運用する場合は `FRONTEND_ALLOWED_ORIGINS` に許可ドメインをカンマ区切りで指定する。未設定かつ `MONSHINMATE_ENV=local` では `http://localhost:5173` 系を自動許可する。
-- **静的アセット**: 問診項目画像とロゴ画像はデータベースに保存し、`/questionnaire-item-images/files/*` と `/system-logo/files/*` の API から配信する（旧ディレクトリ内のファイルは起動時に自動移行）。
-- **郵便番号初期データ**: `backend/app/postal_code_data/utf_ken_all.csv` を同梱し、初回検索または辞書状態確認時に `postal_codes.sqlite3` を生成する。生成DBはGit管理対象外。
+## 2. 起動・ビルド構成
 
-### 3.5 Cloud Run / Firestore 拡張
-- Cloud Run + Firestore 向けの永続化アダプタおよび Secret Manager 連携は、`private/` 配下に配置する非公開サブモジュールで提供する。
-- プライベートモジュールが提供する `FirestoreAdapter` を利用する場合は、`MONSHINMATE_FIRESTORE_ADAPTER` 環境変数に `モジュール:クラス` 形式で指定する（例: `monshinmate_cloud.firestore_adapter:FirestoreAdapter`）。
-- Cloud Run の標準デプロイスクリプトは Secret Manager の値を Cloud Run のシークレット参照として環境変数へ注入し、アプリ起動時の Secret Manager SDK 呼び出しを行わない。ローカルや独自環境で実行時ローダーを使う場合だけ `MONSHINMATE_SECRET_MANAGER_ADAPTER` と `SECRET_MANAGER_ENABLED=1` を設定する。
-- 本リポジトリのみで運用する場合は `PERSISTENCE_BACKEND=sqlite` を既定とし、Cloud Run 向け設定値は読み込まれない。
-- Cloud Run 部署時に利用する `.env` サンプルはサブモジュール側の `.env.cloudrun.example` を参照する。
-- Firestore の `sessions`、`auditLogs`、`pushSubscriptions` は `expires_at` を TTL フィールドとして使う。既定保持期間は、確定済み問診365日、中断問診24時間、監査ログ365日、Pushトークン90日。
-- Cloud Run はリクエスト課金、最小インスタンス0、最大インスタンス数付きで配備する。予算アラートは月額3,000円の50%・80%・100%到達時と100%到達予測時に通知するが、サービスは自動停止しない。
-- Firestoreアダプタの初期化はプロセス内で冪等にし、モジュール読込時とFastAPI startup時に同じクライアント作成・管理者seedを繰り返さない。既存環境のCloud Runでは `MIGRATE_LEGACY_ASSETS_ON_STARTUP=0` とし、移行済み同梱画像をコールドスタートごとに照合しない。
+- 汎用バックエンドイメージは [Dockerfile](<../backend/Dockerfile>) のPython 3.12を使用し、[requirements.lock](<../backend/requirements.lock>) から依存を導入する。Python依存は仮想環境内へ入れる。
+- フロントエンドはVite 7を使用。対応Node.jsは20.19以上の20系、または22.12以上。正確な採用版は [package.json](<../frontend/package.json>) とロックファイルを参照し、古いNode 18を前提にしない。
+- [docker-compose.yml](<../docker-compose.yml>) はローカル用で、CouchDB 5984、backend 8001、frontend 5173（`FRONTEND_HTTP_PORT`で変更可能）をループバックへバインドする。共有ネットワーク向けの公開・TLS・アクセス制御は別途設計が必要。
+- Composeには管理者やCouchDBの既定パスワードを置かない。`COUCHDB_USER` / `COUCHDB_PASSWORD` / `SECRET_KEY` / `TOTP_ENC_KEY` は事前注入必須。backendは`MONSHINMATE_ENV=production`で鍵検証を行い、SQLiteをホストのデータ領域へ永続化する。
+- [.dockerignore](<../.dockerignore>) は環境ファイル、鍵、実DB、ログ、データ類、private領域等を除外する。汎用イメージには非公開クラウドアダプタやGCP専用依存を同梱しない。クラウド向け設定・デプロイ手順は非公開サブモジュール側で管理する。
+- 実環境の起動・移行と、合成データによる隔離テストは分ける。既存DBや秘密情報を読み込む通常起動を、無許可の確認手順として実行しない。
 
-## 4. バックエンド（FastAPI）
-### 4.1 主要モジュール
-- `main.py`: エントリポイント。Pydantic モデル、API ルーティング、PDF/CSV生成、エクスポート暗号化、TOTP・JWT ロジック、メトリクスを包含。
-- `db.py`: SQLite テーブル作成・マイグレーション代替（`init_db`）、テンプレート/セッション/ユーザー CRUD、CouchDB 接続ヘルパー、監査ログ記録。
-- `session_fsm.py`: セッション状態遷移（残項目管理、LLM 追加質問キュー）。
-- `validator.py`: 項目タイプ別バリデーション。個人情報フィールドは `personal_info` ユーティリティで整形。
-- `postal_code_lookup.py`: 郵便番号CSVのインポート、住所検索、辞書メタ情報管理。
-- `structured_context.py`: 回答値の正規化（空回答→`該当なし` など）とセッション辞書更新。
-- `llm_gateway.py`: LLM 設定の正規化、HTTP 呼び出し、状態キャッシュ、直列化ロック。
-- `pdf_layout.py`: ReportLab 非依存のレイアウトモード定義。通常起動ではこちらだけを読み込む。
-- `pdf_renderer.py`: A4 縦構成／structured/legacy レイアウト切替、質問ツリーのフラット化、ReportLab スタイル適用。PDF要求時に遅延ロードする。
+## 3. APIの公開境界
 
-### 4.2 API グルーピング（抜粋）
-- **ヘルスチェック**: `/health`, `/healthz`, `/readyz`。
-- **テンプレート管理**: `GET/POST/DELETE /questionnaires`, `/questionnaires/{id}/duplicate|rename|reset`, `/questionnaires/{id}/summary-prompt`, `/questionnaires/{id}/followup-prompt`。
-- **テンプレート入出力**: `/admin/questionnaires/export|import`。テンプレート・LLM設定・システム設定をまとめて転送でき、エクスポート時に PBKDF2+Fernet で暗号化可。
-- **LLM**: `/llm/settings`（GET/PUT）、`/llm/settings/test`、`/llm/list-models`、`/llm/chat`。これらはログイン時に発行する管理者JWTを `Authorization: Bearer` で送る必要がある。`/llm/list-models` と `/llm/settings/test` は `provider_profiles` を受け取り、UIで未保存の `project_id` などを一時的に反映できる。Vertex AIはモデル名を手入力して疎通を確認する。
-- **LLM プロバイダメタ情報**: `/llm/providers` で利用可能なプロバイダ一覧と UI 向けメタデータを返す。`ollama` / `lm_studio` / `openai` に加えて、Vertex AI を利用する `gcp_vertex` プロバイダが常に含まれる。メタデータには追加設定項目や既定値を含め、管理画面での入力欄が自動的に構成される。
-- **システム設定**: `/system/bootstrap|timezone|display-name|entry-message|completion-message|theme-color|logo|pdf-layout|default-questionnaire|database-status|llm-status`。`/system/bootstrap` は初期描画に必要な公開設定を永続層1読取で返す。`/system/llm-status` は管理者専用であり、患者画面から定期照会しない。
-- **郵便番号辞書**: `GET /postal-code/{postal_code}` で住所候補を返す。`GET/POST /system/postal-code-dictionary` で辞書状態確認とCSVアップロード更新を行う。
-- **管理者認証**: `/admin/login`（パスワード）→ `/admin/login/totp`（TOTP）、`/admin/auth/status`、`/admin/password`（初期設定）、`/admin/password/change`、`/admin/password/reset/*`、`/admin/totp/*`（setup/verify/disable/regenerate/mode）。
-- **セッション**: `/sessions`、`/sessions/{id}/answers`、`/sessions/{id}/llm-questions`、`/sessions/{id}/llm-answers[/batch]`、`/sessions/{id}/finalize`。
-- **管理セッション**: `GET /admin/sessions`（フィルタ検索）、`/admin/sessions/page`（通常一覧のカーソルページング）、`/admin/sessions/completed`（Push非対応時の低頻度ポーリング）、`/admin/sessions/{id}`、出力・削除 API。常時接続の旧SSEは廃止した。
-- **完了通知**: 管理画面は FCM Push を優先し、設定不足または通知未許可の場合だけ画面表示中に60秒間隔でポーリングする。Push購読操作には管理者ログイン時に発行する8時間の用途限定JWTを使い、Push本文には患者情報を含めない。
-- **メトリクス**: `GET /metrics`（OpenMetrics テキスト）。利用されていなかったUIイベント送信は廃止した。
+[api_policy.py](<../backend/app/api_policy.py>) の完全一致allowlistを基準とし、`/system/*`や`/admin/*`全体を匿名許可するprefix例外は設けない。Swagger / ReDoc / OpenAPI公開ルートも無効。
 
-### 4.3 セッションライフサイクル
-- `POST /sessions` はテンプレ ID、回答ドラフト、最大追加質問数を返す。作成時に `METRIC_SESSIONS_CREATED` をインクリメント。
-- `SessionFSM.step` が `Validator.validate_partial` → `StructuredContextManager.update_structured_context`（回答正規化）→ 残項目再計算。
-- 追加質問は `SessionFSM.next_questions()` が LLM ゲートウェイを呼び、`llm_*` 形式の ID を採番して `pending_llm_questions` に積む。提示文は `llm_question_texts` と `question_texts` に保持し、履歴テーブルにも保存。
-- 回答は `session_responses` テーブルに JSON で永続化。CouchDB が有効な場合は `answers` ドキュメントにも反映（`db.py` の `save_session`）。
-- `POST /sessions/{id}/finalize` で `METRIC_SUMMARIES` を加算し、まとめた回答と要約を保存・返却。LLM 失敗時は `llm_error` を `sessionStorage` に退避して完了まで進める設計。
-- セッション処理はメモリに存在しない場合でも永続層から復元する。確定済みセッションへの再度の `finalize` は保存済み結果を返し、LLM生成・保存・通知を重複実行しない。
+| 区分 | 主なAPI | 認証・公開内容 |
+| --- | --- | --- |
+| 最小ヘルス情報 | `GET /health`, `/healthz`, `/readyz` | 匿名可。内部構成や秘密情報を公開しない |
+| 患者用表示設定 | `GET /system/bootstrap`、表示名・案内文・テーマ・ロゴ・タイムゾーン・既定テンプレート等の明示されたGET | 患者表示に必要な設定だけ |
+| 問診の公開素材 | `GET /questionnaires`, `/questionnaires/{id}/template`、検証済み画像取得、郵便番号検索 | 問診表示に必要な素材のみ |
+| LLM公開稼働可否 | `GET /system/llm-availability` | `status`のみ。詳細状態は管理者限定 |
+| セッション開始 | `POST /sessions` | 匿名開始可、IP別・全体の永続レート制限。capabilityを一度発行 |
+| 患者操作 | `POST /sessions/{id}/answers`, `/llm-answers`, `/llm-answers/batch`, `/llm-questions`, `/finalize` | 当該セッション専用のBearer capabilityが必要 |
+| 管理者認証 | `/admin/login`, `/admin/login/totp`, `/admin/bootstrap`, `/admin/recovery`等 | パスワード・challenge・offline credential等を用途別に検証。安全な状態フラグのみ匿名取得可 |
+| 外部連携 | `POST /patient-summary`, `/patient-summaries`, `/patient-summary/pdf` | 連携用APIキーを専用ハンドラーで検証。患者capabilityとは別 |
+| 管理操作 | セッション一覧・詳細・削除・出力、テンプレート更新、LLM設定・chat、システム設定更新、DB/LLM詳細状態、`/metrics`等 | 有効な管理者access JWTが必要。認証設定変更は再認証も要求 |
 
-### 4.4 LLM 連携（通信仕様）
-- **デフォルトプロンプト**: 追加質問用 `DEFAULT_SYSTEM_PROMPT` / `DEFAULT_FOLLOWUP_PROMPT`、サマリー用 `DEFAULT_SUMMARY_PROMPT` を `llm_gateway.py` / `main.py` に定義。管理画面の「LLM 設定」「テンプレート詳細」からテンプレート単位で上書きでき、プレースホルダ `{max_questions}` を埋め込む。
-- **設定保持**: 更新用の `LLMSettingsUpdate` と読み取り用の `LLMSettingsRead` を分離した。読み取り応答はallowlist方式で組み立て、API key、認証token、秘密鍵、`service_account_json` を含めない。`provider_profiles` の拡張fieldはプロバイダが `sensitive=false` と宣言したものだけを返す。`followup_timeout_seconds` は5秒から120秒に制限する。
-- **追加質問生成**: `SessionFSM.next_questions()` → `LLMGateway.generate_followups()` を呼び出し、セッション ID 単位でロック。  
-  - `provider="ollama"`: `POST {base_url}/api/chat` に `format` で JSON Schema（配列）を渡し、`message.content` または `response` の文字列を `json.loads`。
-  - `provider="lm_studio"`（OpenAI 互換）: `POST {base_url}/v1/chat/completions` に `response_format.json_schema` を指定し、`choices[0].message.content` の文字列 JSON をパース。
-  - `provider="gcp_vertex"`: `generateContent` でGeminiを呼び出す。`location=global` では `https://aiplatform.googleapis.com`、マルチリージョンの `us` と `eu` では `https://aiplatform.{location}.rep.googleapis.com`、個別リージョンでは `https://{location}-aiplatform.googleapis.com` を使う。認証はADCだけを使い、Cloud Runでは割り当てたサービスアカウントが資格情報になる。JSONキーファイルの入力、保存、利用は行わない。
-  - Vertex AIの各呼び出しは、`contents` に1件の `role=user` だけを入れる単発要求である。モデル応答を次の要求へ含めず、function callは応答の構造化データとして終端処理する。この構造では `thoughtSignature` を再送する後続要求が存在しない。将来、`role=model` の応答またはfunction responseを次の `contents` へ追加する場合は、応答partを順序と署名を変えずに保存して再送する実装が必要になる。
-  - Gemini 3系ではサンプリング温度を送らず、モデル既定値を使う。最大出力tokenは設定値を32から65,536へ制限し、HTTPタイムアウトは5秒から120秒へ制限する。追質問、単一質問、要約、管理者チャットは `responseMimeType=application/json` と用途別の固定 `responseSchema` を送る。Grounding用の `tools` は送らない。
-  - 本番はVertex AIのrequest-response loggingとプロジェクト単位のインメモリキャッシュを無効にする。Interactions APIは使わず、単発の `generateContent` だけを使う。Google側の不正利用監視によるprompt loggingの除外は別途の申請が必要であるため、この設定だけでGoogle側の保持を0とは保証しない。
-  - パース失敗・HTTP エラー時は警告ログとともにスタブへフォールバックし、追加質問フェーズを即終了（空配列）。成功時は `llm_question_texts` に記録し `llm_1..n` の ID を採番。
-- **単一項目用フォールバック質問**: `generate_question()` は未回答項目向けに個別問い合わせを行う実装で、同様に Ollama / LM Studio のチャット API を呼び分ける。失敗時・ローカルモードではスタブの汎用質問を返す（現行フローでは未使用だが残置）。
-- **サマリー生成**: `summarize_with_prompt()` がリモート LLM に同様のチャットリクエストを送信。失敗時は `summarize()` の簡易結合文にフォールバック。バックエンドで `summary_prompts` に保存されたプロンプトを使用し、UI から有効化フラグを制御。
-- **疎通状態管理**: すべてのリモート呼び出しで成功または失敗を `_record_status()` に報告する。管理者専用の `/system/llm-status` は `status`, `detail`, `source`, `checked_at` を返す。匿名利用できる `/system/llm-availability` は `status` だけを返す。
-- **チャット API**: `/llm/chat` はサイドバー用軽量チャット。リモート有効時は上記と同じ経路で呼び出し、失敗時はスタブ応答。呼び出し数は `METRIC_LLM_CHATS` で計測。
-- **スタブモード**: `enabled=False` または `base_url` 未設定時はローカルスタブが動作し、追加質問は生成せず、サマリーは簡易結合文を返す。UI フッターには「既定はローカルLLMで外部送信なし」と表示。
+通常bodyは256KiB、画像アップロードは512KiBにmultipart用の限定余裕、インポートは5MiBに限定余裕を設け、`Content-Length`だけでなく受信チャンクも上限検査する。応答には`no-store`、`nosniff`、`no-referrer`、`X-Frame-Options: DENY`を付ける。CORSは認証の代用ではなく、必要なoriginを明示設定する。
 
-#### 4.4.1 Gemini 2.5 Flashの移行候補
+## 4. 患者セッションのライフサイクル
 
-2026-09-01にGoogle Cloud公式文書を確認した結果、候補のmodel IDと利用条件は次のとおりである。
+### 4.1 開始・回答・永続状態
 
-- `gemini-3.5-flash-lite`：GA。Standard PayGoは `global`、`us`、`eu` で利用できる。GlobalのStandard料金は入力100万tokenあたり0.30米ドル、テキスト出力100万tokenあたり2.50米ドルである。
-- `gemini-3.1-flash-lite`：GA。Standard PayGoは `global`、`us`、`eu` で利用できる。GlobalのStandard料金は入力100万tokenあたり0.25米ドル、テキスト出力100万tokenあたり1.50米ドルである。
-- `gemini-3.5-flash`：GA。モデル提供地域には `asia-northeast1` が含まれるが、同リージョンでは単一ゾーンProvisioned Throughputだけを利用できる。Standard PayGoは `global`、`us`、`eu` に限られる。GlobalのStandard料金は入力100万tokenあたり1.50米ドル、テキスト出力100万tokenあたり9.00米ドルである。
+1. 患者は受診種別・基本情報・テンプレート項目を入力する。`POST /sessions`は`id`, `session_token`, `expires_at`を返す。セッションIDだけでは患者操作を認可しない。
+2. capabilityは暗号学的乱数から生成し、有効期限は24時間。サーバーにはSHA-256ハッシュを保存し、生tokenをDBやログへ保存しない。作成応答以外で再発行しない。
+3. 回答更新・追加質問・確定はBearer capabilityを検証し、永続CASによるセッション単位の操作leaseを取得する。他の操作が実行中なら409を返す。レート制限は永続カウンタで行う。
+4. lease取得後は毎回DBからセッションを復元する。インスタンス内の`sessions`キャッシュは正本にしない。回答、進行状況、質問文マップ、`pending_llm_questions`キューを保存し、別プロセスでも発行済み質問と未回答状態を引き継げる。
+5. [session_fsm.py](<../backend/app/session_fsm.py>) の`SessionFSM`はテンプレート回答・追加質問の進行を扱う。LLMへ渡す回答はサーバー側テンプレートと発行済み質問を基準に制限する。LLM呼出し入口で永続レート制限を適用する。
 
-現行の `asia-northeast1` とStandard PayGoを同時に維持できる候補は確認できなかった。
-本番環境は2026年9月16日の承認により、`gemini-3.1-flash-lite` と `us` へ移行する。
-アプリは `asia-northeast1`、FirestoreとGCSは `asia-northeast2` に配置されている。
-この分離により、保存先は日本のままだが、Geminiに送るデータの機械学習処理は米国マルチリージョンで行われる。
-新規環境で生成するGCPプロファイルだけは、確認済みGAモデルの `gemini-3.1-flash-lite` と `global` を既定値にする。
-保存済みプロファイルがある既存環境では、そのmodelとlocationを継続して読み込む。
+**異常終了時のleaseを時間経過だけで横取りしない。** 遅延した旧workerが後から上書きする危険を避けるため、取り残されたleaseは閉じたままとする。運用者が保存状態と旧処理の停止を確認して整合性を回復する必要があり、自動復旧・自動引継ぎを保証しない。
 
-確認に使用した一次情報は、[モデルのライフサイクル](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)、[Gemini 3.5 Flash](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash)、[Gemini 3.5 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite)、[Gemini 3.1 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite)、[料金表](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)である。
-`thoughtSignature` の再送条件は、[Google Cloudのthought signatures仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking/thought-signatures)と[GenerateContentのPart仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/Content)で確認した。
+### 4.2 確定と患者情報の消去
 
-### 4.5 テンプレート・プロンプト管理
-- テンプレートは `questionnaire_templates` テーブルに `items_json` と LLM 追質問設定（有効フラグ・上限件数）を保存。
-- サマリー／追質問プロンプトは `summary_prompts`, `followup_prompts` にテンプレート ID × 受診種別で保存し、UI で有効化フラグを切り替え。
-- `reset_questionnaire` / `reset_default_template` は `main.py` 内の `make_default_initial_items` 等を再投入し、設定を初期化。
-- 問診項目画像は `/questionnaire-item-images` API 経由でアップロードし、テンプレートの `options[].imageUrl` 等から参照。
+- `/finalize`は回答・必要な要約を管理者用記録として保存した後、`{id, status: "finalized", finalized_at}`だけを返す。回答、患者氏名、生年月日、要約を患者向け完了レスポンスへ含めない。
+- 有効な同一capabilityでの確定再試行は同じreceiptだけを返し、LLM要約を再生成しない。確定後の回答変更・追加質問等は409で拒否する。失効・不正なcapabilityは401。
+- フロントエンドはreceiptのIDと状態を検証してから患者情報・token・回答・質問・再送キューをまとめて消去する。未送信回答が残る場合や確定応答を取得できない場合に、成功したように完了画面へ進めない。
+- [Done.tsx](<../frontend/src/pages/Done.tsx>) は完了メッセージだけを表示し、戻る操作で患者要約を再表示しない。次患者開始、手動終了、無操作タイムアウトでも患者状態を消去する。
 
-### 4.6 エクスポートとファイル処理
-- **セッション**: `/admin/sessions/export|import` は JSON エンベロープ（`version`, `type`, `exported_at`, `payload`）でやり取りし、オプションパスワードで PBKDF2+Fernet 暗号化。CSV/Markdown/PDF ダウンロード API を併設。
-- **テンプレート**: `/admin/questionnaires/export|import` でテンプレート・LLM設定・ブランド設定・関連画像をまとめてエクスポート。インポート時は mode=`merge|replace` を指定。
-- **PDF**: `pdf_renderer.render_session_pdf` が構造化テーブル、Followup 条件表示、個人情報ブロックを描画。施設名やレイアウトモードは `/system/pdf-layout` で設定し、ReportLabはPDF出力要求時だけ読み込む。
+### 4.3 ブラウザ内の状態と再送
 
-### 4.7 ロギング・監査・メトリクス
-- Python 標準 `logging` で API ログ・LLM ログ・セキュリティログ（`security.log`）を出力。主要イベントは `audit_logs` テーブルにも記録（ユーザー変更・パスワード更新・TOTP 状態変更など）。
-- メトリクスは整数カウンタの簡易実装（Prometheus 互換書式）。追加要求があれば `prometheus_client` への置換で拡張可能。
+- [patientSession.ts](<../frontend/src/utils/patientSession.ts>) は当該タブの`sessionStorage`でセッションと入力を管理する。無操作15分で警告、16分で消去。これはサーバーcapabilityの24時間TTLとは別の端末保護策。
+- 消去時は進行中のfetchを中断し、世代番号を更新する。古い非同期応答が次患者の状態や消去済みデータを復活させない。
+- 患者fetchは現在のセッションの同一origin URLに限定し、Bearer付与、`no-store`、redirect拒否を行う。
+- [retryQueue.ts](<../frontend/src/retryQueue.ts>) は回答保存と追加回答一括保存だけを対象とする。セッションに紐付け、TTL 30分・最大50件・指数backoff・回数上限で再送する。確定や任意URLをキューに入れず、認可エラー等の恒久失敗は無制限再試行しない。
 
-## 5. フロントエンド（React + Vite）
-### 5.1 ルーティングと画面
-- 患者フロー: `/`（Entry）→ `/basic-info` → `/questionnaire` → `/questions` → `/done`。ページ遷移時に `FlowProgress` で進捗を表示。
-- 管理フロー: `/admin/login`（モーダル実装あり）→ `/admin/main`（ダッシュボード）→ 各種設定・データページ。
-- 管理ページ一覧: `AdminMain`, `AdminTemplates`, `AdminTemplateEditor`（コンポーネント構成）、`AdminSessions`, `AdminSessionDetail`, `AdminDataTransfer`, `AdminLlm`, `AdminPostalCode`, `AdminAppearance`, `AdminTimezone`, `AdminManual`, `AdminLicense`, `AdminLicenseDeps`, `AdminSecurity`, `AdminInitialPassword`, `AdminTotpSetup`, `AdminPasswordReset`, `LLMChat`, `LlmWait` 等。
-- すべて `App.tsx` 内の `Routes` で定義し、ヘッダー右上の「管理画面」ボタンからモーダルログインを起動。
-- 管理ページはルート単位で遅延ロードし、患者向け初期JSに管理機能を同梱しない。管理画面ボタン押下時にダッシュボードのchunkを先読みする。
+## 5. 管理者認証と永続CAS
 
-### 5.2 状態管理とユーティリティ
-- **コンテキスト**: `AuthContext`（管理ルートまたはログイン操作時だけ認証状態を確認）、`NotificationContext`（Chakra Toast を患者/管理で出し分け）、`TimezoneContext` と `ThemeColorContext`（`systemBootstrap.ts` の一括設定キャッシュと連動）、`LLMStatus` ユーティリティ（管理画面の明示的な疎通確認）。
-- **保存戦略**: 患者回答はブラウザ `sessionStorage` に保存。`retryQueue.ts` でネットワーク断時の POST をキューし、`flushQueue()` がページ遷移時に再送。
-- **フォーム補助**: `utils/personalInfo` で個人情報入力（かな等）をフォーマット。`BasicInfo` は郵便番号を全角/半角数字から7桁へ正規化し、住所自動入力に失敗した場合は手入力を維持する。`QuestionnaireForm` はテンプレート JSON から Chakra コンポーネントを動的生成し、条件表示（`when`）、年齢/性別制限、複数選択、自由入力を扱う。
-- **スタイル**: `theme/` で色・タイポグラフィを定義。`FontSizeControl` と `useAutoFontSize` でロゴ・システム名称の自動縮小を実装。
+### 5.1 アカウント・鍵・JWT
 
-### 5.3 通信とエラー処理
-- `fetch` ベースで API と通信。`NotificationContext` を通じてリトライ案内やエラー通知を表示。患者向け通知は画面下部（8 秒）、管理向けは右上（5 秒）。
-- LLM 追加質問画面ではすべての回答をまとめて送信し、失敗時は `postWithRetry` でキューに退避した後 `finalize` を試みる設計。`sessionStorage` に `llm_error` を保存し、バックエンドへ送っておく。
-- 患者フローの表示名、案内文、テーマ、タイムゾーン、ロゴ、既定テンプレートは `/system/bootstrap` を同時実行時も含めて1回だけ取得し、管理画面で保存した値はキャッシュへ即時反映する。
-- 管理ダッシュボードの LLM ステータス・DB ステータスは画面表示時に `/system/llm-status` / `/system/database-status` のスナップショットを取得し、Chakra `Tag` で状態表示する。患者画面では表示に使わない状態照会を行わない。
+- [admin_security.py](<../backend/app/admin_security.py>) と [admin_security_routes.py](<../backend/app/admin_security_routes.py>) が認証を実装する。`admin:account:v1`が認証状態の正本であり、旧`users`テーブルや`ADMIN_PASSWORD`の既定値を自動的に信用しない。
+- 新しく設定するパスワードは12文字以上・UTF-8で72byte以下、bcryptで保存。承認済み旧ハッシュ継承はこの新規長さ要件を遡及適用しない。TOTP secretはFernet暗号化し、復号不能時にMFAを自動解除しない。
+- `K_SERVICE`が設定された環境、または`MONSHINMATE_ENV`がlocal / test / development / dev以外なら本番として扱う。DB初期化前に独立した強い`SECRET_KEY`と`TOTP_ENC_KEY`を検証する。ローカル未指定鍵はプロセスごとの乱数であり、再起動をまたぐ運用には固定の安全な鍵が必要。
+- access JWTはHS256、15分、`aud=monshinmate-admin`, `iss=monshinmate`, `scope="admin push:manage"`。`exp/iat/nbf/sub/aud/iss/jti/ver/purpose`と用途・寿命を検証し、永続アカウントのversion変更で既存accessを失効させる。Pushだけ8時間有効な別JWTという構成ではない。
+- ログインchallengeは5分、enrollmentは10分、再認証は5分。challengeやenrollment tokenをaccess tokenとして使えない。`amr`はパスワードのみ、またはパスワード+OTPの実際の認証を表す。
 
-## 6. データストア
-### 6.1 SQLite スキーマ（`db.py`）
-- `questionnaire_templates(id, visit_type, items_json, llm_followup_enabled, llm_followup_max_questions)`
-- `summary_prompts(id, visit_type, prompt_text, enabled)`
-- `followup_prompts(id, visit_type, prompt_text, enabled)`
-- `sessions(id, patient_name, dob, gender, visit_type, questionnaire_id, answers_json, summary, remaining_items_json, completion_status, attempt_counts_json, additional_questions_used, max_additional_questions, followup_prompt, started_at, finalized_at)`
-- `session_responses(session_id, item_id, answer_json, question_text, ts)`
-- `llm_settings(id, json)` / `app_settings(id, json)`
-- `users(id, username, hashed_password, totp_secret, is_totp_enabled, is_initial_password, totp_mode, password_updated_at, totp_changed_at)`
-- `audit_logs(id, ts, event, username, note)` と `users` 更新用トリガ。
+### 5.2 MFA・初回登録・復旧
 
-### 6.2 CouchDB（オプション）
-- `COUCHDB_URL` 設定時は `get_couch_db()` で接続し、セッション回答をドキュメントとして保存。`COUCHDB_DB`（既定 `monshin_sessions`）に `session_id` をキーとして `answers`, `question_texts`, `llm_question_texts`, `summary`, `timestamps` を格納。
-- `_users` DB を初期化し、認証情報（`COUCHDB_USER`, `COUCHDB_PASSWORD`）を設定。Docker Compose では `admin/admin`。
+- `/admin/login`はパスワードを検証し、必要に応じて`totp_required`とchallenge、または`enrollment_required`とenrollment tokenを返す。`/admin/login/totp`でchallengeを消費する。今回の指定は `MONSHINMATE_ADMIN_REQUIRE_MFA=0` によるパスワードのみ運用。MFA未登録・必須登録途中でないアカウントは直接accessを返す。未指定の本番／明示1はMFA必須、不正値は拒否。既存MFA・必須登録途中・ロック・由来不明pendingを設定だけで迂回しない。
+- TOTPの受理済みtime stepを永続保存する。前後1stepの許容範囲でも、登録・ログイン・再認証間で同じコードを再利用できない。
+- パスワード変更、TOTP設定変更・再登録等ではBearer accessに加えて`X-Admin-Reauth`を要求する。再認証tokenは当該accessの`jti`へ結び付ける。
+- 初回登録・復旧は [provision_admin.py](<../backend/tools/provision_admin.py>) のoffline `bootstrap` / `recovery`で開始する。operatorが保存先を明示し、0600の新規ファイルへ短命・一回限りのcredentialを発行する。既定15分（許容60〜3600秒）、サーバーにはhashだけ保存し、発行時点で旧管理アクセスをロック・失効させる。
+- HTTPの`/admin/bootstrap`または`/admin/recovery`でcredentialと新パスワードを提出。明示MFA任意なら直接access、それ以外はTOTP登録・確認へ進む。
+- 現パスワードの継続は承認済みオフライン `migrate-legacy` で対応。MFA無効・非初期の旧admin bcryptハッシュを、未作成の共有認証状態へ一度だけ継承する。既存状態を上書きせず、旧ユーザーのHTTP／起動時自動信頼もしない。旧管理者更新を止めた保守時間帯とバックアップが必要。
+- 旧パスワードreset API、非常用固定パスワード、GETによるTOTP secret発行、任意TOTP mode変更は廃止（410）。[reset_admin_password.py](<../backend/tools/reset_admin_password.py>) は旧方式を実行しない。
 
-### 6.3 ファイルストレージ
-- 問診項目画像: `backend/app/questionnaire_item_images/` 配下に保存し `/questionnaire-item-images/files/{filename}` で配信。
-- システムロゴ/アイコン: `backend/app/system_logo/` に保存し `/system-logo/files/{filename}` で配信。UI はトリミング情報を保持。
-- ログ: `backend/app/logs/` に API/LLM/セキュリティログ（ローテーション付き）を生成。
+具体的な管理手順は [管理者セットアップ](<admin_system_setup.md>)、UI操作は [管理者マニュアル](<../docs/admin_user_manual.md>) を参照。
 
-## 7. セキュリティと認証
-- 管理者ユーザーは `admin` 固定。初回パスワードは `ADMIN_PASSWORD`（既定 `admin`）。パスワード更新と同時に永続化する `users.is_initial_password` を `/admin/auth/status` が返し、状態表示のたびにbcrypt検証を繰り返さない。
-- TOTP（二段階認証）は `AdminSecurity` 画面で有効化。`/admin/totp/setup`（QR 生成）、`/admin/totp/verify`、`/admin/totp/disable`、`/admin/totp/regenerate` を利用。モード（`off` / `reset_only` / `login_and_reset`）は `/admin/totp/mode` で制御し、`users.totp_mode` に保存。
-- 非常用リセット: `ADMIN_EMERGENCY_RESET_PASSWORD` を設定した場合、TOTP 無効時のみ `/admin/password/reset/emergency` で初期化可能。CLI からは `backend/tools/reset_admin_password.py` を使用。
-- TOTP シークレットは `TOTP_ENC_KEY` 環境変数を設定すると Fernet で暗号化保存。`backend/tools/encrypt_totp_secrets.py` が移行ツール。
-- 監査ログ `audit_logs` と `security.log` にパスワード変更・TOTP 状態変更・ログイン試行を記録。PII は平文で出力しない。
-- 患者画面は匿名アクセス。セッション ID は `sessionStorage` に保持し、URL 共有を防ぐためリロード時にトップへリダイレクト。
+### 5.3 セキュリティ状態の保存先
 
-## 8. 環境変数と設定
-- 認証関連: `ADMIN_PASSWORD`, `ADMIN_EMERGENCY_RESET_PASSWORD`, `SECRET_KEY`, `TOTP_ENC_KEY`。
-- データベース: `MONSHINMATE_DB`, `COUCHDB_URL`, `COUCHDB_DB`, `COUCHDB_USER`, `COUCHDB_PASSWORD`。
-- LLM: `LLM_PROVIDER`（既定 `local`）、`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` など（UI から保存され `llm_settings` に反映）。
-- PDF/外観: `/system/*` API で編集した内容は `app_settings` に JSON として保存され、再起動後も反映される。
-- Docker Compose では `.env.example` を参考に `backend` サービスへ環境変数を渡す。セッション保存先 SQLite はホスト `./data/sqlite/app.sqlite3` にマウント。
+- SQLite: `security_state(key, revision, value)`に保存し、`BEGIN IMMEDIATE`でCAS更新を直列化する。通常の患者出力・設定exportには混ぜない。
+- CouchDB: `COUCHDB_SECURITY_DB`（既定は`COUCHDB_DB + "_security"`）というセッションDBと別のDBを使用し、`_rev`でCASを実装する。同一DB指定は拒否し、接続失敗時にSQLiteやメモリへfallbackしない。
+- Firestore: アダプタ生成前に`security_get_state`と`security_compare_and_swap_state`の実装を要求する。ローカルの非公開実装へトランザクションCAS・患者状態保護・メタデータ保存・インポート501を追加し、fakeで隔離検証済み。実SDK通信・実クラウドの並行トランザクションは未検証。[非公開アダプタの運用文書](../private/cloud-run-adapter/README.md) に従い、実revisionの確定と本番前ゲートを別途満たす。
+- CAS transformは再試行され得るため副作用を含めない。認証・失効・レート制限は複数worker間で共有される永続状態を参照する。
 
-## 9. 運用・監視
-- ヘルスチェック: `curl http://localhost:8001/healthz` → `{"status":"ok"}`。`/readyz` は DB 接続確認を含む。
-- LLMステータス: 管理画面は画面表示時または設定更新時に、管理者JWT付きで `/system/llm-status` を参照する。患者画面は別途ステータスを照会せず、実処理のフォールバックで問診を継続する。管理画面から手動疎通テスト（`/llm/settings/test`）を実行できる。
-- DB ステータス: `/system/database-status` が `sqlite` / `couchdb` / `error` を返す。管理ダッシュボードでバッジ表示。
-- バックアップ: SQLite はファイルコピー、CouchDB は `_all_dbs` ダンプ（`docker/tools/` に想定スクリプト）。エクスポート API は暗号化 ZIP での退避用途に使う。
-- ログ点検: `backend/app/logs/api.log`, `llm.log`, `security.log`。必要に応じて logrotate や外部集中管理へ転送。
+## 6. LLM連携とデータ最小化
 
-## 10. 制約・留意事項
-- LLM 問い合わせは同期呼び出しで、タイムアウト時は患者フローがベース問診のみで進行。追加質問が 0 件の場合でも finalize を呼び出す。
-- `/metrics` はプロセス内カウンタであり、マルチプロセスで共有されない。Gunicorn ワーカー増設時は Prometheus ライブラリへの置換が必要。
-- CouchDB 無効時はセッション回答が SQLite の JSON カラムに保存されるため、サイズ増に注意。大量データ運用時は CouchDB か PostgreSQL への移行を推奨。
-- 実際のログインは `AdminLogin` がAPIを呼ぶ。ログイン成功時の管理者JWTは `sessionStorage` に保持し、保護対象APIへBearer tokenとして送る。Bearer認証はCookieのようにブラウザから自動送信されないため、今回の保護対象に独立したCSRF tokenは追加していない。
-- `frontend` 側のルータはブラウザリロード時に `/` へ強制移動する実装のため、管理ページへ直接ブックマークするとログイン前提の導線になる。
+- プロバイダはOllama、LM Studio / OpenAI互換等。利用有効化・モデル・URL・認証設定は管理者が管理する。設定変更だけで保存済みの患者履歴を自動再送しない。
+- [LLM設定の秘匿処理](<../backend/app/llm_settings_security.py>) は更新と読み取りを分離し、allowlistで読み取り応答・exportを構成する。API key、認証token、秘密鍵、`service_account_json`は返さず、必要なら設定済みフラグだけを返す。拡張fieldも非機密として許可されたものだけ。
+- 追加質問と要約には、テンプレートおよびサーバーが発行した質問に一致する臨床回答だけを渡す。個人情報項目、氏名、生年月日、連絡先、住所、患者ID、token等を除外する。**自由記述に混在する識別情報の完全匿名化は保証しない。** 入力内容・患者説明・送信先事業者との取り決めも必要。
+- HTTPS origin allowlist、URL構文、認証情報・query・fragmentの拒否、DNS結果の公開IP検査で宛先を制限する。metadata、private / loopback等への誘導を拒否し、redirectで制限を迂回しない。
+- ローカルLLMのloopback例外は`MONSHINMATE_ENV=local`かつ`MONSHINMATE_ALLOW_LOCAL_LLM=1`の場合だけ。`MONSHINMATE_LLM_ALLOWED_ORIGINS`は環境側で管理し、管理画面のURL変更だけで宛先制限を緩和できない。
+- 追加質問は`SessionFSM`と`LLMGateway.generate_followups()`で生成し、件数・利用量を制限する。HTTP失敗・不正な構造化応答等は安全なfallbackに収束させ、生の例外本文・credential・患者入力をログや患者応答へ反映しない。
+- 要約はテンプレート別プロンプトを使い、失敗時は簡易要約へfallbackする。LLM無効時やstub応答であることと、「設定にかかわらず外部送信しない」ことを混同しない。
+- 管理者用`/system/llm-status`は詳細、患者用`/system/llm-availability`は`status`だけ。`/llm/chat`も管理者限定であり、匿名LLM中継APIにしない。
+- Vertex AI等のクラウド固有実装・資格情報運用は非公開アダプタの検証が必要。現行reviewでクラウド側の保持、logging、処理地域、実モデル利用可否を確認したとは主張しない。
 
-## 11. 関連資料
-- `README.md`: 公開向けセットアップ・機能概要。
-- `internal_docs/implementation.md`: 実装履歴とチェックリスト（計画時点のメモ含む）。
-- `internal_docs/admin_system_setup.md`: 管理者向け運用手順（TOTP/非常用リセットの詳細）。
-- `docs/session_api.md`: 公開 API 仕様書。
-- `frontend/public/docs/*.md`: 管理画面向けマニュアル（ビルド成果物は `frontend/dist/docs/`）。
-- `tools/export_public.sh`: 公開資料エクスポート。
+## 7. テンプレート・出力・アセット
 
----
-本書に記載の挙動は `main` ブランチの最新コードと一致するよう随時更新すること。差異を発見した場合は、本ファイルと `internal_docs/implementation.md` 双方に記録する。
+### 7.1 問診・プロンプト
+
+- `questionnaire_templates`はテンプレートID・受診種別ごとの項目と追質問有効フラグ・上限件数を保存する。
+- `summary_prompts` / `followup_prompts`に有効フラグとプロンプトを保存し、管理UIから編集する。テンプレート変更・初期化APIは管理者専用。
+- 条件分岐、年齢・性別条件、選択肢、自由入力、個人情報ブロック等をフォームに反映する。郵便番号補助に失敗しても手入力を維持する。
+
+### 7.2 インポート・エクスポート
+
+- `/admin/sessions/export|import`と`/admin/questionnaires/export|import`は管理者専用。転送対象はschema allowlistで検査し、認証状態やLLM credentialを出力しない。患者記録のexport自体にはPIIが含まれ得る。
+- JSON envelopeは`version/type/exported_at/payload`で構成し、任意パスワード付きのPBKDF2+Fernet形式を扱う。通常のJSONやZIPを自動的に暗号化済みと説明しない。
+- importは5MiB・最大100record等の上限、厳格なschemaとアセット検査を行う。`merge|replace`のいずれも、検証完了後にアダプタのatomic import hookで反映する。認証状態・既存credentialを移送データから上書きしない。
+- **SQLiteのatomic importは実装済み。** [sqlite_atomic_imports.py](<../backend/app/sqlite_atomic_imports.py>) と [SQLiteAdapter](<../backend/app/db/sqlite_adapter.py>) が同一接続・単一トランザクションで設定、画像、セッション等を更新し、失敗時はrollbackする。
+- **CouchDB / Firestoreのatomic importは未対応で501。** 部分更新へのfallbackや本番データをsnapshotで巻き戻す代替処理はしない。アダプタ機能がない場合にUIだけで成功を見せない。
+- [pdf_renderer.py](<../backend/app/pdf_renderer.py>) が問診結果・条件項目・個人情報ブロック等のPDFを構成する。PDF設定は管理者用`/system/pdf-layout`で扱い、ReportLabはPDF要求時に読み込む。
+
+### 7.3 画像と保存領域
+
+- 問診画像・ロゴは [transfer_security.py](<../backend/app/transfer_security.py>) で検証し、単一フレームのPNG / JPEG / WebPのみ受理する。SVG、HTML、アニメーションを拒否する。
+- 入力と再encode後の画像は各512KiB以下、最大4,000,000pixel。デコード・再encodeでメタデータを除去し、拡張子・申告MIMEだけを信用しない。取得にも安全なヘッダーを適用する。
+- アセットの正本は永続化アダプタのbinary asset保存であり、旧ローカル画像ディレクトリを現行の唯一の保存先としない。旧資産の起動時移行は明示的な設定・承認の下で扱い、Composeでは無効化する。
+
+## 8. データストア・運用上の注意
+
+### 8.1 SQLite / CouchDB
+
+主なSQLiteテーブルは`questionnaire_templates`, `summary_prompts`, `followup_prompts`, `sessions`, `session_responses`, `llm_settings`, `app_settings`, `security_state`, `audit_logs`等。`sessions`には回答・進行情報だけでなく`pending_llm_questions_json`, `llm_question_texts_json`, `question_texts_json`も保存する。旧`users`が残っていても、現行管理者認証の正本ではない。
+
+CouchDBのセッションdocumentにも進行状態・質問文・未処理質問を保存する。セッションDBとsecurity DBのアクセス権を分離し、公開設定・患者出力からsecurity状態へ到達させない。CouchDB利用時もローカル設定等を含む全保存先をバックアップ対象として把握する。
+
+### 8.2 フロントエンド
+
+- 患者フローは`/` → `/basic-info` → `/questionnaire` → `/questions` → `/done`。ルートガード、無操作監視、世代管理と消去処理を組み合わせる。単純な「reloadしたらトップへ戻す」だけをプライバシー対策にしない。
+- 管理画面はlogin / enrollment / recoveryを経て、テンプレート、セッション、転送、LLM、外観、郵便番号、時刻、安全設定等へ遷移する。管理ページは遅延ロードする。
+- [adminApi.ts](<../frontend/src/utils/adminApi.ts>) は同一originへのBearer送信、`no-store`、redirect拒否、401時の認証状態消去を担う。accessは15分であり、期限切れをUIだけで延長しない。
+- `/system/bootstrap`は患者表示用の設定を一括取得し、テーマ・タイムゾーン等と共有する。管理者向けのDB/LLM詳細状態を患者表示のために照会しない。
+
+### 8.3 設定・監査・バックアップ
+
+- 主な環境設定: `MONSHINMATE_ENV`, `SECRET_KEY`, `TOTP_ENC_KEY`, `MONSHINMATE_DB`, `COUCHDB_URL`, `COUCHDB_DB`, `COUCHDB_SECURITY_DB`, `COUCHDB_USER`, `COUCHDB_PASSWORD`、LLM接続・宛先制限、CORS設定。旧`ADMIN_PASSWORD` / `ADMIN_EMERGENCY_RESET_PASSWORD`をbootstrap / recoveryの代替にしない。
+- APIログはルートパターン・method・status・時間を中心とし、回答、password、OTP、token、QR secret、生の例外本文を記録しない。セキュリティ監査はcredentialを除いたイベントを扱い、既存user triggerが認証状態の正本ではない。
+- `/metrics`は管理者限定。プロセス内の簡易カウンタをクラスタ全体の永続監査やレート制限の代わりにしない。
+- バックアップは実際のSQLite / CouchDB各保存先・アセット・必要な暗号鍵を対象とし、暗号化・権限・保持期間・復元手順を運用で定義する。CouchDBのDB名一覧取得はバックアップではない。TOTP暗号鍵の紛失や無計画な差し替えはMFA復号不能につながる。
+- 退役したcredentialの復活、旧capabilityの復活、残存leaseとの不整合を避けるため、security状態を含む復元・移行は通常の患者export/importとは別の承認付き作業として扱う。
+- 今回の実装確認はローカル・合成データの範囲。実CouchDB / Firestore等の疎通、本番複数インスタンス、クラウドIAM・外部事業者保持方針まで検証済みと解釈しない。
+
+## 9. 履歴: Geminiモデル選定とクラウド配置
+
+> 以下は従来文書に記録されたモデル調査・移行判断の履歴を保存したものです。今回のセキュリティreviewで料金・GA状態・提供地域・実配備・移行完了を再検証していません。現行運用への指示や本番確認結果として扱わず、変更時は一次情報と承認済みの非公開運用記録を再確認してください。
+
+2026-09-01の調査記録では、Gemini 2.5 Flashの移行候補は次のとおりとされていた。
+
+- `gemini-3.5-flash-lite`: GA、Standard PayGoは`global` / `us` / `eu`。Global Standard料金は入力100万tokenあたり0.30米ドル、テキスト出力100万tokenあたり2.50米ドル。
+- `gemini-3.1-flash-lite`: GA、Standard PayGoは`global` / `us` / `eu`。同料金は入力0.25米ドル、テキスト出力1.50米ドル。
+- `gemini-3.5-flash`: GA。`asia-northeast1`では単一ゾーンProvisioned Throughputのみ、Standard PayGoは`global` / `us` / `eu`。同料金は入力1.50米ドル、テキスト出力9.00米ドル。
+
+当時の記録では、`asia-northeast1`とStandard PayGoを同時に維持できる候補は見つからず、2026-09-16の承認で`gemini-3.1-flash-lite` / `us`へ移行する判断が記載された。アプリは`asia-northeast1`、Firestore / GCSは`asia-northeast2`、モデル処理は米国マルチリージョンという保存・処理地域の区別が説明されていた。新規GCPプロファイルの既定候補は同モデルと`global`、保存済みプロファイルはmodel / locationを維持する方針だった。今回、これらの実配備や移行の実施状況は確認していない。
+
+通信設計の過去記録には、Vertex AIでADCを利用する単発`generateContent`、JSONキーファイル不使用、用途別JSON schema、Gemini 3系の温度省略、出力token 32〜65,536・timeout 5〜120秒、Grounding tools不使用が記載された。`role=user`のみの単発要求では`thoughtSignature`を返送する後続要求がなく、将来model応答やfunction responseを会話へ追加する場合はpartの順序と署名を保った再送が必要、とされた。これらも非公開実装を今回検証した結果ではない。
+
+request-response loggingやプロジェクト単位のインメモリcacheを無効にする方針も記録されていたが、不正利用監視等の事業者側保持までゼロになる保証ではない。現行設定や除外申請の状態は別途確認が必要。
+
+当時参照された一次情報: [モデルのライフサイクル](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)、[Gemini 3.5 Flash](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash)、[Gemini 3.5 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite)、[Gemini 3.1 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-1-flash-lite)、[料金表](https://cloud.google.com/gemini-enterprise-agent-platform/generative-ai/pricing)、[thought signatures](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking/thought-signatures)、[GenerateContent Part](https://docs.cloud.google.com/gemini-enterprise-agent-platform/reference/rest/v1/Content)。
+
+## 10. 関連ドキュメント
+
+- [管理者セットアップ・復旧](<admin_system_setup.md>)
+- [管理者ユーザーマニュアル](<../docs/admin_user_manual.md>)
+- [セッションAPI](<../docs/session_api.md>)
+- [実装履歴と判断メモ](<implementation.md>)
+- [セキュリティレビュー・本番反映前ゲート](<security_review.md>)
+- [LLM通信の補足](<LLMcommunication.md>)（過去の手順と現行境界の差に注意）

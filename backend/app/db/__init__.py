@@ -1,4 +1,4 @@
-﻿"""永続化アダプタの切替ハブ。"""
+"""永続化アダプタの切替ハブ。"""
 from __future__ import annotations
 
 import os
@@ -30,6 +30,11 @@ for candidate in (_ADAPTER_DIR, _PRIVATE_DIR):
             sys.path.insert(0, path_str)
 
 from ..config import get_settings
+from ..security_config import validate_security_configuration
+
+# Validate before importing adapters (which may open external connections).
+validate_security_configuration()
+
 from .interfaces import PersistenceAdapter
 from .sqlite_adapter import (
     SQLiteAdapter,
@@ -104,11 +109,19 @@ def _select_adapter() -> PersistenceAdapter:
                 " MONSHINMATE_FIRESTORE_ADAPTER 環境変数でプライベートモジュールを指定し、"
                 "Cloud Run 用サブモジュールを追加してください。"
             )
+        for method in ("security_get_state", "security_compare_and_swap_state"):
+            if not callable(getattr(_firestore_adapter_class, method, None)):
+                raise RuntimeError("Firestore adapter lacks required persistent security CAS support: " + method)
         return _firestore_adapter_class(_settings.firestore)  # type: ignore[call-arg]
     return SQLiteAdapter()
 
 
 _adapter: PersistenceAdapter = _select_adapter()
+
+def get_active_adapter() -> PersistenceAdapter:
+    """Return the configured adapter without silently substituting a backend."""
+    return _adapter
+
 
 def get_current_persistence_backend() -> str:
     """現在選択されている永続化バックエンド名を返す。"""
@@ -130,8 +143,8 @@ def check_firestore_health() -> bool:
         else:
             adapter.list_templates()  # type: ignore[attr-defined]
         return True
-    except Exception as exc:  # pragma: no cover - 例外時のみ
-        logger.warning("firestore_health_check_failed: %s", exc)
+    except Exception:  # provider errors may contain credentials or patient data
+        logger.warning("firestore_health_check_failed")
         return False
 
 def _delegate(name: str) -> Callable[..., Any]:
@@ -157,6 +170,8 @@ def init_db(db_path: str | None = None) -> None:
 
 
 _METHOD_NAMES = [
+    "security_get_state",
+    "security_compare_and_swap_state",
     "upsert_template",
     "get_template",
     "list_templates",
@@ -214,6 +229,7 @@ __all__ = [
     "couch_db",
     "check_firestore_health",
     "get_current_persistence_backend",
+    "get_active_adapter",
     "fernet",
     "pwd_context",
     "get_couch_db",

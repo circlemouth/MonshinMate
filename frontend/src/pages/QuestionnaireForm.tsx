@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { finalizePatient } from '../utils/finalizePatient';
+import { patientJson, patientGeneration, isPatientGeneration } from '../utils/patientSession';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   VStack,
   FormControl,
@@ -106,9 +108,11 @@ export default function QuestionnaireForm() {
       const ageParam = age !== undefined ? `&age=${age}` : '';
       const genderParam = gender ? `&gender=${encodeURIComponent(gender)}` : '';
       const encodedId = encodeURIComponent(questionnaireIdFromSession);
+      const epoch = patientGeneration();
       fetch(`/questionnaires/${encodedId}/template?visit_type=${visitType}${genderParam}${ageParam}`)
         .then((res) => res.json())
         .then((data) => {
+          if (!isPatientGeneration(epoch)) return;
           setItems(data.items);
           sessionStorage.setItem('questionnaire_items', JSON.stringify(data.items));
           const ans = { ...answers };
@@ -147,7 +151,7 @@ export default function QuestionnaireForm() {
             'llm_followup_enabled',
             data.llm_followup_enabled ? '1' : '0'
           );
-        });
+        }).catch(() => {});
     }, [visitType, sessionId, navigate, gender, age, patientName, personalInfoFromEntry, questionnaireIdFromSession]);
 
   useEffect(() => {
@@ -197,29 +201,23 @@ export default function QuestionnaireForm() {
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`/sessions/${sessionId}/finalize`, { method: 'POST' });
-      const data = await res.json();
-      sessionStorage.setItem('summary', data.summary);
-      sessionStorage.setItem('answers', JSON.stringify(ans));
+      await finalizePatient(sessionId);
+      navigate('/done', { replace: true });
     } catch {
-      sessionStorage.setItem('answers', JSON.stringify(ans));
-      postWithRetry(`/sessions/${sessionId}/finalize`, {});
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({
-        title: 'ネットワークエラーが発生しました。',
-        description: '接続後に再度お試しください。',
-        status: 'error',
-        channel: 'patient',
-        actionLabel: '再試行',
-        onAction: () => {
-          void finalize(ans);
-        },
+        title: '送信完了を確認できませんでした。',
+        description: '回答は消去していません。接続を確認して再試行してください。',
+        status: 'error', channel: 'patient', actionLabel: '再試行', duration: null, isClosable: false,
+        onAction: () => { void finalize(ans); },
       });
     }
-    navigate('/done');
   };
 
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const handleSubmit = async () => {
-    if (!sessionId) return;
+    if (!sessionId || submitting.current) return;
     setAttempted(true);
     // 必須チェック
     const requiredErrors = visibleItems
@@ -228,10 +226,13 @@ export default function QuestionnaireForm() {
     if (requiredErrors.length > 0) {
       return;
     }
+    submitting.current = true; setBusy(true);
+    const epoch = patientGeneration();
     const flag = sessionStorage.getItem('llm_followup_enabled');
     const llmFollowupEnabled = flag === '1' || flag === null;
     try {
       await postWithRetry(`/sessions/${sessionId}/answers`, { answers });
+      if (!isPatientGeneration(epoch)) return;
       if (llmFollowupEnabled) {
         sessionStorage.setItem('answers', JSON.stringify(answers));
         navigate('/llm-wait');
@@ -239,8 +240,11 @@ export default function QuestionnaireForm() {
         await finalize(answers);
       }
     } catch {
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       sessionStorage.setItem('answers', JSON.stringify(answers));
-      await finalize(answers);
+      notify({ title: '回答を送信できませんでした。もう一度送信してください。', status: 'error', channel: 'patient' });
+    } finally {
+      submitting.current = false; setBusy(false);
     }
   };
 
@@ -456,7 +460,7 @@ export default function QuestionnaireForm() {
           </Box>
         );
       })}
-      <Button onClick={handleSubmit} colorScheme="primary" size="lg" py={7} isDisabled={missingRequired}>
+      <Button onClick={handleSubmit} isLoading={busy} colorScheme="primary" size="lg" py={7} isDisabled={missingRequired}>
         次へ
       </Button>
     </VStack>

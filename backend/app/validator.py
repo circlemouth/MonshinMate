@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Sequence
+import json
+import math
 
 from fastapi import HTTPException
 
@@ -23,15 +25,46 @@ class Validator:
                 return it
             if isinstance(it, dict) and it.get("id") == item_id:
                 return it
+            children = it.get("followups", {}) if isinstance(it, dict) else getattr(it, "followups", {})
+            for group in (children or {}).values():
+                found = Validator._find_item(group or [], item_id)
+                if found is not None:
+                    return found
         return None
+
+    @staticmethod
+    def validate_shape(answers: dict[str, Any]) -> None:
+        def check(value: Any, depth: int = 0) -> None:
+            if depth > 6:
+                raise HTTPException(422, "answer nesting limit exceeded")
+            if isinstance(value, str) and len(value) > 4000:
+                raise HTTPException(422, "answer length limit exceeded")
+            if isinstance(value, dict):
+                if len(value) > 200:
+                    raise HTTPException(422, "answer item limit exceeded")
+                for key, child in value.items():
+                    if not isinstance(key, str) or len(key) > 128:
+                        raise HTTPException(422, "invalid answer key")
+                    check(child, depth + 1)
+            elif isinstance(value, list):
+                if len(value) > 100:
+                    raise HTTPException(422, "answer list limit exceeded")
+                for child in value:
+                    check(child, depth + 1)
+            elif isinstance(value, float) and not math.isfinite(value):
+                raise HTTPException(422, "non-finite answer")
+        check(answers)
+        if len(json.dumps(answers, ensure_ascii=False, allow_nan=False).encode()) > 256 * 1024:
+            raise HTTPException(413, "answers too large")
 
     @staticmethod
     def validate_partial(items: Sequence[Any], answers: dict[str, Any]) -> None:
         """部分的な回答の型や選択肢を検証する。"""
+        Validator.validate_shape(answers)
         for key, value in answers.items():
             spec = Validator._find_item(items, key)
             if spec is None:
-                continue
+                raise HTTPException(status_code=422, detail="unknown answer item")
             item_type = getattr(spec, "type", spec.get("type") if isinstance(spec, dict) else None)
             options = getattr(spec, "options", spec.get("options") if isinstance(spec, dict) else None)
             if item_type in ("string", "text"):

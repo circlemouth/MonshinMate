@@ -20,8 +20,8 @@ Dockerコンテナで簡単にセットアップできます。
 - LLM 連携: 不足項目に応じた追加質問の生成と、問診完了時の要約作成を提供。ollama もしくは OpenAI 互換（LM Studio 等）に接続できます。プロバイダ・モデル・温度・システムプロンプト・タイムアウトは管理画面から設定でき、モデル一覧取得と疎通テストを備えます（既定は無効で、設定しない限り外部送信はありません）。
 - エクスポート/出力: 問診結果を PDF / CSV / Markdown で出力可能。複数選択の ZIP（MD/PDF）や集計 CSV に対応。テンプレート・セッションの JSON エクスポート/インポートはパスワード付き暗号化（Fernet）に対応し、画像（項目画像・ロゴ）も同梱します。
 - 管理画面（設定）: タイムゾーン、施設表示名、導入文/完了文のカスタマイズ、テーマカラー、ロゴ/アイコンのアップロード、PDF レイアウト（構造化/レガシー）、既定テンプレートの切替を提供します。状態カードで DB 種別・LLM 疎通状況を表示します。
-- 二段階認証（Authenticator/TOTP）: 管理者ログインに TOTP を導入できます。TOTP シークレットの暗号化保存（`TOTP_ENC_KEY`）や非常用リセット（`ADMIN_EMERGENCY_RESET_PASSWORD`）、適用モード（off/reset_only/login_and_reset）を備えます。
-- データ永続化: 既定は SQLite。環境変数で CouchDB を有効化するとセッション/回答のみを CouchDB に保存します。
+- 管理認証: 今回の指定は明示ポリシーによるパスワードのみ運用。既存パスワードは条件を満たす旧hashのオフライン移行で継承できます。TOTPも利用可能ですが、環境変数の初期/非常用パスワード認証と旧resetは廃止されています。[管理者セットアップ](<internal_docs/admin_system_setup.md>) を参照してください。
+- データ永続化: 既定は SQLite。環境変数で CouchDB を有効化するとセッション/回答と共有セキュリティ状態を CouchDB に保存します。
 - 運用補助: ヘルスチェック（/health, /healthz, /readyz）、OpenMetrics（/metrics）、監査ログ（パスワード/TOTP変更・ログイン試行）を提供します。
 
 ## システム構成
@@ -29,12 +29,12 @@ Dockerコンテナで簡単にセットアップできます。
 - フロントエンド: React + Vite + Chakra UI（`frontend/`）。開発は Vite、配信は Nginx（`frontend/Dockerfile`）。
 - 永続化:
   - SQLite（既定）: テンプレート/各種設定/監査ログ/管理ユーザー等を保存。`MONSHINMATE_DB` 未設定時は `backend/app/app.sqlite3` を使用。
-  - CouchDB（任意）: セッションと回答を保存。`COUCHDB_URL` を設定すると有効化。
+  - CouchDB（任意）: セッション・回答・共有セキュリティ状態を保存。`COUCHDB_URL` を設定すると有効化。
 - LLM ゲートウェイ: ollama または OpenAI 互換 API（LM Studio 等）に接続（`backend/app/llm_gateway.py`）。モデル一覧取得と疎通テストを提供。
 - 配布/起動: `docker-compose.yml` で `couchdb` / `backend` / `frontend` を定義。`FRONTEND_HTTP_PORT` でフロントのホスト側ポート変更可。
 
 ## クイックスタート（Docker 推奨）
-1) リポジトリ直下でビルドして起動します。
+1) [設定例](<.env.example>) と [管理者セットアップ](<internal_docs/admin_system_setup.md>) を確認し、専用CouchDB資格情報・独立した強いJWT/TOTP鍵・MFAポリシーを設定します。既存鍵を不用意に再生成しないでください。開発では合成データのみを使い、本番データとは分離します。その後リポジトリ直下でビルドして起動します。
 ```
 docker compose build
 docker compose up -d
@@ -43,10 +43,10 @@ docker compose up -d
 2) アクセス
 - フロントエンド: `http://localhost:5173`（`FRONTEND_HTTP_PORT` で変更可）
 - バックエンド API: `http://localhost:8001`
-- CouchDB 管理画面: `http://localhost:5984/_utils`（既定ユーザー `admin/admin`）
+- CouchDB 管理画面: `http://localhost:5984/_utils`（明示設定した専用資格情報。既定 `admin/admin` はありません）
 
 3) 初期セットアップ
-- 管理ユーザーは `admin`。初期パスワードは `ADMIN_PASSWORD`（未設定時は `admin`）です。ログイン後に必ず変更してください。
+- 管理ユーザーは `admin`。現パスワードを継続するアップグレードでは、承認済みオフライン `migrate-legacy` を使います（条件付き・自動移行ではありません）。新規登録だけは単回bootstrap資格情報で行います。固定の初期パスワードはありません。
 - 「セキュリティ」から TOTP（二段階認証）を有効化できます（QR を読み取り 6 桁コードを登録）。
 - 「LLM 設定」でプロバイダ・ベース URL・モデル・API キーを設定して疎通テストを実行してください（未設定のままでも動作します）。
 
@@ -59,7 +59,7 @@ docker compose down
 - compose では `backend` に `COUCHDB_URL=http://couchdb:5984/` を渡します。セッションは CouchDB に保存され、テンプレートなどは SQLite に保存されます。
 
 ## ローカル開発
-前提: Python 3.11 以上、Node.js 18 以上。
+検証済み: Python 3.12。Node.jsは `^20.19.0 || >=22.12.0`。起動前に `MONSHINMATE_DB` を専用の合成DBパスへ設定し、実DB・実環境ファイルを使用しないでください。
 
 バックエンド（API）
 ```
@@ -68,7 +68,8 @@ python -m venv venv
 venv\Scripts\activate  # Windows（PowerShell）
 # または source venv/bin/activate  # macOS/Linux
 pip install --upgrade pip
-pip install -e .
+pip install -r requirements.lock
+pip install --no-deps -e .
 uvicorn app.main:app --reload --port 8001
 ```
 動作確認: `curl http://localhost:8001/healthz` → `{"status":"ok"}` で正常。
@@ -76,7 +77,7 @@ uvicorn app.main:app --reload --port 8001
 フロントエンド（開発サーバ）
 ```
 cd frontend
-npm install
+npm ci
 npm run dev
 # http://localhost:5173 を開く（`FRONTEND_HTTP_PORT` で調整可）
 ```
@@ -90,32 +91,27 @@ npm run dev
 
 ## 環境変数（主要）
 - 基本/実行: `MONSHINMATE_ENV`（既定 `local`）、`FRONTEND_HTTP_PORT`
-- 管理者/認証: `ADMIN_PASSWORD`、`ADMIN_EMERGENCY_RESET_PASSWORD`、`SECRET_KEY`（JWT 署名鍵）
+- 管理者/認証: `SECRET_KEY`（JWT署名鍵）、`MONSHINMATE_ADMIN_REQUIRE_MFA`（今回 `0`、必須運用は `1`、未指定の本番は必須。不正値拒否）
 - 二段階認証: `TOTP_ENC_KEY`（Fernet 鍵。URL-safe Base64 32byte）
 - データベース（SQLite/CouchDB）:
   - `MONSHINMATE_DB`（SQLite ファイルパス。Compose 既定は `/app/data/sqlite/app.sqlite3`）
   - `COUCHDB_URL`、`COUCHDB_DB`（既定 `monshin_sessions`）、`COUCHDB_USER`、`COUCHDB_PASSWORD`
 - （CouchDB を使う場合は `COUCHDB_URL` 等を設定してください）
-- Secret Manager（任意・プライベートモジュール導入時）:
-  - `MONSHINMATE_SECRET_MANAGER_ADAPTER`（例: `monshinmate_cloud.secret_manager:load_secrets`）
-  - `SECRET_MANAGER_ENABLED`、`SECRET_MANAGER_PROJECT`、`SECRET_MANAGER_PREFIX`
-- ファイルストレージ（任意）: `FILE_STORAGE_BACKEND`（既定 `local`）、`GCS_BUCKET`、`STORAGE_EMULATOR_HOST`、`GCS_SIGNED_URL_TTL`
+- Cloud Run/Firestoreと秘密情報の起動前注入は [非公開アダプタ運用文書](<private/cloud-run-adapter/README.md>) を参照してください。汎用Composeをその本番設定とみなさないでください。
 
-Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照してください。
+設定は [Compose](<docker-compose.yml>) と [設定例](<.env.example>) を参照してください。
 
 ## 認証と二段階認証（Authenticator/TOTP）
-- 管理ログインにはパスワードが必須です。初回は `admin` / `ADMIN_PASSWORD` でログインし、速やかに変更してください。
-- 二段階認証は管理画面「セキュリティ」で有効化します。QR を Authenticator アプリで読み取り、6 桁コードを登録します。
-- 非常時の復旧:
-  - TOTP が無効のときは `ADMIN_EMERGENCY_RESET_PASSWORD` 設定時に UI から非常用パスワードで初期化できます。
-  - UI が使えない場合は `backend/tools/reset_admin_password.py` で初期化（実行前に DB バックアップを推奨）。
-- セキュリティ強化:
-  - `TOTP_ENC_KEY` を設定すると TOTP シークレットを暗号化保存します。
-  - パスワード変更/TOTP 状態変更/ログイン試行は `backend/app/logs/security.log` と SQLite `audit_logs` に監査記録します（PII は平文で出力しません）。
+- 今回の指定では `MONSHINMATE_ADMIN_REQUIRE_MFA=0` を明示し、MFA未登録ならパスワードのみでログインします。既存MFA・必須登録・ロックを設定で迂回しません。
+- 現パスワードの継続は、非初期・MFA無効などの条件を満たす旧bcryptハッシュのオフライン継承で対応します。変更を強制するbootstrap/recoveryを継続目的で発行しないでください。実アカウントの適用可否と本番ログインは未確認です。
+- 新規登録/必要な復旧は、明示対象の単回資格情報を [発行CLI](<backend/tools/provision_admin.py>) で発行します。発行時点で既存アカウントをロック・失効するため、承認・バックアップ・保守計画が必要です。
+- MFA有効時はpassword→短命challenge→TOTPの順です。JWTは15分、機密操作は5分再認証。共有CASによる制限/失効を維持します。
+- TOTPは「セキュリティ」で登録できます。任意登録の確認前は現在の認証設定を維持します。本番のJWT/TOTP鍵は起動前に独立した強い値を注入し、既存鍵を保持してください。
+- 正確な条件・移行手順・72バイト制限は [管理者セットアップ](<internal_docs/admin_system_setup.md>)、認証別のAPI契約は [API仕様](<docs/session_api.md>) を参照してください。
 
 ## データ管理（SQLite / CouchDB）
 - 既定は SQLite。Compose では `./data/sqlite/app.sqlite3`（コンテナ内 `/app/data/sqlite/app.sqlite3`）に保存します。
-- `COUCHDB_URL` を設定すると、セッション/回答のみ CouchDB に保存されます。テンプレート・設定は SQLite に保存します。
+- `COUCHDB_URL` を設定すると、セッション/回答と共有セキュリティ状態 CouchDB に保存されます。テンプレート・設定は SQLite に保存します。
 - 管理画面の「メイン」カードで、現在の DB 種別（SQLite/CouchDB/エラー）を確認できます。
 
 ## 郵便番号辞書
@@ -145,12 +141,12 @@ Docker Compose の既定値は `docker-compose.yml` と `.env.example` を参照
 - ダウンロード/入出力: `GET /admin/sessions/{id}/download/{fmt}` `GET /admin/sessions/bulk/download/{fmt}` `POST /admin/sessions/export` `POST /admin/sessions/import`
 - 削除: `DELETE /admin/sessions/{id}` `POST /admin/sessions/bulk/delete`
 - LLM 設定/テスト: `GET/PUT /llm/settings` `POST /llm/settings/test` `POST /llm/list-models`
-- 認証/TOTP: `GET /admin/auth/status` `POST /admin/login` `POST /admin/password` `POST /admin/password/change` `POST /admin/password/reset/request` `POST /admin/password/reset/confirm` `POST /admin/password/reset/emergency` `GET/PUT /admin/totp/mode` `GET /admin/totp/setup` `POST /admin/totp/verify` `POST /admin/totp/disable` `POST /admin/totp/regenerate`
+- 認証/TOTP: `GET /admin/auth/status` `POST /admin/login` `POST /admin/login/totp` `POST /admin/bootstrap` `POST /admin/recovery` `POST /admin/reauth` `POST /admin/password/change` `POST /admin/totp/setup` `POST /admin/totp/verify` `POST /admin/totp/disable`。旧reset・GET setup・PUT modeなどの廃止経路は410です。
 
-詳細仕様は `docs/session_api.md` と管理画面マニュアル（`docs/admin_user_manual.md`）を参照してください。
+公開許可リスト以外は管理JWT必須です。患者操作は専用Bearer `session_token`、サマリー連携は `X-MonshinMate-Api-Key` を使い、互換ではありません。詳細は [API仕様](<docs/session_api.md>) と [管理画面マニュアル](<docs/admin_user_manual.md>) を参照してください。
 
 ## 保守ツール
-- `backend/tools/reset_admin_password.py`: 管理者パスワードを強制リセット（TOTP 無効化を含む）
+- [管理者オフラインCLI](<backend/tools/provision_admin.py>): `migrate-legacy`（条件付き現パスワード継承）、`bootstrap` / `recovery`（ロック・失効を伴う単回資格情報発行）。旧resetツールは廃止されています。
 - `backend/tools/audit_dump.py`: 監査ログのダンプ（`--limit`/`--db`）
 - `backend/tools/encrypt_totp_secrets.py`: 既存 DB の TOTP シークレットを暗号化保存へ移行
 - `backend/tools/collect_licenses.py`: 依存ライブラリのライセンス情報を収集

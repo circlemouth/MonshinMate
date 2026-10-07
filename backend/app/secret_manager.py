@@ -36,8 +36,9 @@ from .config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Signing/encryption keys must already be injected before production imports.
+# Fixed admin passwords are retired; never request them from a cloud loader.
 _DEFAULT_SECRET_KEYS = [
-    "ADMIN_PASSWORD",
     "SECRET_KEY",
     "TOTP_ENC_KEY",
     "LLM_API_KEY",

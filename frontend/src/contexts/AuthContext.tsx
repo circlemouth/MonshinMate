@@ -1,11 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
-import { adminFetch } from '../utils/adminApi';
+import { adminFetch, clearAdminSession, ADMIN_AUTH_CHANGED } from '../utils/adminApi';
 
 // APIレスポンスの型定義
 interface AuthStatus {
   is_initial_password: boolean;
   is_totp_enabled: boolean;
+  mfa_required?: boolean;
   emergency_reset_available?: boolean;
   is_authenticated?: boolean;
 }
@@ -16,6 +17,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isInitialPassword: boolean;
   isTotpEnabled: boolean;
+  mfaRequired: boolean | null;
   emergencyResetAvailable: boolean;
   showTotpSetup: boolean;
   setShowTotpSetup: (show: boolean) => void;
@@ -47,6 +49,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(hasStoredAdminSession);
   const [isInitialPassword, setIsInitialPassword] = useState(false);
   const [isTotpEnabled, setIsTotpEnabled] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState<boolean | null>(null);
   const [emergencyResetAvailable, setEmergencyResetAvailable] = useState(false);
   const [showTotpSetup, setShowTotpSetup] = useState(false);
   const lastCheckedTokenRef = useRef<string | null | undefined>(undefined);
@@ -70,21 +73,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const response = await adminFetch('/admin/auth/status');
         if (response.ok) {
           const data: AuthStatus = await response.json();
+          if (sessionStorage.getItem('adminAccessToken') !== token) return;
           const authenticated = loggedIn && Boolean(data.is_authenticated);
           setIsAuthenticated(authenticated);
           setIsInitialPassword(data.is_initial_password);
           setIsTotpEnabled(data.is_totp_enabled);
+          setMfaRequired(typeof data.mfa_required === 'boolean' ? data.mfa_required : null);
           setEmergencyResetAvailable(Boolean(data.emergency_reset_available));
           if (loggedIn && !authenticated) {
-            sessionStorage.removeItem('adminLoggedIn');
-            sessionStorage.removeItem('adminAccessToken');
+            clearAdminSession();
           }
           lastCheckedTokenRef.current = authenticated ? token : null;
         } else {
+          if (sessionStorage.getItem('adminAccessToken') !== token) return;
           setIsAuthenticated(false);
           lastCheckedTokenRef.current = token;
         }
       } catch (error) {
+        if (sessionStorage.getItem('adminAccessToken') !== token) return;
         console.error('Failed to fetch auth status:', error);
         setIsAuthenticated(false);
       } finally {
@@ -115,10 +121,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [location.pathname, checkAuthStatus]);
 
   const logout = useCallback(() => {
-    sessionStorage.removeItem('adminLoggedIn');
-    sessionStorage.removeItem('adminAccessToken');
+    clearAdminSession();
     lastCheckedTokenRef.current = undefined;
+    setShowTotpSetup(false);
     setIsAuthenticated(false);
+  }, []);
+
+  useEffect(() => {
+    const sync = () => {
+      lastCheckedTokenRef.current = undefined;
+      setIsAuthenticated(hasStoredAdminSession());
+      if (!hasStoredAdminSession()) setShowTotpSetup(false);
+    };
+    window.addEventListener(ADMIN_AUTH_CHANGED, sync);
+    return () => window.removeEventListener(ADMIN_AUTH_CHANGED, sync);
   }, []);
 
   // Context値もuseMemoで包んで不要な再レンダ/参照変化を抑制
@@ -127,6 +143,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated,
     isInitialPassword,
     isTotpEnabled,
+    mfaRequired,
     emergencyResetAvailable,
     showTotpSetup,
     setShowTotpSetup,
@@ -137,6 +154,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     isAuthenticated,
     isInitialPassword,
     isTotpEnabled,
+    mfaRequired,
     emergencyResetAvailable,
     showTotpSetup,
     logout,

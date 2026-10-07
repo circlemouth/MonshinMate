@@ -5,6 +5,7 @@ import logging
 import hashlib
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -12,8 +13,6 @@ import app.main as main_module  # type: ignore[import]
 from app.main import (  # type: ignore[import]
     PATIENT_SUMMARY_RATE_LIMIT,
     SessionCreateRequest,
-    _PATIENT_SUMMARY_RATE,
-    _create_admin_access_token,
     _find_latest_finalized_session,
     app,
     create_session,
@@ -30,14 +29,69 @@ from app.db import (
 )
 from app.llm_gateway import DEFAULT_FOLLOWUP_PROMPT
 from fastapi.testclient import TestClient
-import base64
+import pytest
+
+from app import admin_security, db, patient_security
+from app.db.sqlite_adapter import SQLiteAdapter
+from security_support import bootstrap_admin_headers
 
 
 client = TestClient(app)
+_admin_credentials: tuple[object, dict, dict[str, str]] | None = None
+
+
+@pytest.fixture(autouse=True)
+def isolated_storage(tmp_path, monkeypatch):
+    """各テストで資格情報・レート制限・患者データを新しいDBへ隔離する。"""
+    global _admin_credentials
+    adapter = SQLiteAdapter(str(tmp_path / "synthetic.sqlite3"))
+    adapter.init()
+    monkeypatch.setattr(db, "_adapter", adapter)
+    monkeypatch.setattr(llm_gateway, "settings", main_module.default_llm_settings.model_copy(deep=True))
+    sessions.clear()
+    _admin_credentials = None
+    yield adapter
+    sessions.clear()
+    _admin_credentials = None
 
 
 def _admin_headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {_create_admin_access_token()}"}
+    """同じDB・同じ有効なアカウントの実MFA tokenだけを再利用する。"""
+    global _admin_credentials
+    account = admin_security.account()
+    if _admin_credentials is not None:
+        adapter, cached_account, headers = _admin_credentials
+        if adapter is db._adapter and cached_account == account:
+            response = client.get("/admin/auth/status", headers=headers)
+            if response.status_code == 200 and response.json().get("is_authenticated"):
+                return headers
+    headers = bootstrap_admin_headers(client)
+    _admin_credentials = (db._adapter, admin_security.account(), headers)
+    return headers
+
+
+def _patient_headers(created) -> dict[str, str]:
+    assert created.status_code == 200, created.text
+    data = created.json()
+    assert data["session_token"]
+    assert datetime.fromisoformat(data["expires_at"]) > datetime.now(UTC)
+    return {"Authorization": "Bearer " + data["session_token"]}
+
+
+def _saved_session(session_id: str) -> dict:
+    response = client.get(f"/admin/sessions/{session_id}", headers=_admin_headers())
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def _assert_receipt(response, session_id: str) -> dict:
+    assert response.status_code == 200, response.text
+    receipt = response.json()
+    assert set(receipt) == {"id", "status", "finalized_at"}
+    assert receipt["id"] == session_id
+    assert receipt["status"] == "finalized"
+    assert receipt["finalized_at"]
+    return receipt
 
 
 def test_system_bootstrap_aggregates_settings_with_one_storage_read(monkeypatch) -> None:
@@ -94,7 +148,8 @@ def _create_finalized_patient_summary_session(
         )
     )
     session_id = created.id
-    session = sessions[session_id]
+    session = main_module._get_session(session_id)
+    assert session is not None
     session.finalized_at = datetime.now(UTC)
     session.interrupted = False
     session.completion_status = "finalized"
@@ -173,25 +228,42 @@ def test_invalid_patient_summary_auth_does_not_exhaust_valid_request_rate_limit(
     settings = load_app_settings() or {}
     settings["patient_summary_api_key_hash"] = hashlib.sha256(api_key.encode()).hexdigest()
     save_app_settings(settings)
-    _PATIENT_SUMMARY_RATE.clear()
-
-    try:
-        for _ in range(PATIENT_SUMMARY_RATE_LIMIT + 1):
-            invalid = client.post(
-                "/patient-summary",
-                headers={"X-MonshinMate-Api-Key": "invalid-synthetic-key"},
-                json={"patient_name": "合成 該当なし", "dob": "1900-01-01"},
-            )
-            assert invalid.status_code == 401
-
-        valid = client.post(
+    # 永続レート制限の状態は isolated_storage がテストごとに初期化する。
+    for _ in range(PATIENT_SUMMARY_RATE_LIMIT + 1):
+        invalid = client.post(
             "/patient-summary",
-            headers={"X-MonshinMate-Api-Key": api_key},
+            headers={"X-MonshinMate-Api-Key": "invalid-synthetic-key"},
             json={"patient_name": "合成 該当なし", "dob": "1900-01-01"},
         )
-        assert valid.status_code == 404
-    finally:
-        _PATIENT_SUMMARY_RATE.clear()
+        assert invalid.status_code == 401
+
+    valid = client.post(
+        "/patient-summary",
+        headers={"X-MonshinMate-Api-Key": api_key},
+        json={"patient_name": "合成 該当なし", "dob": "1900-01-01"},
+    )
+    assert valid.status_code == 404
+
+
+def test_patient_summary_rate_limit_survives_adapter_recreation(isolated_storage, monkeypatch) -> None:
+    api_key = "synthetic-persistent-rate-key"
+    save_app_settings({"patient_summary_api_key_hash": hashlib.sha256(api_key.encode()).hexdigest()})
+    now = [1_800_000_000.0]
+    monkeypatch.setattr(patient_security, "time", SimpleNamespace(time=lambda: now[0]))
+    for _ in range(PATIENT_SUMMARY_RATE_LIMIT):
+        response = client.post("/patient-summary", headers={"X-MonshinMate-Api-Key": api_key},
+                               json={"patient_name": "該当なし", "dob": "2000-01-01"})
+        assert response.status_code == 404
+    reloaded = SQLiteAdapter(isolated_storage.default_db_path)
+    reloaded.init()
+    monkeypatch.setattr(db, "_adapter", reloaded)
+    limited = client.post("/patient-summary", headers={"X-MonshinMate-Api-Key": api_key},
+                          json={"patient_name": "該当なし", "dob": "2000-01-01"})
+    assert limited.status_code == 429
+    now[0] += main_module.PATIENT_SUMMARY_RATE_WINDOW_SECONDS
+    resumed = client.post("/patient-summary", headers={"X-MonshinMate-Api-Key": api_key},
+                          json={"patient_name": "該当なし", "dob": "2000-01-01"})
+    assert resumed.status_code == 404
 
 
 def test_patient_summary_api_key_write_route_is_not_public() -> None:
@@ -199,11 +271,21 @@ def test_patient_summary_api_key_write_route_is_not_public() -> None:
         "/system/patient-summary-api-key",
         json={"api_key": "synthetic-summary-key-should-not-be-set"},
     )
-    assert response.status_code == 404
+    assert response.status_code == 401
+    authorized = client.put(
+        "/system/patient-summary-api-key", headers=_admin_headers(),
+        json={"api_key": "synthetic-summary-key-should-not-be-set"},
+    )
+    assert authorized.status_code == 404
+    assert not (load_app_settings() or {}).get("patient_summary_api_key_hash")
 
 
 def test_patient_summaries_pages_finalized_exact_identity_and_personal_info(monkeypatch) -> None:
     monkeypatch.setattr(llm_gateway, "sync_status", lambda **_kwargs: None)
+    def synthetic_postal_lookup(postal_code):
+        assert postal_code == "1000001"
+        return {"candidates": [{"prefecture": "東京都", "city": "千代田区", "town": "千代田"}]}
+    monkeypatch.setattr(main_module, "lookup_postal_code", synthetic_postal_lookup)
     on_startup()
     api_key = "synthetic-history-key-20260830"
     settings = load_app_settings() or {}
@@ -225,10 +307,12 @@ def test_patient_summaries_pages_finalized_exact_identity_and_personal_info(monk
         },
     )
     second_id = _create_finalized_patient_summary_session(patient_name, dob)
-    sessions[first_id].finalized_at = datetime(2026, 8, 29, tzinfo=UTC)
-    sessions[second_id].finalized_at = datetime(2026, 8, 30, tzinfo=UTC)
-    save_session(sessions[first_id])
-    save_session(sessions[second_id])
+    first_session = main_module._get_session(first_id)
+    second_session = main_module._get_session(second_id)
+    first_session.finalized_at = datetime(2026, 8, 29, tzinfo=UTC)
+    second_session.finalized_at = datetime(2026, 8, 30, tzinfo=UTC)
+    save_session(first_session)
+    save_session(second_session)
     _create_finalized_patient_summary_session("履歴試験 花子別人", dob)
 
     first_page = client.post(
@@ -243,8 +327,9 @@ def test_patient_summaries_pages_finalized_exact_identity_and_personal_info(monk
     assert first_data["next_cursor"] == second_id
 
     inserted_id = _create_finalized_patient_summary_session(patient_name, dob)
-    sessions[inserted_id].finalized_at = datetime(2026, 8, 31, tzinfo=UTC)
-    save_session(sessions[inserted_id])
+    inserted_session = main_module._get_session(inserted_id)
+    inserted_session.finalized_at = datetime(2026, 8, 31, tzinfo=UTC)
+    save_session(inserted_session)
 
     second_page = client.post(
         "/patient-summaries",
@@ -369,8 +454,10 @@ def test_llm_chat() -> None:
     assert res.json()["reply"].startswith("LLM応答")
 
 
-def test_llm_settings_get_and_update() -> None:
-    """LLM 設定の取得と更新ができることを確認する。"""
+def test_llm_settings_get_and_update(monkeypatch) -> None:
+    """明示的に許可したローカル環境でプロバイダ別設定を保持する。"""
+    monkeypatch.setenv("MONSHINMATE_ENV", "local")
+    monkeypatch.setenv("MONSHINMATE_ALLOW_LOCAL_LLM", "1")
     on_startup()
     profiles = {
         "ollama": {
@@ -619,9 +706,16 @@ def test_llm_status_snapshot_endpoint() -> None:
     assert data["status"] in {"disabled", "pending", "ng", "ok"}
 
 
-def test_llm_status_updates_after_settings_change() -> None:
-    """設定変更と疎通テストで LLM 状態が更新される。"""
+def test_llm_status_updates_after_settings_change(monkeypatch) -> None:
+    """設定保存は通信せず、明示的な疎通テストだけで状態を更新する。"""
     on_startup()
+    calls = []
+    def failed_connection(*, source="manual_test"):
+        calls.append(source)
+        llm_gateway._record_status("ng", source, "synthetic connection failure")
+        return {"status": "ng", "detail": "synthetic connection failure"}
+    monkeypatch.setattr(llm_gateway, "test_connection", failed_connection)
+    monkeypatch.setattr(llm_gateway, "_last_status", {"status": "disabled", "checked_at": None})
     payload = {
         "provider": "ollama",
         "model": "test-model",
@@ -630,17 +724,25 @@ def test_llm_status_updates_after_settings_change() -> None:
         "enabled": True,
         "base_url": "http://127.0.0.1:9",
     }
+    denied = client.put("/llm/settings", json=payload, headers=_admin_headers())
+    assert denied.status_code == 400
+    assert denied.json()["detail"] == "llm_destination_not_allowed"
+    assert load_llm_settings() is None
+    monkeypatch.setenv("MONSHINMATE_ENV", "local")
+    monkeypatch.setenv("MONSHINMATE_ALLOW_LOCAL_LLM", "1")
     res = client.put("/llm/settings", json=payload, headers=_admin_headers())
     assert res.status_code == 200
     snapshot = client.get("/system/llm-status", headers=_admin_headers()).json()
-    assert snapshot["status"] in {"ng", "pending"}
-    assert snapshot.get("checked_at") is not None
+    assert snapshot["status"] == "pending"
+    assert snapshot.get("checked_at") is None
+    assert calls == []
     client.post("/llm/settings/test", headers=_admin_headers())
     snapshot_after = client.get(
         "/system/llm-status", headers=_admin_headers()
     ).json()
     assert snapshot_after["status"] in {"ng", "disabled", "ok"}
     assert snapshot_after.get("checked_at") is not None
+    assert len(calls) == 1
 
 
 def test_create_session() -> None:
@@ -684,7 +786,7 @@ def test_create_session() -> None:
     assert stored["questionnaire_id"] == data["questionnaire_id"]
 
     # 追加質問の取得と回答
-    q_res = client.post(f"/sessions/{session_id}/llm-questions")
+    q_res = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res))
     assert q_res.status_code == 200
     q_data = q_res.json()
     assert q_data["questions"] == []
@@ -725,7 +827,7 @@ def test_upload_and_delete_question_item_image(tmp_path) -> None:
     )
     data = base64.b64decode(png_b64)
     res = client.post(
-        "/questionnaire-item-images",
+        "/questionnaire-item-images", headers=_admin_headers(),
         files={"file": ("test.png", data, "image/png")},
     )
     assert res.status_code == 200
@@ -733,7 +835,7 @@ def test_upload_and_delete_question_item_image(tmp_path) -> None:
     get_res = client.get(url)
     assert get_res.status_code == 200
     filename = url.split("/")[-1]
-    del_res = client.delete(f"/questionnaire-item-images/{filename}")
+    del_res = client.delete(f"/questionnaire-item-images/{filename}", headers=_admin_headers())
     assert del_res.status_code == 200
     after = client.get(url)
     assert after.status_code == 404
@@ -754,18 +856,19 @@ def test_add_answers() -> None:
     session_id = res.json()["id"]
 
     add_payload = {"answers": {"chief_complaint": "腹痛", "onset": "1週間前から"}}
-    add_res = client.post(f"/sessions/{session_id}/answers", json=add_payload)
+    add_res = client.post(f"/sessions/{session_id}/answers", headers=_patient_headers(res), json=add_payload)
     assert add_res.status_code == 200
     assert add_res.json()["status"] == "ok"
 
-    finalize_res = client.post(f"/sessions/{session_id}/finalize")
+    finalize_res = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert finalize_res.status_code == 200
     data = finalize_res.json()
     assert data["status"] == "finalized"
     assert "finalized_at" in data and data["finalized_at"]
-    ans = data["answers"]
+    _assert_receipt(finalize_res, session_id)
+    ans = _saved_session(session_id)["answers"]
     assert ans["chief_complaint"] == "腹痛"
-    assert ans["onset"] == "1週間前から"
+    assert ans["onset"] == ["1週間前から"]
 
 
 def test_finalize_with_summary_enabled() -> None:
@@ -773,7 +876,7 @@ def test_finalize_with_summary_enabled() -> None:
     on_startup()
     # サマリー作成を有効化
     client.post(
-        "/questionnaires/default/summary-prompt",
+        "/questionnaires/default/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": "", "enabled": True},
     )
     payload = {
@@ -787,10 +890,10 @@ def test_finalize_with_summary_enabled() -> None:
     assert res.status_code == 200
     session_id = res.json()["id"]
 
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
-    data = fin.json()
-    assert data["summary"].startswith("要約")
+    _assert_receipt(fin, session_id)
+    assert _saved_session(session_id)["summary"].startswith("要約")
 
 
 def test_startup_preserves_custom_summary_prompt() -> None:
@@ -799,12 +902,12 @@ def test_startup_preserves_custom_summary_prompt() -> None:
     custom_summary = "カスタムサマリー"
     custom_followup = "カスタム追質問"
     res = client.post(
-        "/questionnaires/default/summary-prompt",
+        "/questionnaires/default/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": custom_summary, "enabled": True},
     )
     assert res.status_code == 200
     res = client.post(
-        "/questionnaires/default/followup-prompt",
+        "/questionnaires/default/followup-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": custom_followup, "enabled": True},
     )
     assert res.status_code == 200
@@ -813,10 +916,10 @@ def test_startup_preserves_custom_summary_prompt() -> None:
     on_startup()
 
     summary_cfg = client.get(
-        "/questionnaires/default/summary-prompt?visit_type=initial"
+        "/questionnaires/default/summary-prompt?visit_type=initial", headers=_admin_headers()
     )
     followup_cfg = client.get(
-        "/questionnaires/default/followup-prompt?visit_type=initial"
+        "/questionnaires/default/followup-prompt?visit_type=initial", headers=_admin_headers()
     )
     assert summary_cfg.status_code == 200
     assert followup_cfg.status_code == 200
@@ -843,10 +946,10 @@ def test_blank_answer_saved_as_not_applicable() -> None:
     session_id = data["id"]
     assert data["answers"]["chief_complaint"] == "該当なし"
 
-    finalize_res = client.post(f"/sessions/{session_id}/finalize")
+    finalize_res = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert finalize_res.status_code == 200
-    final_data = finalize_res.json()
-    assert final_data["answers"]["chief_complaint"] == "該当なし"
+    _assert_receipt(finalize_res, session_id)
+    assert _saved_session(session_id)["answers"]["chief_complaint"] == "該当なし"
 
 def test_llm_question_loop() -> None:
     """追加質問エンドポイントが順次質問を返すことを確認する。"""
@@ -860,9 +963,9 @@ def test_llm_question_loop() -> None:
     }
     res = client.post("/sessions", json=create_payload)
     session_id = res.json()["id"]
-    q_list = client.post(f"/sessions/{session_id}/llm-questions").json()["questions"]
+    q_list = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res)).json()["questions"]
     assert q_list == []
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
 
 
@@ -879,10 +982,10 @@ def test_followup_session_flow() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     session_id = res.json()["id"]
-    q_res = client.post(f"/sessions/{session_id}/llm-questions")
+    q_res = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res))
     assert q_res.status_code == 200
     assert q_res.json()["questions"] == []
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
     assert fin.json()["status"] == "finalized"
 
@@ -905,15 +1008,10 @@ def test_llm_disabled() -> None:
     }
     res = client.post("/sessions", json=payload)
     session_id = res.json()["id"]
-    q_res = client.post(f"/sessions/{session_id}/llm-questions")
+    q_res = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res))
     assert q_res.status_code == 200
     assert q_res.json()["questions"] == []
-    # 後片付け：LLM を有効化に戻す
-    client.put(
-        "/llm/settings",
-        json={"provider": "ollama", "model": "llama2", "temperature": 0.2, "system_prompt": "", "enabled": True},
-        headers=_admin_headers(),
-    )
+    # 設定の後片付けはテスト単位の隔離fixtureで行う。
 
 
 def test_admin_session_list_and_detail() -> None:
@@ -929,15 +1027,15 @@ def test_admin_session_list_and_detail() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     session_id = res.json()["id"]
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
 
-    list_res = client.get("/admin/sessions")
+    list_res = client.get("/admin/sessions", headers=_admin_headers())
     assert list_res.status_code == 200
     sessions = list_res.json()
     assert any(s["id"] == session_id for s in sessions)
 
-    detail_res = client.get(f"/admin/sessions/{session_id}")
+    detail_res = client.get(f"/admin/sessions/{session_id}", headers=_admin_headers())
     assert detail_res.status_code == 200
     detail = detail_res.json()
     assert detail["patient_name"] == "一覧太郎"
@@ -957,12 +1055,12 @@ def test_admin_session_search_filters() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     session_id = res.json()["id"]
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
 
     # 正常にヒットする検索
     list_res = client.get(
-        "/admin/sessions",
+        "/admin/sessions", headers=_admin_headers(),
         params={
             "patient_name": "検索",
             "dob": "1990-12-31",
@@ -976,7 +1074,7 @@ def test_admin_session_search_filters() -> None:
 
     # 不一致の検索ではヒットしない
     nohit_res = client.get(
-        "/admin/sessions",
+        "/admin/sessions", headers=_admin_headers(),
         params={"patient_name": "不存在"},
     )
     assert nohit_res.status_code == 200
@@ -996,16 +1094,16 @@ def test_admin_session_search_ignores_spaces() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     session_id = res.json()["id"]
-    fin = client.post(f"/sessions/{session_id}/finalize")
+    fin = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
 
     # 全角・半角スペースを取り除いた検索語でも一致する
-    list_res = client.get("/admin/sessions", params={"patient_name": "空白太郎"})
+    list_res = client.get("/admin/sessions", headers=_admin_headers(), params={"patient_name": "空白太郎"})
     assert list_res.status_code == 200
     assert any(s["id"] == session_id for s in list_res.json())
 
     # 前後の空白を含む検索語でも一致する
-    padded_res = client.get("/admin/sessions", params={"patient_name": "  空白太郎　"})
+    padded_res = client.get("/admin/sessions", headers=_admin_headers(), params={"patient_name": "  空白太郎　"})
     assert padded_res.status_code == 200
     assert any(s["id"] == session_id for s in padded_res.json())
 
@@ -1023,11 +1121,11 @@ def test_admin_session_download() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     sid = res.json()["id"]
-    fin = client.post(f"/sessions/{sid}/finalize")
+    fin = client.post(f"/sessions/{sid}/finalize", headers=_patient_headers(res))
     assert fin.status_code == 200
 
     for fmt, ctype in [("md", "text/markdown"), ("csv", "text/csv"), ("pdf", "application/pdf")]:
-        r = client.get(f"/admin/sessions/{sid}/download/{fmt}")
+        r = client.get(f"/admin/sessions/{sid}/download/{fmt}", headers=_admin_headers())
         assert r.status_code == 200
         assert r.headers["content-type"].startswith(ctype)
         assert len(r.content) > 0
@@ -1059,10 +1157,10 @@ def test_markdown_export_formats_personal_info_and_yesno() -> None:
     res = client.post("/sessions", json=payload)
     assert res.status_code == 200
     sid = res.json()["id"]
-    finalize = client.post(f"/sessions/{sid}/finalize")
+    finalize = client.post(f"/sessions/{sid}/finalize", headers=_patient_headers(res))
     assert finalize.status_code == 200
 
-    response = client.get(f"/admin/sessions/{sid}/download/md")
+    response = client.get(f"/admin/sessions/{sid}/download/md", headers=_admin_headers())
     assert response.status_code == 200
     text = response.text
 
@@ -1099,18 +1197,18 @@ def test_admin_bulk_download() -> None:
     assert r1.status_code == 200 and r2.status_code == 200
     sid1 = r1.json()["id"]
     sid2 = r2.json()["id"]
-    assert client.post(f"/sessions/{sid1}/finalize").status_code == 200
-    assert client.post(f"/sessions/{sid2}/finalize").status_code == 200
+    assert client.post(f"/sessions/{sid1}/finalize", headers=_patient_headers(r1)).status_code == 200
+    assert client.post(f"/sessions/{sid2}/finalize", headers=_patient_headers(r2)).status_code == 200
 
     # CSV は単一CSVとして返る
-    r_csv = client.get("/admin/sessions/bulk/download/csv", params=[("ids", sid1), ("ids", sid2)])
+    r_csv = client.get("/admin/sessions/bulk/download/csv", headers=_admin_headers(), params=[("ids", sid1), ("ids", sid2)])
     assert r_csv.status_code == 200
     assert r_csv.headers["content-type"].startswith("text/csv")
     assert len(r_csv.content) > 0
 
     # MD/PDF は ZIP で返る
     for fmt in ("md", "pdf"):
-        r_zip = client.get(f"/admin/sessions/bulk/download/{fmt}", params=[("ids", sid1), ("ids", sid2)])
+        r_zip = client.get(f"/admin/sessions/bulk/download/{fmt}", headers=_admin_headers(), params=[("ids", sid1), ("ids", sid2)])
         assert r_zip.status_code == 200
         assert r_zip.headers["content-type"].startswith("application/zip")
         assert len(r_zip.content) > 0
@@ -1120,21 +1218,21 @@ def test_pdf_layout_setting_toggle() -> None:
     """PDFレイアウト設定の取得と更新が行える。"""
 
     on_startup()
-    res = client.get("/system/pdf-layout")
+    res = client.get("/system/pdf-layout", headers=_admin_headers())
     assert res.status_code == 200
     first = res.json()
     assert first["mode"] in {"structured", "legacy"}
 
-    put_res = client.put("/system/pdf-layout", json={"mode": "legacy"})
+    put_res = client.put("/system/pdf-layout", headers=_admin_headers(), json={"mode": "legacy"})
     assert put_res.status_code == 200
     assert put_res.json()["mode"] == "legacy"
 
-    confirm = client.get("/system/pdf-layout")
+    confirm = client.get("/system/pdf-layout", headers=_admin_headers())
     assert confirm.status_code == 200
     assert confirm.json()["mode"] == "legacy"
 
     # 他テストに影響を与えないよう既定に戻す
-    revert = client.put("/system/pdf-layout", json={"mode": "structured"})
+    revert = client.put("/system/pdf-layout", headers=_admin_headers(), json={"mode": "structured"})
     assert revert.status_code == 200
     assert revert.json()["mode"] == "structured"
 
@@ -1164,7 +1262,7 @@ def test_questionnaire_options() -> None:
             },
         ],
     }
-    res = client.post("/questionnaires", json=payload)
+    res = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res.status_code == 200
     get_res = client.get("/questionnaires/opt/template?visit_type=initial")
     assert get_res.status_code == 200
@@ -1174,7 +1272,7 @@ def test_questionnaire_options() -> None:
     assert data["items"][1]["type"] == "multi"
     assert data["items"][1]["allow_freetext"] is True
     # 後片付け
-    del_res = client.delete("/questionnaires/opt?visit_type=initial")
+    del_res = client.delete("/questionnaires/opt?visit_type=initial", headers=_admin_headers())
     assert del_res.status_code == 200
 
 
@@ -1195,7 +1293,7 @@ def test_questionnaire_image() -> None:
             }
         ],
     }
-    res = client.post("/questionnaires", json=payload)
+    res = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res.status_code == 200
     get_res = client.get("/questionnaires/img/template?visit_type=initial")
     assert get_res.status_code == 200
@@ -1203,13 +1301,13 @@ def test_questionnaire_image() -> None:
     assert data["items"][0]["image"] == img
     # 画像を削除して更新
     payload["items"][0]["image"] = None
-    res2 = client.post("/questionnaires", json=payload)
+    res2 = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res2.status_code == 200
     get_res2 = client.get("/questionnaires/img/template?visit_type=initial")
     assert get_res2.status_code == 200
     data2 = get_res2.json()
     assert data2["items"][0].get("image") is None
-    del_res = client.delete("/questionnaires/img?visit_type=initial")
+    del_res = client.delete("/questionnaires/img?visit_type=initial", headers=_admin_headers())
     assert del_res.status_code == 200
 
 
@@ -1236,14 +1334,14 @@ def test_questionnaire_when() -> None:
             },
         ],
     }
-    res = client.post("/questionnaires", json=payload)
+    res = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res.status_code == 200
     get_res = client.get("/questionnaires/cond/template?visit_type=initial")
     assert get_res.status_code == 200
     data = get_res.json()
     assert data["items"][1]["when"]["item_id"] == "symptom"
     # 後片付け
-    del_res = client.delete("/questionnaires/cond?visit_type=initial")
+    del_res = client.delete("/questionnaires/cond?visit_type=initial", headers=_admin_headers())
     assert del_res.status_code == 200
 
 
@@ -1281,7 +1379,7 @@ def test_questionnaire_gender_filter() -> None:
             },
         ],
     }
-    res = client.post("/questionnaires", json=payload)
+    res = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res.status_code == 200
     male_res = client.get("/questionnaires/gender_tpl/template?visit_type=initial&gender=male")
     female_res = client.get("/questionnaires/gender_tpl/template?visit_type=initial&gender=female")
@@ -1293,7 +1391,7 @@ def test_questionnaire_gender_filter() -> None:
     # gender 未指定および "both" はどちらにも表示される
     assert "common" in male_items and "common" in female_items
     assert "both_item" in male_items and "both_item" in female_items
-    client.delete("/questionnaires/gender_tpl?visit_type=initial")
+    client.delete("/questionnaires/gender_tpl?visit_type=initial", headers=_admin_headers())
 
 
 def test_questionnaire_age_filter() -> None:
@@ -1321,7 +1419,7 @@ def test_questionnaire_age_filter() -> None:
             {"id": "all", "label": "全員", "type": "string"},
         ],
     }
-    res = client.post("/questionnaires", json=payload)
+    res = client.post("/questionnaires", headers=_admin_headers(), json=payload)
     assert res.status_code == 200
     child_res = client.get("/questionnaires/age_tpl/template?visit_type=initial&age=10")
     adult_res = client.get("/questionnaires/age_tpl/template?visit_type=initial&age=30")
@@ -1330,7 +1428,7 @@ def test_questionnaire_age_filter() -> None:
     assert "child" in child_ids and "adult" not in child_ids
     assert "adult" in adult_ids and "child" not in adult_ids
     assert "all" in child_ids and "all" in adult_ids
-    client.delete("/questionnaires/age_tpl?visit_type=initial")
+    client.delete("/questionnaires/age_tpl?visit_type=initial", headers=_admin_headers())
 
 
 def test_duplicate_questionnaire() -> None:
@@ -1346,18 +1444,18 @@ def test_duplicate_questionnaire() -> None:
         "visit_type": "followup",
         "items": [{"id": "q2", "label": "Q2", "type": "string", "required": False}],
     }
-    client.post("/questionnaires", json=src_initial)
-    client.post("/questionnaires", json=src_follow)
+    client.post("/questionnaires", headers=_admin_headers(), json=src_initial)
+    client.post("/questionnaires", headers=_admin_headers(), json=src_follow)
     client.post(
-        "/questionnaires/dup_src/summary-prompt",
+        "/questionnaires/dup_src/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": "init", "enabled": True},
     )
     client.post(
-        "/questionnaires/dup_src/summary-prompt",
+        "/questionnaires/dup_src/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "followup", "prompt": "fup", "enabled": False},
     )
 
-    res = client.post("/questionnaires/dup_src/duplicate", json={"new_id": "dup_copy"})
+    res = client.post("/questionnaires/dup_src/duplicate", headers=_admin_headers(), json={"new_id": "dup_copy"})
     assert res.status_code == 200
 
     init_copy = client.get(
@@ -1370,17 +1468,17 @@ def test_duplicate_questionnaire() -> None:
     assert follow_copy["items"][0]["label"] == "Q2"
 
     init_prompt = client.get(
-        "/questionnaires/dup_copy/summary-prompt?visit_type=initial"
+        "/questionnaires/dup_copy/summary-prompt?visit_type=initial", headers=_admin_headers()
     ).json()
     follow_prompt = client.get(
-        "/questionnaires/dup_copy/summary-prompt?visit_type=followup"
+        "/questionnaires/dup_copy/summary-prompt?visit_type=followup", headers=_admin_headers()
     ).json()
     assert init_prompt["prompt"] == "init" and init_prompt["enabled"] is True
     assert follow_prompt["prompt"] == "fup" and follow_prompt["enabled"] is False
-    client.delete("/questionnaires/dup_src?visit_type=initial")
-    client.delete("/questionnaires/dup_src?visit_type=followup")
-    client.delete("/questionnaires/dup_copy?visit_type=initial")
-    client.delete("/questionnaires/dup_copy?visit_type=followup")
+    client.delete("/questionnaires/dup_src?visit_type=initial", headers=_admin_headers())
+    client.delete("/questionnaires/dup_src?visit_type=followup", headers=_admin_headers())
+    client.delete("/questionnaires/dup_copy?visit_type=initial", headers=_admin_headers())
+    client.delete("/questionnaires/dup_copy?visit_type=followup", headers=_admin_headers())
 
 
 def test_rename_questionnaire_updates_related_data() -> None:
@@ -1397,18 +1495,18 @@ def test_rename_questionnaire_updates_related_data() -> None:
         "visit_type": "followup",
         "items": [{"id": "q2", "label": "Q2", "type": "string"}],
     }
-    client.post("/questionnaires", json=initial_payload)
-    client.post("/questionnaires", json=follow_payload)
+    client.post("/questionnaires", headers=_admin_headers(), json=initial_payload)
+    client.post("/questionnaires", headers=_admin_headers(), json=follow_payload)
     client.post(
-        "/questionnaires/rename_src/summary-prompt",
+        "/questionnaires/rename_src/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": "rename_summary", "enabled": True},
     )
     client.put(
-        "/system/default-questionnaire",
+        "/system/default-questionnaire", headers=_admin_headers(),
         json={"questionnaire_id": "rename_src"},
     )
 
-    res = client.post("/questionnaires/rename_src/rename", json={"new_id": "rename_dst"})
+    res = client.post("/questionnaires/rename_src/rename", headers=_admin_headers(), json={"new_id": "rename_dst"})
     assert res.status_code == 200
     assert res.json()["id"] == "rename_dst"
 
@@ -1422,15 +1520,15 @@ def test_rename_questionnaire_updates_related_data() -> None:
     assert renamed_template["items"][0]["label"] == "Q1"
 
     renamed_prompt = client.get(
-        "/questionnaires/rename_dst/summary-prompt?visit_type=initial"
+        "/questionnaires/rename_dst/summary-prompt?visit_type=initial", headers=_admin_headers()
     ).json()
     assert renamed_prompt["prompt"] == "rename_summary"
     assert renamed_prompt["enabled"] is True
 
     default_after = client.get("/system/default-questionnaire").json()
     assert default_after["questionnaire_id"] == "rename_dst"
-    client.delete("/questionnaires/rename_dst?visit_type=initial")
-    client.delete("/questionnaires/rename_dst?visit_type=followup")
+    client.delete("/questionnaires/rename_dst?visit_type=initial", headers=_admin_headers())
+    client.delete("/questionnaires/rename_dst?visit_type=followup", headers=_admin_headers())
 
 
 def test_rename_questionnaire_validation() -> None:
@@ -1438,7 +1536,7 @@ def test_rename_questionnaire_validation() -> None:
 
     on_startup()
     client.post(
-        "/questionnaires",
+        "/questionnaires", headers=_admin_headers(),
         json={
             "id": "rename_a",
             "visit_type": "initial",
@@ -1446,7 +1544,7 @@ def test_rename_questionnaire_validation() -> None:
         },
     )
     client.post(
-        "/questionnaires",
+        "/questionnaires", headers=_admin_headers(),
         json={
             "id": "rename_b",
             "visit_type": "initial",
@@ -1455,16 +1553,16 @@ def test_rename_questionnaire_validation() -> None:
     )
 
     res_default = client.post(
-        "/questionnaires/default/rename", json={"new_id": "foo"}
+        "/questionnaires/default/rename", headers=_admin_headers(), json={"new_id": "foo"}
     )
     assert res_default.status_code == 400
 
     res_duplicate = client.post(
-        "/questionnaires/rename_a/rename", json={"new_id": "rename_b"}
+        "/questionnaires/rename_a/rename", headers=_admin_headers(), json={"new_id": "rename_b"}
     )
     assert res_duplicate.status_code == 400
-    client.delete("/questionnaires/rename_a?visit_type=initial")
-    client.delete("/questionnaires/rename_b?visit_type=initial")
+    client.delete("/questionnaires/rename_a?visit_type=initial", headers=_admin_headers())
+    client.delete("/questionnaires/rename_b?visit_type=initial", headers=_admin_headers())
 
 
 def test_session_persisted() -> None:
@@ -1480,18 +1578,24 @@ def test_session_persisted() -> None:
     res = client.post("/sessions", json=create_payload)
     session_id = res.json()["id"]
     client.post(
-        f"/sessions/{session_id}/answers",
+        f"/sessions/{session_id}/answers", headers=_patient_headers(res),
         json={"answers": {"onset": "昨日から"}},
     )
-    client.post(f"/sessions/{session_id}/finalize")
+    client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(res))
     record = db_get_session(session_id)
     assert record is not None
-    assert record["answers"]["onset"] == "昨日から"
+    assert record["answers"]["onset"] == ["昨日から"]
 
 
-def test_llm_followup_disabled_by_template() -> None:
-    """テンプレートでLLM追加質問を無効化した場合、質問が返らないことを確認する。"""
+def test_llm_followup_disabled_by_template(monkeypatch) -> None:
+    """テンプレート無効時はLLMが有効でも質問生成を呼ばない。"""
     on_startup()
+    monkeypatch.setattr(llm_gateway.settings, "enabled", True)
+    calls = []
+    def unexpected_followups(**kwargs):
+        calls.append(kwargs)
+        return []
+    monkeypatch.setattr(llm_gateway, "generate_followups", unexpected_followups)
     payload = {
         "id": "nofup",
         "visit_type": "initial",
@@ -1500,7 +1604,7 @@ def test_llm_followup_disabled_by_template() -> None:
         ],
         "llm_followup_enabled": False,
     }
-    client.post("/questionnaires", json=payload)
+    client.post("/questionnaires", headers=_admin_headers(), json=payload)
     create_payload = {
         "patient_name": "テスト",
         "dob": "2000-01-01",
@@ -1511,16 +1615,24 @@ def test_llm_followup_disabled_by_template() -> None:
     }
     res = client.post("/sessions", json=create_payload)
     session_id = res.json()["id"]
-    q_res = client.post(f"/sessions/{session_id}/llm-questions").json()
+    q_res = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res)).json()
     assert q_res["questions"] == []
-    client.delete("/questionnaires/nofup?visit_type=initial")
+    assert calls == [], "disabled template must not send answers to an LLM"
+    client.delete("/questionnaires/nofup?visit_type=initial", headers=_admin_headers())
 
 
-def test_llm_followup_max_questions() -> None:
-    """テンプレートで設定した追加質問数の上限が反映されることを確認する。"""
+def test_llm_followup_max_questions(monkeypatch) -> None:
+    """追加質問上限を永続化し、別リクエストでも再生成しない。"""
     on_startup()
+    monkeypatch.setattr(llm_gateway.settings, "enabled", True)
+    calls = []
+    def generate_followups(**kwargs):
+        calls.append(kwargs)
+        assert kwargs["max_questions"] == 2
+        return ["合成質問1", "合成質問2"]
+    monkeypatch.setattr(llm_gateway, "generate_followups", generate_followups)
     client.post(
-        "/questionnaires",
+        "/questionnaires", headers=_admin_headers(),
         json={
             "id": "maxq",
             "visit_type": "initial",
@@ -1543,18 +1655,20 @@ def test_llm_followup_max_questions() -> None:
         },
     )
     session_id = res.json()["id"]
-    q1 = client.post(f"/sessions/{session_id}/llm-questions").json()
-    assert q1["questions"] == []
-    q2 = client.post(f"/sessions/{session_id}/llm-questions").json()
+    q1 = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res)).json()
+    assert [question["text"] for question in q1["questions"]] == ["合成質問1", "合成質問2"]
+    sessions.clear()
+    q2 = client.post(f"/sessions/{session_id}/llm-questions", headers=_patient_headers(res)).json()
     assert q2["questions"] == []
-    client.delete("/questionnaires/maxq?visit_type=initial")
+    assert len(calls) == 1
+    client.delete("/questionnaires/maxq?visit_type=initial", headers=_admin_headers())
 
 
 def test_followup_prompt_api() -> None:
     """追加質問プロンプトの取得・保存とセッション反映を確認する。"""
     on_startup()
     client.post(
-        "/questionnaires",
+        "/questionnaires", headers=_admin_headers(),
         json={
             "id": "adv",
             "visit_type": "initial",
@@ -1563,18 +1677,18 @@ def test_followup_prompt_api() -> None:
             "llm_followup_max_questions": 1,
         },
     )
-    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial")
+    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial", headers=_admin_headers())
     assert res.json()["prompt"] == DEFAULT_FOLLOWUP_PROMPT
     assert res.json()["enabled"] is False
     client.post(
-        "/questionnaires/adv/followup-prompt",
+        "/questionnaires/adv/followup-prompt", headers=_admin_headers(),
         json={
             "visit_type": "initial",
             "prompt": "{max_questions}個以内で返答",
             "enabled": True,
         },
     )
-    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial")
+    res = client.get("/questionnaires/adv/followup-prompt?visit_type=initial", headers=_admin_headers())
     assert res.json()["prompt"] == "{max_questions}個以内で返答"
     assert res.json()["enabled"] is True
     res = client.post(
@@ -1592,7 +1706,7 @@ def test_followup_prompt_api() -> None:
     rec = db_get_session(sid)
     assert rec["followup_prompt"] == "{max_questions}個以内で返答"
     client.post(
-        "/questionnaires/adv/followup-prompt",
+        "/questionnaires/adv/followup-prompt", headers=_admin_headers(),
         json={
             "visit_type": "initial",
             "prompt": "ignored",
@@ -1613,14 +1727,14 @@ def test_followup_prompt_api() -> None:
     sid = res.json()["id"]
     rec = db_get_session(sid)
     assert rec["followup_prompt"] == DEFAULT_FOLLOWUP_PROMPT
-    client.delete("/questionnaires/adv?visit_type=initial")
+    client.delete("/questionnaires/adv?visit_type=initial", headers=_admin_headers())
 
 
 def test_slider_item_validation() -> None:
     """スライドバー項目の範囲チェックを確認する。"""
     on_startup()
     client.post(
-        "/questionnaires",
+        "/questionnaires", headers=_admin_headers(),
         json={
             "id": "slider",
             "visit_type": "initial",
@@ -1641,9 +1755,9 @@ def test_slider_item_validation() -> None:
         },
     )
     sid = res.json()["id"]
-    ok = client.post(f"/sessions/{sid}/answers", json={"answers": {"pain": 5}})
+    ok = client.post(f"/sessions/{sid}/answers", headers=_patient_headers(res), json={"answers": {"pain": 5}})
     assert ok.status_code == 200
-    sid2 = client.post(
+    second_created = client.post(
         "/sessions",
         json={
             "patient_name": "四郎",
@@ -1653,15 +1767,16 @@ def test_slider_item_validation() -> None:
             "answers": {},
             "questionnaire_id": "slider",
         },
-    ).json()["id"]
-    ng = client.post(f"/sessions/{sid2}/answers", json={"answers": {"pain": 11}})
+    )
+    sid2 = second_created.json()["id"]
+    ng = client.post(f"/sessions/{sid2}/answers", headers=_patient_headers(second_created), json={"answers": {"pain": 11}})
     assert ng.status_code == 400
 
 
 def test_summary_prompt_api_default() -> None:
     """サマリープロンプトの既定値取得を確認する。"""
     on_startup()
-    res = client.get("/questionnaires/unknown/summary-prompt?visit_type=initial")
+    res = client.get("/questionnaires/unknown/summary-prompt?visit_type=initial", headers=_admin_headers())
     assert res.status_code == 200
     data = res.json()
     assert data["prompt"].startswith("あなたは医療記録作成の専門家です")
@@ -1685,13 +1800,13 @@ def test_session_can_resume_after_memory_cache_loss_and_batch_answers() -> None:
     session_id = created.json()["id"]
     sessions.clear()
     response = client.post(
-        f"/sessions/{session_id}/llm-answers/batch",
+        f"/sessions/{session_id}/llm-answers/batch", headers=_patient_headers(created),
         json={"answers": {"chief_complaint": "発熱", "onset": "昨日"}},
     )
     assert response.status_code == 200
     stored = db_get_session(session_id)
     assert stored["answers"]["chief_complaint"] == "発熱"
-    assert stored["answers"]["onset"] == "昨日"
+    assert stored["answers"]["onset"] == ["昨日"]
 
 
 def test_finalize_is_idempotent_after_memory_cache_loss() -> None:
@@ -1699,7 +1814,7 @@ def test_finalize_is_idempotent_after_memory_cache_loss() -> None:
 
     on_startup()
     client.post(
-        "/questionnaires/default/summary-prompt",
+        "/questionnaires/default/summary-prompt", headers=_admin_headers(),
         json={"visit_type": "initial", "prompt": "", "enabled": False},
     )
     created = client.post(
@@ -1713,17 +1828,118 @@ def test_finalize_is_idempotent_after_memory_cache_loss() -> None:
         },
     )
     session_id = created.json()["id"]
-    first = client.post(f"/sessions/{session_id}/finalize")
+    first = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(created))
     sessions.clear()
-    second = client.post(f"/sessions/{session_id}/finalize")
+    second = client.post(f"/sessions/{session_id}/finalize", headers=_patient_headers(created))
     assert first.status_code == 200
     assert second.status_code == 200
     assert second.json()["finalized_at"] == first.json()["finalized_at"]
 
 
 def test_admin_sessions_page_has_bounded_shape() -> None:
-    response = client.get("/admin/sessions/page?limit=2")
+    response = client.get("/admin/sessions/page?limit=2", headers=_admin_headers())
     assert response.status_code == 200
     payload = response.json()
     assert len(payload["items"]) <= 2
     assert "next_cursor" in payload
+
+
+def test_finalization_summarizes_once_and_settings_never_resend_records(monkeypatch) -> None:
+    on_startup()
+    prompt = "合成テスト専用サマリープロンプト"
+    configured = client.post(
+        "/questionnaires/default/summary-prompt", headers=_admin_headers(),
+        json={"visit_type": "initial", "prompt": prompt, "enabled": True},
+    )
+    assert configured.status_code == 200
+    created = client.post("/sessions", json={
+        "patient_name": "要約合成患者", "dob": "2000-01-01", "gender": "female",
+        "visit_type": "initial", "answers": {"chief_complaint": "頭痛"},
+    })
+    headers = _patient_headers(created)
+    session_id = created.json()["id"]
+    calls = []
+    def summarize_once(received_prompt, context, labels, **kwargs):
+        assert received_prompt == prompt
+        assert context == {"chief_complaint": "頭痛"}
+        assert set(labels) == {"chief_complaint"}
+        assert kwargs == {"lock_key": session_id, "retry": 0}
+        assert db_get_session(session_id)["completion_status"] != "finalized"
+        calls.append(context)
+        return "合成テスト要約"
+    monkeypatch.setattr(llm_gateway, "has_remote_backend", lambda: True)
+    monkeypatch.setattr(llm_gateway, "summarize_with_prompt", summarize_once)
+    def unexpected_summary(*args, **kwargs):
+        pytest.fail("a second/fallback/background summary must not run")
+    monkeypatch.setattr(llm_gateway, "summarize", unexpected_summary)
+    first = client.post(f"/sessions/{session_id}/finalize", headers=headers)
+    _assert_receipt(first, session_id)
+    stored = _saved_session(session_id)
+    assert stored["summary"] == "合成テスト要約"
+    assert len(calls) == 1
+    sessions.clear()
+    assert client.post(f"/sessions/{session_id}/finalize", headers=headers).json() == first.json()
+    assert len(calls) == 1
+
+    updated = client.put("/llm/settings", headers=_admin_headers(), json={
+        "provider": "openai", "model": "synthetic-model", "enabled": True,
+        "temperature": 0.2, "base_url": "https://api.openai.com",
+    })
+    assert updated.status_code == 200, updated.text
+    assert _saved_session(session_id) == stored
+    assert len(calls) == 1
+
+
+def test_persistent_session_overrides_stale_cache_and_finalized_updates_fail() -> None:
+    on_startup()
+    created = client.post("/sessions", json={
+        "patient_name": "永続合成患者", "dob": "2000-01-01", "gender": "female",
+        "visit_type": "initial", "answers": {"chief_complaint": "保存された回答"},
+    })
+    headers = _patient_headers(created)
+    session_id = created.json()["id"]
+    stale = main_module._get_session(session_id)
+    stale.answers["chief_complaint"] = "古いキャッシュの回答"
+    sessions[session_id] = stale
+    added = client.post(f"/sessions/{session_id}/answers", headers=headers,
+                        json={"answers": {"onset": "昨日"}})
+    assert added.status_code == 200
+    assert _saved_session(session_id)["answers"]["chief_complaint"] == "保存された回答"
+    finalized = client.post(f"/sessions/{session_id}/finalize", headers=headers)
+    _assert_receipt(finalized, session_id)
+    before = db_get_session(session_id)
+    for suffix in ("answers", "llm-answers", "llm-answers/batch", "llm-questions"):
+        sessions[session_id] = stale
+        response = client.post(f"/sessions/{session_id}/{suffix}", headers=headers, json={
+            "answers": {"chief_complaint": "改変"}, "item_id": "chief_complaint", "answer": "改変",
+        })
+        assert response.status_code == 409
+    assert db_get_session(session_id) == before
+
+
+def test_llm_answers_require_persistently_issued_question_text(monkeypatch) -> None:
+    on_startup()
+    monkeypatch.setattr(llm_gateway.settings, "enabled", True)
+    monkeypatch.setattr(llm_gateway, "generate_followups", lambda **kwargs: ["合成追加質問"])
+    created = client.post("/sessions", json={
+        "patient_name": "発行合成患者", "dob": "2000-01-01", "gender": "female",
+        "visit_type": "initial", "answers": {"chief_complaint": "頭痛"},
+    })
+    headers = _patient_headers(created)
+    session_id = created.json()["id"]
+    for suffix, payload in (
+        ("answers", {"answers": {"llm_1": "未発行"}}),
+        ("llm-answers", {"item_id": "llm_1", "answer": "未発行"}),
+        ("llm-answers/batch", {"answers": {"llm_1": "未発行"}}),
+    ):
+        rejected = client.post(f"/sessions/{session_id}/{suffix}", headers=headers, json=payload)
+        assert rejected.status_code == 422
+    issued = client.post(f"/sessions/{session_id}/llm-questions", headers=headers)
+    assert issued.status_code == 200, issued.text
+    item_id = issued.json()["questions"][0]["id"]
+    sessions.clear()
+    accepted = client.post(f"/sessions/{session_id}/llm-answers", headers=headers,
+                           json={"item_id": item_id, "answer": "発行済みへの回答"})
+    assert accepted.status_code == 200, accepted.text
+    assert _saved_session(session_id)["answers"][item_id] == "発行済みへの回答"
+    assert db_get_session(session_id)["question_texts"][item_id] == "合成追加質問"

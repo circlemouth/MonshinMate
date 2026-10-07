@@ -1,6 +1,20 @@
 # セッションAPI仕様
 
-本ドキュメントはセッション関連エンドポイントの仕様を示す。
+本ドキュメントはセキュリティ修正版のAPI契約を示す。**破壊的変更あり・本番未反映**。既存UUIDだけの患者クライアント、無認証の管理API利用、旧パスワードリセットAPIは継続利用できない。
+
+## 認可の共通規則
+
+| 区分 | 必要な資格情報 |
+| --- | --- |
+| 患者セッション作成、問診テンプレート一覧・取得、表示用設定、郵便番号検索、死活状態 | 認証不要（作成には永続レート制限） |
+| 患者回答・追加質問・確定 | 作成時の `session_token` を `Authorization: Bearer <token>` で送信 |
+| 患者サマリー連携3 API | 専用 `X-MonshinMate-Api-Key`。患者/管理トークンで代替不可 |
+| その他（設定の更新、プロンプト取得、診断、メトリクス、画像登録、全管理データ・ダウンロードを含む） | 有効な管理者Bearer JWT。画面の表示制御とは独立にサーバーで検証 |
+| ログイン・登録・復旧手続き | 後述の用途限定challenge/enrollment/recovery資格情報 |
+
+公開GETの正確な許可一覧は [api_policy.py](../backend/app/api_policy.py) が管理する。新設ルートは既定で管理者限定。URLクエリにトークンを入れない。応答には `Cache-Control: no-store`、`nosniff`、`no-referrer` を付ける。
+
+通常リクエスト本文は256KiBまで。回答は深さ6、文字列4000文字、辞書200項目、キー128文字、配列100項目まで。未知の質問IDや未発行LLM質問は422。401=認証無効、409=確定済み/同時操作中、413=本文超過、429=レート制限、503=共有状態利用不能（ローカルメモリに退避して許可しない）。
 
 ## POST /patient-summary
 - 概要: 患者名と生年月日をキーに、最新の確定済み問診を Markdown 形式で返す統合 API。
@@ -83,9 +97,13 @@
   サーバーに送信する。
 - レスポンス:
   - `status` (str): 作成結果。固定値 `created`
-  - `id` (str): セッションID
+  - `id` (str): セッションID（資格情報ではない）
+  - `session_token` (str): ランダムな患者専用トークン。サーバーにはハッシュのみ保存。
+  - `expires_at` (str): ISO8601形式、発行から24時間。
   - `answers` (object): 現在までの回答
-- 備考: 空欄で送信された回答は「該当なし」として保存される。
+- 制約: 氏名1〜128文字、生年月日1〜32文字、性別32文字以内、`visit_type` は `initial` / `followup`、`questionnaire_id` は128文字以内。
+- 作成制限: IPごと60件/分、全体300件/分（全ワーカー共有）。期限切れ・紛失時のUUIDからのトークン再発行APIはない。旧セッションの管理閲覧は可能だが患者の再開は不可。
+- 備考: 空欄で送信された回答は「該当なし」として保存される。患者端末は完了/中止/アイドル時に資格情報と回答を消去する。
 
 ## GET /postal-code/{postal_code}
 - 概要: 郵便番号から住所候補を検索する。患者画面の住所自動入力で利用する。
@@ -147,15 +165,15 @@
 - 備考: 従来の単件APIは互換性のため継続して利用できる。
 
 ## POST /sessions/{session_id}/finalize
-- 概要: セッションを確定し要約を生成する（回答送信後すぐに呼び出される）。
-- リクエストボディ:
-  - `llm_error` (str, 任意): LLM通信に失敗した場合のエラー内容。指定された場合、要約末尾に追記される。
-- レスポンス:
-  - `summary` (str): 生成された要約。サマリー作成モードが無効の場合は空文字
-  - `answers` (object): 確定した回答
-  - `finalized_at` (str): ISO8601形式の確定時刻
-  - `status` (str): `finalized`
-- 備考: 同じセッションを再度確定した場合は、保存済みの確定結果を返す。要約生成と完了通知は重複実行しない。
+- 認証: 当該患者のBearerトークン必須。他患者・管理者のトークンでは代替できない。
+- 概要: 共有DB上の操作ロック内で要約を同期生成し、セッションを確定する。確定済み回答の変更・追加質問生成は409。
+- リクエストボディ: `llm_error` (str, 任意) は障害の有無としてのみ利用し、原文は保存・要約へ追記しない。
+- レスポンス: `{ "id": "<session-id>", "status": "finalized", "finalized_at": "<ISO8601>" }` の受付情報のみ。**氏名・回答・要約は返さない**。
+- 応答消失時は同じトークンで再試行し同じ受付情報を取得する。確定済み記録がある場合は要約を再生成しない。通知はbest-effortで、永続outboxによるexactly-once配信は保証しない。
+- 追加質問・要約のLLM利用枠はセッションごと10回/分、全体120回/分。設定変更で過去の問診を自動再送しない。
+- 操作中の競合は409。プロセス強制終了でロックが残った場合も時間だけで奪取せず、運用者による記録整合性の確認が必要。
+- LLM送信はテンプレートに定義された臨床項目と実際に発行した追加質問に限定し、氏名・住所・電話等の既知の識別項目を除外する。ただし自由記述中の識別情報を完全匿名化する保証ではない。
+- クライアントは確定を汎用オフラインキューに積まず明示的再試行とする。正常完了後は保存回答・患者トークン・再送キューを消去して履歴を置換し、戻る操作による再表示を防ぐ。
 
 ## GET /admin/sessions/page
 
@@ -166,7 +184,7 @@
 - レスポンス: `{ items: SessionSummary[], next_cursor: string | null }`
 - 備考: 条件検索では従来の `GET /admin/sessions` を使用する。
 
-※ セッションと回答は既定で CouchDB に保存される。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象。環境変数 `COUCHDB_URL` を設定しない場合は従来通り SQLite に保存される。`COUCHDB_URL` に認証情報を含めない場合は、`COUCHDB_USER` と `COUCHDB_PASSWORD` を併せて設定する。CouchDB が設定されているにもかかわらず保存に失敗した場合、SQLite へは保存されずエラーとなる。サンプル `.env` では `COUCHDB_URL=http://couchdb:5984/` などが設定されており、Docker Compose で構築した CouchDB とそのまま連携できる。
+※ 通常の既定はSQLite。CouchDBを明示設定した場合はセッションと回答をCouchDBに保存する。固定項目の回答に加え、LLM による追加質問で提示された「質問文」とその回答のペアも保存対象。環境変数 `COUCHDB_URL` を設定しない場合は従来通り SQLite に保存される。`COUCHDB_URL` に認証情報を含めない場合は、`COUCHDB_USER` と `COUCHDB_PASSWORD` を併せて設定する。CouchDB が設定されているにもかかわらず保存に失敗した場合、SQLite へは保存されずエラーとなる。サンプル `.env` では `COUCHDB_URL=http://couchdb:5984/` などが設定されており、Docker Compose で構築した CouchDB とそのまま連携できる。
 
 ## GET /llm/settings
 
@@ -224,32 +242,20 @@
 - 認証: 不要。
 - 備考: 設定値、エラー詳細、更新契機、確認時刻は返さない。
 
-## POST /admin/login
-- 概要: 管理画面へのログインを行う。
-- リクエストボディ:
-  - `password` (str): 管理者パスワード
-- レスポンス:
-  - `{ status: "ok", access_token: "...", token_type: "bearer", expires_in: 28800 }`（成功時）
+## 管理者認証API（旧契約との互換性なし）
 
-## GET /admin/password/status
-- 概要: 管理者パスワードが初期状態かどうかを確認する。
-- レスポンス:
-  - `is_default` (bool): `true` の場合はパスワードが未設定（既定値）であり、フロントエンドで新規設定画面を表示する必要がある。
+- `GET /admin/auth/status`: 公開用の状態投影。初期登録可能性、認証済み状態等のみ。旧 `/admin/password/status` は使用しない。
+- `POST /admin/login` `{password}`: MFA有効時は `{status:"totp_required",challenge_token,expires_in:300}`。MFA登録が未完了なら `{status:"enrollment_required",enrollment_token,expires_in:600}`。`MONSHINMATE_ADMIN_REQUIRE_MFA=0` かつMFA未登録・必須登録途中でない場合は、`{status:"ok",access_token,token_type:"bearer",expires_in:900}` を直接返す。未指定の本番／明示 `1` はMFA必須。不正設定値は拒否し、既存MFA・必須登録途中・ロック・由来不明pendingは `0` でも迂回しない。
+- `POST /admin/login/totp` `{challenge_token,totp_code}`: パスワード検証に結び付いた単回challengeを消費し、`access_token`、`token_type:"bearer"`、`expires_in:900` を返す。TOTPだけのログインは不可。同一30秒ステップのコード再使用は、登録・ログイン・再認証間でも拒否する。
+- `POST /admin/bootstrap` / `POST /admin/recovery` `{credential,new_password}`: オフラインCLIで作成した用途別・短命・単回資格情報を使用。明示 `MONSHINMATE_ADMIN_REQUIRE_MFA=0` なら通常のaccess応答、それ以外はMFA登録用トークンを返す。後者は管理APIへの権限をまだ与えない。既定/固定の初期・非常用パスワードはない。
+- `POST /admin/totp/setup` / `POST /admin/totp/regenerate`: 登録用Bearer、または管理者Bearer＋`X-Admin-Reauth` が必要。`enrollment_id`、`provisioning_uri`、`qr_code_data_url`、`expires_in:600` を一度だけ返す。既存MFAは新しいコード検証成功まで維持。
+- `POST /admin/totp/verify` `{enrollment_id,totp_code}`: 同じ所有者・用途のBearer（再登録時は再認証も）を検証。成功でMFA有効化、新しい管理JWTを発行し旧トークンを失効。
+- `POST /admin/reauth` `{password,totp_code?}`: 管理Bearer必須。MFA有効アカウントだけ `totp_code` も必要。現在のJWT識別子に結び付いた `reauth_token`（300秒）を返す。
+- `POST /admin/password/change` `{current_password,new_password}`: 管理Bearer＋`X-Admin-Reauth: <reauth_token>` 必須。MFAは維持、全旧アクセストークンを失効する。新パスワードは12文字以上、UTF-8で72バイト以下。
+- `POST /admin/totp/disable`: 管理Bearer＋再認証が必要。MFA必須ポリシーでは禁止。
+- 旧 `POST /admin/password`、旧 `/admin/password/reset/*`、`GET /admin/totp/setup`、`PUT /admin/totp/mode` は410。
 
-## POST /admin/password
-- 概要: 管理者パスワードを新しく設定する。
-- リクエストボディ:
-  - `password` (str): 新しいパスワード
-- レスポンス:
-  - `{ status: "ok" }`（成功時）
-
-## POST /admin/password/change
-- 概要: 現在のパスワードを入力して新しいパスワードに変更する。変更時に二段階認証は無効化される。
-- リクエストボディ:
-  - `current_password` (str): 現在のパスワード
-  - `new_password` (str): 新しいパスワード
-- レスポンス:
-  - `{ status: "ok" }`（成功時）
+現パスワードの継承は承認済みオフライン `migrate-legacy` に限定し、HTTPや起動時に旧アカウントを自動信頼しない。手順・移行時のバックアップ・適用条件は [セットアップ手順](../internal_docs/admin_system_setup.md) を参照。秘密鍵はアプリimport前に供給し、紛失したTOTP鍵を新規キーで黙って置換してはならない。
 
 ## GET /admin/sessions
 - 概要: 保存済みセッションの一覧を取得する。
@@ -363,4 +369,13 @@
 - 概要: 依存サービス（DB・LLM）の疎通確認を行う。利用可能な場合は `{"status":"ready"}` を返す。
 
 ## GET /metrics
-- 概要: OpenMetrics 形式の最小メトリクスを返す。
+- 概要: 管理者Bearer必須。OpenMetrics形式の最小メトリクスを返す。
+
+## 入出力の安全境界
+
+- エクスポート/ダウンロード/画像登録/インポートは管理者Bearer必須。CSVの数式開始文字は無害化する。
+- 画像登録はPNG/JPEG/WebP、512KiB以下、400万画素以下、単一フレームを再エンコード。SVG/HTML等は不可。旧保存画像も配信時検証。
+- インポートは5MiB以下、セッション100件以下。暗号化形式のKDFは固定パラメータを検証し、受信側で任意反復回数を実行しない。認証状態/患者トークン/秘密APIキーをポータブルエクスポートに含めない。
+- SQLiteのmerge/replaceは設定・画像・セッションごとの原子トランザクション。セッションの対象に未完了能力トークンまたは操作中ロックがあれば409（期限切れでも自動消去しない）。成功時に対象患者能力を失効する。
+- 原子的インポート契約を満たさないアダプタは501で変更前に拒否する。CouchDBの横断インポートは非対応、非公開Firestore実装は未検証。
+- インポートしたLLM設定は次回起動時に反映し、インポートを契機に過去の問診の外部再送やLLM疎通を実行しない。

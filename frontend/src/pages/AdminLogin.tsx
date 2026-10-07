@@ -1,191 +1,64 @@
-import { useEffect, useState } from 'react';
-import {
-  Container,
-  VStack,
-  FormControl,
-  FormLabel,
-  Input,
-  Button,
-  Text,
-  HStack,
-  Heading,
-  Box,
-} from '@chakra-ui/react';
+import { useState } from 'react';
+import { Container, VStack, FormControl, FormLabel, Input, Button, Text, Heading } from '@chakra-ui/react';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
-type Props = {
-  inModal?: boolean;
-  onSuccess?: () => void;
-};
+import { acceptAdminToken, adminJson } from '../utils/adminApi';
+import { useRequestScope } from '../hooks/useRequestScope';
+import AdminEnrollment from '../components/AdminEnrollment';
 
+type Props = { inModal?: boolean; onSuccess?: () => void };
 export default function AdminLogin({ inModal = false, onSuccess }: Props) {
   const [password, setPassword] = useState('');
+  const [challenge, setChallenge] = useState('');
+  const [enrollmentToken, setEnrollmentToken] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [totpRequired, setTotpRequired] = useState(false);
-  const [totpCode, setTotpCode] = useState('');
-  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [busy, setBusy] = useState(false);
   const navigate = useNavigate();
-  const { checkAuthStatus, isTotpEnabled, emergencyResetAvailable } = useAuth();
-
-  useEffect(() => {
-    if (inModal) void checkAuthStatus(true);
-  }, [checkAuthStatus, inModal]);
-
-  const handleLogin = async () => {
-    setError('');
-    setLoading(true);
+  const scope = useRequestScope();
+  const submit = async () => {
+    const request = scope.start();
+    setBusy(true); setError('');
     try {
-      const res = await fetch('/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.detail || 'ログインに失敗しました');
-      }
-
-      if (data?.status === 'totp_required') {
-        setTotpRequired(true);
+      const data = challenge
+        ? await adminJson('/admin/login/totp', { challenge_token: challenge, totp_code: code }, {}, request.signal)
+        : await adminJson('/admin/login', { password }, {}, request.signal);
+      request.assertCurrent();
+      setPassword(''); setCode('');
+      if (data.status === 'totp_required') {
+        if (!data.challenge_token) throw new Error('ログインを最初からやり直してください');
+        setChallenge(data.challenge_token);
         return;
       }
-
-      if (data?.access_token) {
-        sessionStorage.setItem('adminAccessToken', data.access_token);
+      if (data.status === 'enrollment_required') {
+        if (!data.enrollment_token) throw new Error('登録資格情報がありません。ログインをやり直してください');
+        setChallenge(''); setEnrollmentToken(data.enrollment_token);
+        return;
       }
-      sessionStorage.setItem('adminLoggedIn', '1');
-      setFailedAttempts(0);
-      await checkAuthStatus(true); // AuthContextの状態を更新
+      request.assertCurrent();
+      acceptAdminToken(data);
+      setChallenge('');
       onSuccess?.();
       navigate('/admin/main', { replace: true });
-
-    } catch (e: any) {
-      setError(e.message);
-      setFailedAttempts((n) => n + 1);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) {
+      if (!request.current()) return;
+      setError(e instanceof Error ? e.message : 'ログインに失敗しました');
+      // A rejected or expired challenge must never fall back to code-only login.
+      setChallenge(''); setCode('');
+    } finally { if (request.current()) setBusy(false); }
   };
-
-  const handleTotpLogin = async () => {
-    if (!totpCode) {
-      setError('TOTPコードを入力してください');
-      return;
-    }
-    setError('');
-    setLoading(true);
-    try {
-      const res = await fetch('/admin/login/totp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ totp_code: totpCode }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.detail || 'TOTPコードが正しくありません');
-      }
-      if (data?.access_token) {
-        sessionStorage.setItem('adminAccessToken', data.access_token);
-      }
-      sessionStorage.setItem('adminLoggedIn', '1');
-      await checkAuthStatus(true); // AuthContextの状態を更新
-      onSuccess?.();
-      navigate('/admin/main', { replace: true });
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const content = (
-      <VStack spacing={6} p={8} bg="white" borderRadius="md" boxShadow="lg" w="100%" maxW="md">
-        <Heading size="lg">管理者ログイン</Heading>
-
-        {!totpRequired ? (
-          <>
-            <FormControl isInvalid={!!error}>
-              <FormLabel>パスワード</FormLabel>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleLogin(); }
-                }}
-                autoFocus
-              />
-            </FormControl>
-            <HStack justify="space-between" width="100%">
-              <Box />
-              <Button onClick={handleLogin} colorScheme="primary" isLoading={loading}>
-                ログイン
-              </Button>
-            </HStack>
-          </>
-        ) : (
-          <>
-            <Text>2段階認証コードを入力してください。</Text>
-            <FormControl isInvalid={!!error}>
-              <FormLabel>確認コード</FormLabel>
-              <Input
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.target.value)}
-                placeholder="123456"
-                maxLength={6}
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') { e.preventDefault(); handleTotpLogin(); }
-                }}
-              />
-            </FormControl>
-            <HStack justify="space-between" width="100%">
-              <Button variant="link" onClick={() => setTotpRequired(false)} isDisabled={loading} size="sm">
-                戻る
-              </Button>
-              <Button colorScheme="primary" onClick={handleTotpLogin} isLoading={loading}>
-                認証してログイン
-              </Button>
-            </HStack>
-          </>
-        )}
-        {error && (
-          <>
-            <Text color="red.500" mt={2} fontSize="sm" textAlign="center">{error}</Text>
-            {failedAttempts >= 3 && (
-              <>
-                {isTotpEnabled && (
-                  <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm" display="block" mx="auto">
-                    パスワードをお忘れですか？
-                  </Button>
-                )}
-                {!isTotpEnabled && emergencyResetAvailable && (
-                  <Button as={RouterLink} to="/admin/password/reset" variant="link" size="sm" display="block" mx="auto">
-                    非常用パスワードでリセット
-                  </Button>
-                )}
-                {!isTotpEnabled && !emergencyResetAvailable && error.includes('パスワードが間違っています') && (
-                  <Text fontSize="xs" color="gray.600" textAlign="center" width="100%" mt={2}>
-                    リセットには二段階認証の有効化、またはサーバ上で
-                    <code> backend/tools/reset_admin_password.py </code>
-                    の実行が必要です。
-                  </Text>
-                )}
-              </>
-            )}
-          </>
-        )}
-      </VStack>
-  );
-
-  if (inModal) {
-    return content;
-  }
-
-  return (
-    <Container centerContent pt={10}>
-      {content}
-    </Container>
-  );
+  if (enrollmentToken) return <AdminEnrollment mode="bootstrap" initialToken={enrollmentToken} onComplete={onSuccess} onCancel={() => setEnrollmentToken('')} />;
+  const content = <VStack as="form" onSubmit={e => { e.preventDefault(); if (!busy) void submit(); }} spacing={5} p={6} w="100%" maxW="md">
+    <Heading size="lg">管理者ログイン</Heading>
+    <FormControl>
+      <FormLabel>{challenge ? '確認コード（5分以内）' : 'パスワード'}</FormLabel>
+      {challenge ? <Input value={code} onChange={e => setCode(e.target.value)} maxLength={6} inputMode="numeric" autoComplete="one-time-code" /> : <Input type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="current-password" />}
+    </FormControl>
+    <Button type="submit" isLoading={busy} colorScheme="primary">{challenge ? '認証してログイン' : 'ログイン'}</Button>
+    {challenge && <Text fontSize="sm">直前に使用したコードは再利用できません。アプリの次のコード（約30秒ごと）をお待ちください。</Text>}
+    {challenge && <Button variant="link" onClick={() => { scope.cancel(); setBusy(false); setChallenge(''); setCode(''); }}>パスワード入力へ戻る</Button>}
+    {error && <Text color="red.600" role="alert">{error}</Text>}
+    <Button as={RouterLink} to="/admin/initial-password" onClick={onSuccess} variant="link" size="sm">初期登録</Button>
+    <Button as={RouterLink} to="/admin/password/reset" onClick={onSuccess} variant="link" size="sm">専用資格情報でアカウントを復旧</Button>
+  </VStack>;
+  return inModal ? content : <Container centerContent pt={10}>{content}</Container>;
 }

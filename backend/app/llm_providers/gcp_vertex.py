@@ -8,6 +8,8 @@ import logging
 import re
 
 import httpx
+from urllib.parse import urlsplit
+from ..llm_data_security import validate_profile_destination
 try:  # pragma: no cover
     import google.auth as google_auth
     from google.auth.transport.requests import Request as GoogleAuthRequest
@@ -102,6 +104,7 @@ class GcpVertexProvider:
             _MIN_OUTPUT_TOKENS,
             min(_MAX_OUTPUT_TOKENS_LIMIT, max_tokens),
         )
+        validate_profile_destination("gcp_vertex", normalized)
         return normalized
 
     # --- 認証処理 ---
@@ -161,14 +164,19 @@ class GcpVertexProvider:
         json_payload: dict[str, Any] | None = None,
         timeout_seconds: float = 30.0,
     ) -> httpx.Response:
-        with httpx.Client(timeout=timeout_seconds) as client:
-            response = client.request(method, url, headers=headers, json=json_payload)
-            try:
+        parsed = urlsplit(url)
+        host = parsed.hostname or ""
+        if (parsed.scheme != "https" or parsed.username or parsed.password or parsed.query or parsed.fragment
+                or parsed.port not in {None, 443}
+                or not re.fullmatch(r"(?:aiplatform|aiplatform\.(?:us|eu)\.rep|[a-z]+-[a-z]+[0-9]-aiplatform)\.googleapis\.com", host)):
+            raise ValueError("llm_destination_not_allowed")
+        try:
+            with httpx.Client(timeout=timeout_seconds, trust_env=False, follow_redirects=False) as client:
+                response = client.request(method, url, headers=headers, json=json_payload)
                 response.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                detail = self._extract_error_message(response)
-                raise RuntimeError(detail) from exc
-            return response
+                return response
+        except httpx.HTTPError:
+            raise RuntimeError("llm_request_failed") from None
 
     def _extract_error_message(self, response: httpx.Response) -> str:
         # サーバーのerror bodyが要求値をechoする可能性を考慮し、
@@ -485,7 +493,7 @@ class GcpVertexProvider:
                 )
                 return [str(item) for item in data if isinstance(item, (str, int, float))]
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.warning("vertex_followups_json_parse_failed: %s", exc)
+            _LOGGER.warning("vertex_followups_json_parse_failed")
         _LOGGER.warning("vertex_followups_response_unparseable length=%d", len(response_text))
         repaired = self._extract_strings_from_text(response_text)
         if repaired:
@@ -540,7 +548,7 @@ class GcpVertexProvider:
                 safety or None,
             )
         except Exception as exc:  # noqa: BLE001
-            _LOGGER.debug("vertex_response_meta_error: %s", exc)
+            _LOGGER.debug("vertex_response_meta_error")
 
     def chat(
         self,

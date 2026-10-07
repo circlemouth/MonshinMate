@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useNotify } from '../contexts/NotificationContext';
@@ -82,7 +83,7 @@ export function useSessionCompletionWatcher(enabled = true) {
     const poll = async () => {
       if (disposed || document.visibilityState !== 'visible') return;
       try {
-        const response = await fetch(
+        const response = await adminFetch(
           `/admin/sessions/completed?since=${encodeURIComponent(lastSince)}&limit=50`,
         );
         if (!response.ok) return;
@@ -106,7 +107,7 @@ export function useSessionCompletionWatcher(enabled = true) {
       ]);
       const { getMessaging, getToken, isSupported, onMessage } = messagingModule;
       if (!(await isSupported())) return false;
-      const configResponse = await fetch('/system/push-config');
+      const configResponse = await adminFetch('/system/push-config');
       if (!configResponse.ok) return false;
       const config: PushConfig = await configResponse.json();
       if (!config.enabled) return false;
@@ -121,7 +122,7 @@ export function useSessionCompletionWatcher(enabled = true) {
       });
       const accessToken = sessionStorage.getItem('adminAccessToken');
       if (!token || !accessToken) return false;
-      const registerResponse = await fetch('/admin/push-subscriptions', {
+      const registerResponse = await adminFetch('/admin/push-subscriptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({ token }),

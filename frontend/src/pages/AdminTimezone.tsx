@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Stack,
@@ -71,7 +72,7 @@ export default function AdminTimezone() {
   const saveTimezone = useCallback(
     async (nextTimezone: string, signal: AbortSignal) => {
       const payload = { timezone: nextTimezone || 'Asia/Tokyo' };
-      const res = await fetch('/system/timezone', {
+      const res = await adminFetch('/system/timezone', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

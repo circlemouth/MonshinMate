@@ -1,4 +1,4 @@
-﻿"""永続化レイヤー。
+"""永続化レイヤー。
 
 テンプレート・セッション・回答を管理する。既定では SQLite を使用するが、
 環境変数で CouchDB を指定した場合はセッション情報のみ CouchDB に保存する。
@@ -35,11 +35,10 @@ DEFAULT_DB_PATH = os.environ.get(
     "MONSHINMATE_DB", str(_APP_DIR / "app.sqlite3")
 )
 
-# TOTPシークレット暗号化用のキー
-FERNET_KEY = os.getenv(
-    "TOTP_ENC_KEY",
-    base64.urlsafe_b64encode(b"0" * 32).decode(),
-)
+# Validate before any adapter connection; local generated keys are process-local.
+from ..security_config import TOTP_ENC_KEY, validate_security_configuration
+validate_security_configuration()
+FERNET_KEY = TOTP_ENC_KEY
 fernet = Fernet(FERNET_KEY)
 
 # パスワードハッシュ化のコンテキスト
@@ -163,6 +162,10 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     """最小限のテーブル群を作成し、初期データを投入する。"""
     conn = get_conn(db_path)
     try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS security_state ("
+            "key TEXT PRIMARY KEY, revision INTEGER NOT NULL, value TEXT NOT NULL)"
+        )
         # テンプレート
         conn.execute(
             """
@@ -266,6 +269,14 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             )
         except Exception:
             pass
+
+        # Issued-but-unanswered question state must survive every worker reload.
+        session_columns = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
+        for column, default in (("pending_llm_questions_json", "[]"),
+                                ("llm_question_texts_json", "{}"),
+                                ("question_texts_json", "{}")):
+            if column not in session_columns:
+                conn.execute(f"ALTER TABLE sessions ADD COLUMN {column} TEXT NOT NULL DEFAULT '{default}'")
 
         # 回答履歴
         conn.execute(
@@ -472,61 +483,7 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             except (json.JSONDecodeError, KeyError):
                 pass
 
-        # --- データ移行と初期ユーザー作成 ---
-        admin_user = conn.execute("SELECT id FROM users WHERE username = 'admin'").fetchone()
-        if not admin_user:
-            password_to_set = "admin"  # 既定値
-            is_initial = 1
-            seed_source = "default"
-
-            # 環境変数からの上書き
-            password_from_env = os.getenv("ADMIN_PASSWORD")
-            if password_from_env and password_from_env != "admin":
-                password_to_set = password_from_env
-                is_initial = 0
-                seed_source = "env"
-
-            # パスワードをハッシュ化して 'admin' ユーザーを作成
-            hashed_password = pwd_context.hash(password_to_set)
-            conn.execute(
-                """
-                INSERT INTO users (username, hashed_password, is_initial_password)
-                VALUES ('admin', ?, ?)
-                """,
-                (hashed_password, is_initial),
-            )
-            conn.commit()
-            try:
-                now = datetime.now(UTC).isoformat()
-                conn.execute(
-                    "UPDATE users SET password_updated_at = ? WHERE username = 'admin'",
-                    (now,),
-                )
-                conn.commit()
-            except Exception:
-                pass
-            logging.getLogger("security").warning(
-                "admin_user_created from_init is_initial=%s seed_source=%s db=%s",
-                bool(is_initial),
-                seed_source,
-                db_path,
-            )
-            try:
-                conn.execute(
-                    "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, ?, ?)",
-                    (datetime.now(UTC).isoformat(), 'admin_user_created', 'admin', f'seed_source={seed_source}'),
-                )
-                conn.commit()
-            except Exception:
-                pass
-            try:
-                conn.execute(
-                    "INSERT INTO audit_logs(ts, event, username, note) VALUES (?, ?, ?, ?)",
-                    (datetime.now(UTC).isoformat(), 'admin_user_created', 'admin', None),
-                )
-                conn.commit()
-            except Exception:
-                pass
+        # Admin credentials are provisioned offline in security_state, never seeded.
 
     finally:
         conn.close()
@@ -1096,6 +1053,7 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             "finalized_at": finalized_dt.isoformat() if finalized_dt else None,
             "llm_question_texts": llm_qtexts,
             "question_texts": question_texts,
+            "pending_llm_questions": list(getattr(session, "pending_llm_questions", []) or []),
         }
         if session.id in db:
             existing = db.get(session.id)
@@ -1123,8 +1081,9 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
             INSERT INTO sessions (
                 id, patient_name, dob, gender, visit_type, questionnaire_id, answers_json,
                 summary, remaining_items_json, completion_status, attempt_counts_json,
-                additional_questions_used, max_additional_questions, followup_prompt, started_at, finalized_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                additional_questions_used, max_additional_questions, followup_prompt, started_at, finalized_at,
+                pending_llm_questions_json, llm_question_texts_json, question_texts_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 patient_name=excluded.patient_name,
                 dob=excluded.dob,
@@ -1140,7 +1099,10 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 max_additional_questions=excluded.max_additional_questions,
                 followup_prompt=excluded.followup_prompt,
                 started_at=excluded.started_at,
-                finalized_at=excluded.finalized_at
+                finalized_at=excluded.finalized_at,
+                pending_llm_questions_json=excluded.pending_llm_questions_json,
+                llm_question_texts_json=excluded.llm_question_texts_json,
+                question_texts_json=excluded.question_texts_json
             """,
             (
                 session.id,
@@ -1159,6 +1121,9 @@ def save_session(session: Any, db_path: str = DEFAULT_DB_PATH) -> None:
                 session.followup_prompt,
                 started_dt.isoformat() if started_dt else None,
                 finalized_dt.isoformat() if finalized_dt else None,
+                json.dumps(list(getattr(session, "pending_llm_questions", []) or []), ensure_ascii=False),
+                json.dumps(llm_qtexts, ensure_ascii=False),
+                json.dumps(question_texts, ensure_ascii=False),
             ),
         )
 
@@ -1408,8 +1373,9 @@ def get_session(session_id: str, db_path: str = DEFAULT_DB_PATH) -> dict[str, An
         ).fetchall()
         answers = {r["item_id"]: json.loads(r["answer_json"]) for r in rrows}
         # LLM 追加質問の質問文マッピングも返却に含める（API レイヤでは必要に応じて利用）
-        llm_qtexts: dict[str, str] = {}
-        question_texts: dict[str, str] = {}
+        llm_qtexts: dict[str, str] = json.loads(srow.get("llm_question_texts_json") or "{}")
+        question_texts: dict[str, str] = json.loads(srow.get("question_texts_json") or "{}")
+        srow["pending_llm_questions"] = json.loads(srow.get("pending_llm_questions_json") or "[]")
         for r in rrows:
             iid = r.get("item_id")
             qtext = r.get("question_text")
@@ -1760,6 +1726,7 @@ def export_sessions_data(
                 "started_at": started_at,
                 "finalized_at": doc.get("finalized_at"),
                 "llm_question_texts": doc.get("llm_question_texts") or {},
+                "question_texts": doc.get("question_texts") or {},
             }
             result.append(payload)
         return result
@@ -1804,7 +1771,7 @@ def export_sessions_data(
                 "SELECT item_id, question_text FROM session_responses WHERE session_id=?",
                 (sid,),
             ).fetchall()
-            llm_question_texts: dict[str, str] = {}
+            llm_question_texts: dict[str, str] = json.loads(row.get("llm_question_texts_json") or "{}")
             for r in rrows:
                 item_id = r.get("item_id")
                 qtext = r.get("question_text")
@@ -1834,6 +1801,7 @@ def export_sessions_data(
                     "started_at": row.get("started_at") or row.get("finalized_at"),
                     "finalized_at": row.get("finalized_at"),
                     "llm_question_texts": llm_question_texts,
+                    "question_texts": json.loads(row.get("question_texts_json") or "{}"),
                 }
             )
         return result
@@ -1995,8 +1963,8 @@ def get_user_by_username(username: str, db_path: str = DEFAULT_DB_PATH) -> dict[
         if row and row.get("totp_secret"):
             try:
                 row["totp_secret"] = fernet.decrypt(row["totp_secret"].encode()).decode()
-            except InvalidToken:
-                pass
+            except InvalidToken as exc:
+                raise RuntimeError("Stored TOTP secret could not be decrypted; offline recovery required") from exc
         return row
     finally:
         conn.close()
@@ -2007,6 +1975,8 @@ def update_password(username: str, new_password: str, db_path: str = DEFAULT_DB_
     パスワード変更の監査ログを出力する（平文やハッシュは記録しない）。
     """
     logger = logging.getLogger("security")
+    if len(new_password) < 12 or len(new_password.encode("utf-8")) > 72:
+        raise ValueError("Password must have at least 12 characters and at most 72 UTF-8 bytes")
     hashed_password = pwd_context.hash(new_password)
     conn = get_conn(db_path)
     try:
@@ -2040,7 +2010,12 @@ def update_password(username: str, new_password: str, db_path: str = DEFAULT_DB_
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """平文パスワードとハッシュ化済みパスワードを比較する。"""
-    return pwd_context.verify(plain_password, hashed_password)
+    if not plain_password or len(plain_password.encode("utf-8")) > 72:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except (ValueError, TypeError):
+        return False
 
 def update_totp_secret(username: str, secret: str, db_path: str = DEFAULT_DB_PATH) -> None:
     """TOTPシークレットを保存する。"""
@@ -2176,6 +2151,64 @@ class SQLiteAdapter:
             self.default_db_path = db_path
         init_db(self.default_db_path)
 
+    def _security_couch_db(self):
+        # A separate database prevents auth state entering any patient export/view.
+        server = couchdb.Server(COUCHDB_URL)
+        if COUCHDB_USER and COUCHDB_PASSWORD:
+            server.resource.credentials = (COUCHDB_USER, COUCHDB_PASSWORD)
+        name = os.getenv("COUCHDB_SECURITY_DB", COUCHDB_DB_NAME + "_security")
+        if name == COUCHDB_DB_NAME:
+            raise RuntimeError("Security state must use a separate CouchDB database")
+        try:
+            return server[name]
+        except couchdb.http.ResourceNotFound:
+            try:
+                return server.create(name)
+            except couchdb.http.PreconditionFailed:
+                return server[name]
+
+    def security_get_state(self, key: str) -> tuple[str | int | None, dict[str, Any] | None]:
+        if COUCHDB_URL:
+            database = self._security_couch_db()
+            doc = database.get("state:" + key)
+            return (doc["_rev"], doc["value"]) if doc else (None, None)
+        conn = get_conn(self.default_db_path)
+        try:
+            row = conn.execute("SELECT revision, value FROM security_state WHERE key=?", (key,)).fetchone()
+            return (row["revision"], json.loads(row["value"])) if row else (None, None)
+        finally:
+            conn.close()
+
+    def security_compare_and_swap_state(self, key, revision, value) -> bool:
+        serialized = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        if COUCHDB_URL:
+            database = self._security_couch_db()
+            doc = {"_id": "state:" + key, "value": json.loads(serialized)}
+            if revision is not None:
+                doc["_rev"] = revision
+            try:
+                database.save(doc)
+                return True
+            except couchdb.http.ResourceConflict:
+                return False
+        conn = get_conn(self.default_db_path)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if revision is None:
+                changed = conn.execute(
+                    "INSERT OR IGNORE INTO security_state(key, revision, value) VALUES (?, 1, ?)",
+                    (key, serialized),
+                ).rowcount
+            else:
+                changed = conn.execute(
+                    "UPDATE security_state SET revision=revision+1, value=? WHERE key=? AND revision=?",
+                    (serialized, key, revision),
+                ).rowcount
+            conn.commit()
+            return changed == 1
+        finally:
+            conn.close()
+
     def _call_with_db_path(self, func, *args, **kwargs):
         if "db_path" not in kwargs:
             kwargs["db_path"] = self.default_db_path
@@ -2282,6 +2315,32 @@ class SQLiteAdapter:
 
     def import_questionnaire_settings(self, *args, **kwargs):
         return self._call_with_db_path(import_questionnaire_settings, *args, **kwargs)
+
+    def _atomic_import(self, operation, data, *, mode: str, **kwargs):
+        from fastapi import HTTPException
+        if COUCHDB_URL or couch_db is not None:
+            # SQLite settings plus Couch documents cannot share one transaction.
+            raise HTTPException(501, "atomic_import_not_supported")
+        if mode not in {"merge", "replace"}:
+            raise HTTPException(400, "invalid_mode")
+        conn = get_conn(self.default_db_path)
+        try:
+            with conn:
+                conn.execute("BEGIN IMMEDIATE")
+                return operation(conn, data, mode=mode, **kwargs)
+        except sqlite3.Error:
+            raise HTTPException(503, "atomic_import_failed") from None
+        finally:
+            conn.close()
+
+    def atomic_import_questionnaire_settings(self, data, *, mode: str, images=None, logos=None):
+        from ..sqlite_atomic_imports import questionnaire_settings, stage_assets
+        staged = stage_assets(images, logos)
+        return self._atomic_import(questionnaire_settings, data, mode=mode, staged_assets=staged)
+
+    def atomic_import_sessions_data(self, records, *, mode: str):
+        from ..sqlite_atomic_imports import sessions_data
+        return self._atomic_import(sessions_data, records, mode=mode)
 
     def export_sessions_data(self, *args, **kwargs):
         return self._call_with_db_path(export_sessions_data, *args, **kwargs)

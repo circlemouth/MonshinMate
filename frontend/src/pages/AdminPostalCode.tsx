@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { ChangeEvent, useCallback, useEffect, useState } from 'react';
 import {
   Alert,
@@ -47,7 +48,7 @@ export default function AdminPostalCode() {
   const loadInfo = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch('/system/postal-code-dictionary');
+      const response = await adminFetch('/system/postal-code-dictionary');
       if (!response.ok) {
         throw new Error('郵便番号辞書の状態を取得できませんでした');
       }
@@ -87,7 +88,7 @@ export default function AdminPostalCode() {
     try {
       const formData = new FormData();
       formData.append('file', uploadFile);
-      const response = await fetch('/system/postal-code-dictionary', {
+      const response = await adminFetch('/system/postal-code-dictionary', {
         method: 'POST',
         body: formData,
       });

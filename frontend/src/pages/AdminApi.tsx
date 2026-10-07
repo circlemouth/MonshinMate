@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
@@ -39,7 +40,7 @@ export default function AdminApi() {
   const loadInfo = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/system/patient-summary-api');
+      const res = await adminFetch('/system/patient-summary-api');
       if (!res.ok) {
         throw new Error('failed to load');
       }

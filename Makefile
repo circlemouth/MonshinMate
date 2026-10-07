@@ -13,10 +13,10 @@ backend:
 	@source venv/bin/activate && cd backend && uvicorn app.main:app --reload --port 8001
 
 frontend:
-	@cd frontend && (pnpm run dev || yarn dev || npm run dev)
+	@cd frontend && npm run dev
 
 test:
-	@source venv/bin/activate && cd backend && pytest -q
+	@venv/bin/python backend/tools/run_security_tests.py -q
 
 submodules:
 	@git submodule update --init --recursive

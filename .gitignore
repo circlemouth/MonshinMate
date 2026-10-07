@@ -15,8 +15,9 @@ backend/app/postal_code_data/*.sqlite3-*
 # Log files
 *.log
 
-# 注意: internal_docs/ は本リポジトリ（非公開）では Git 管理対象
-# 公開用エクスポートでは tools/export_public.sh が除外処理を行う
+# 注意: internal_docs/ は Git 管理対象であり、名称やこの設定は機密性を保証しない
+# 公開リポジトリへ push する内容は公開可能性をレビューすること
+# tools/export_public.sh の除外は生成スナップショットのみ（Git履歴やpushには適用されない）
 
 # 公開用エクスポート生成物
 public_export/

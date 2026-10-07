@@ -1,29 +1,18 @@
 # バックエンドAPIを提供するコンテナ
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 # ソースコードをコピー
 COPY backend /app
-# Cloud Run / Firestore 用のプライベートアダプタを同梱
-COPY private/cloud-run-adapter /app/private/cloud-run-adapter
-# 依存を仮想環境にインストール
-# ENABLE_GCP=1 のときのみ GCP 依存を追加インストール（デフォルト 0 で軽量化）
-ARG ENABLE_GCP=0
+# 汎用 SQLite/CouchDB イメージ。クラウド専用構成は非公開アダプタ側で管理する。
 RUN python -m venv /venv \
     && . /venv/bin/activate \
-    && pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -e . \
-    && if [ "$ENABLE_GCP" = "1" ]; then \
-         pip install --no-cache-dir \
-           google-cloud-firestore \
-           google-cloud-storage \
-           firebase-admin; \
-       fi
+    && pip install --no-cache-dir -r requirements.lock \
+    && pip install --no-cache-dir --no-deps -e .
 # PATH を仮想環境に設定
 ENV PATH="/venv/bin:$PATH"
-ENV PYTHONPATH="/app/private/cloud-run-adapter"
 
 RUN adduser --disabled-password --gecos '' appuser \
     && chown -R appuser:appuser /app /venv

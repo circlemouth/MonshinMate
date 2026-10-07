@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { finalizePatient } from '../utils/finalizePatient';
+import { patientJson, patientGeneration, isPatientGeneration } from '../utils/patientSession';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { VStack, Box, Input, Button, Heading, Divider } from '@chakra-ui/react';
 import { useNavigate } from 'react-router-dom';
 import { postWithRetry } from '../retryQueue';
@@ -19,40 +21,24 @@ export default function Questions() {
 
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
-    const err = sessionStorage.getItem('llm_error');
-    sessionStorage.removeItem('pending_llm_questions');
     try {
-      const res = await fetch(`/sessions/${sessionId}/finalize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ llm_error: err }),
-      });
-      const data = await res.json();
-      sessionStorage.setItem('summary', data.summary);
-      sessionStorage.setItem('answers', JSON.stringify(ans));
+      await finalizePatient(sessionId);
+      navigate('/done', { replace: true });
     } catch {
-      sessionStorage.setItem('answers', JSON.stringify(ans));
-      postWithRetry(`/sessions/${sessionId}/finalize`, { llm_error: err });
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({
-        title: 'ネットワークエラーが発生しました。',
-        description: '接続後に再度お試しください。',
-        status: 'error',
-        channel: 'patient',
-        actionLabel: '再試行',
-        onAction: () => {
-          void finalize(ans);
-        },
+        title: '送信完了を確認できませんでした。',
+        description: '回答は消去していません。接続を確認して再試行してください。',
+        status: 'error', channel: 'patient', actionLabel: '再試行', duration: null, isClosable: false,
+        onAction: () => { void finalize(ans); },
       });
     }
-    navigate('/done');
   };
 
   const fetchQuestion = async () => {
     if (!sessionId) return;
     try {
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      if (!res.ok) throw new Error('http error');
-      const data = await res.json();
+      const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         setPending(data.questions);
@@ -68,6 +54,7 @@ export default function Questions() {
         await finalize(answers);
       }
     } catch (e) {
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
       console.error('fetchQuestion failed', e);
       try {
         const msg = e instanceof Error ? e.message : String(e);
@@ -109,14 +96,19 @@ export default function Questions() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, navigate]);
 
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const submit = async () => {
-    if (!sessionId || !hasQuestions) return;
+    if (!sessionId || !hasQuestions || submitting.current) return;
+    submitting.current = true; setBusy(true);
+    const epoch = patientGeneration();
     const toSend = pending.map((q) => ({ id: q.id, answer: form[q.id] ?? '' }));
     try {
       // 1バッチ1リクエスト・1永続化書き込みにまとめる。
       await postWithRetry(`/sessions/${sessionId}/llm-answers/batch`, {
         answers: Object.fromEntries(toSend.map((item) => [item.id, item.answer])),
       });
+      if (!isPatientGeneration(epoch)) return;
       const merged: Record<string, any> = { ...answers };
       for (const x of toSend) merged[x.id] = x.answer;
       setAnswers(merged);
@@ -124,9 +116,7 @@ export default function Questions() {
 
       // 次のバッチを取得（前回で上限到達していれば0件が返る）
       sessionStorage.removeItem('pending_llm_questions');
-      const res = await fetch(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      if (!res.ok) throw new Error('http error');
-      const data = await res.json();
+      const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         setPending(data.questions);
@@ -136,16 +126,11 @@ export default function Questions() {
       } else {
         await finalize(merged);
       }
-    } catch (e) {
-      // どれかが失敗した場合でも finalize へ（postWithRetry がキューしている）
-      const merged: Record<string, any> = { ...answers };
-      for (const x of toSend) merged[x.id] = x.answer;
-      try {
-        const msg = e instanceof Error ? e.message : String(e);
-        sessionStorage.setItem('llm_error', msg);
-      } catch {}
-      sessionStorage.removeItem('pending_llm_questions');
-      await finalize(merged);
+    } catch {
+      if (sessionStorage.getItem('session_id') !== sessionId) return;
+      notify({ title: '回答を送信できませんでした。もう一度送信してください。', status: 'error', channel: 'patient' });
+    } finally {
+      submitting.current = false; setBusy(false);
     }
   };
 
@@ -170,7 +155,7 @@ export default function Questions() {
                 {idx < pending.length - 1 && <Divider mt={4} />}
               </Box>
             ))}
-            <Button onClick={submit} colorScheme="primary">まとめて送信</Button>
+            <Button onClick={submit} isLoading={busy} colorScheme="primary">まとめて送信</Button>
           </>
         )}
       </VStack>

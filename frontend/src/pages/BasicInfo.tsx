@@ -12,7 +12,8 @@ import {
   Flex,
   Text,
 } from '@chakra-ui/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { clearPatientSession, storePatientSession, patientGeneration, isPatientGeneration, patientSignal } from '../utils/patientSession';
 import { useNavigate } from 'react-router-dom';
 import { useNotify } from '../contexts/NotificationContext';
 import {
@@ -169,21 +170,23 @@ export default function BasicInfo() {
   };
 
   const handleBackToEntry = () => {
-    sessionStorage.removeItem('patient_name');
-    sessionStorage.removeItem('gender');
-    sessionStorage.removeItem('dob');
-    sessionStorage.removeItem('personal_info');
+    clearPatientSession();
     setVisitType('');
     navigate('/', { replace: true });
   };
 
   type SessionCreateResponse = {
     id: string;
+    session_token: string;
+    expires_at: string;
     questionnaire_id?: string;
     answers?: Record<string, any>;
   };
 
+  const submitting = useRef(false);
+  const [busy, setBusy] = useState(false);
   const handleNext = async () => {
+    if (submitting.current || !sessionStorage.getItem('visit_type')) return;
     setAttempted(true);
     const errs: string[] = [];
     const today = new Date().toISOString().slice(0, 10);
@@ -206,6 +209,8 @@ export default function BasicInfo() {
       return;
     }
 
+    submitting.current = true;
+    setBusy(true);
     sessionStorage.setItem('patient_name', name);
     sessionStorage.setItem('gender', gender);
     let answersPayload: Record<string, any> = {};
@@ -219,6 +224,7 @@ export default function BasicInfo() {
 
     sessionStorage.removeItem('questionnaire_id');
 
+    const epoch = patientGeneration();
     try {
       sessionStorage.setItem('visit_type', visitType);
       const payload = {
@@ -230,17 +236,21 @@ export default function BasicInfo() {
       };
       const res = await fetch('/sessions', {
         method: 'POST',
+        signal: patientSignal(),
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('failed');
       const data: SessionCreateResponse = await res.json();
-      sessionStorage.setItem('session_id', data.id);
+      if (!isPatientGeneration(epoch)) return;
+      storePatientSession(data);
       sessionStorage.setItem('answers', JSON.stringify(data.answers ?? {}));
       const questionnaireId = data.questionnaire_id || 'default';
       sessionStorage.setItem('questionnaire_id', questionnaireId);
       navigate('/questionnaire');
     } catch (error) {
+      if (!isPatientGeneration(epoch)) return;
       notify({
         title: 'セッションの作成に失敗しました。',
         description: '時間をおいて再度お試しください。',
@@ -251,6 +261,9 @@ export default function BasicInfo() {
           void handleNext();
         },
       });
+    } finally {
+      submitting.current = false;
+      setBusy(false);
     }
   };
 
@@ -547,6 +560,7 @@ export default function BasicInfo() {
           </Button>
           <Button
             onClick={handleNext}
+            isLoading={busy}
             colorScheme="primary"
             size="lg"
             w={{ base: '100%', sm: '280px' }}

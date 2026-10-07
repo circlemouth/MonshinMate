@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loadSystemBootstrap } from '../systemBootstrap';
+import { clearPatientSession } from '../utils/patientSession';
 
 const VISIT_OPTIONS = [
   {
@@ -35,18 +36,7 @@ export default function Entry() {
   const [attempted, setAttempted] = useState(false);
 
   useEffect(() => {
-    [
-      'session_id',
-      'answers',
-      'questionnaire_items',
-      'summary',
-      'visit_type',
-      'llm_error',
-      'patient_name',
-      'dob',
-      'gender',
-      'personal_info',
-    ].forEach((k) => sessionStorage.removeItem(k));
+    clearPatientSession();
   }, []);
 
   useEffect(() => {
@@ -72,18 +62,9 @@ export default function Entry() {
       return;
     }
 
+    clearPatientSession();
     sessionStorage.setItem('visit_type', visitType);
-    [
-      'patient_name',
-      'dob',
-      'gender',
-      'personal_info',
-      'session_id',
-      'answers',
-      'questionnaire_items',
-      'summary',
-      'llm_error',
-    ].forEach((k) => sessionStorage.removeItem(k));
+    sessionStorage.setItem('patient_last_activity', String(Date.now()));
 
     navigate('/basic-info');
   };

@@ -1,3 +1,4 @@
+import { adminFetch } from '../utils/adminApi';
 import { useEffect, useState, useRef, useMemo, Fragment, Dispatch, SetStateAction, useCallback } from 'react';
 import type { DragEvent } from 'react';
 import {
@@ -305,7 +306,7 @@ export default function AdminTemplates() {
   const loadTemplateList = (options?: { retainSelection?: boolean }) => {
     const retainSelection = options?.retainSelection ?? false;
     return Promise.all([
-      fetch('/questionnaires').then((res) => res.json()),
+      adminFetch('/questionnaires').then((res) => res.json()),
       loadSystemBootstrap(),
     ]).then(([data, defaultData]) => {
       const ids = Array.from(new Set((data || []).map((t: any) => t.id))).map((id) => ({ id }));
@@ -328,7 +329,7 @@ export default function AdminTemplates() {
   const uploadItemImage = async (file: File): Promise<string | undefined> => {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch('/questionnaire-item-images', { method: 'POST', body: fd });
+    const res = await adminFetch('/questionnaire-item-images', { method: 'POST', body: fd });
     if (!res.ok) return undefined;
     const data = await res.json();
     return data.url as string;
@@ -338,7 +339,7 @@ export default function AdminTemplates() {
     if (!url || url.startsWith('data:')) return;
     const name = url.split('/').pop();
     if (!name) return;
-    await fetch(`/questionnaire-item-images/${name}`, { method: 'DELETE' });
+    await adminFetch(`/questionnaire-item-images/${name}`, { method: 'DELETE' });
   };
 
   const confirmAndDeleteImage = async (url?: string): Promise<boolean> => {
@@ -810,7 +811,7 @@ type FollowupState = {
     }
     setDefaultSaveStatus('saving');
     const handler = setTimeout(() => {
-      fetch('/system/default-questionnaire', {
+      adminFetch('/system/default-questionnaire', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ questionnaire_id: defaultQuestionnaireId }),
@@ -913,12 +914,12 @@ type FollowupState = {
   const loadTemplates = (id: string) => {
     setIsLoading(true);
     Promise.all([
-      fetch(`/questionnaires/${id}/template?visit_type=initial`).then((r) => r.json()),
-      fetch(`/questionnaires/${id}/template?visit_type=followup`).then((r) => r.json()),
-      fetch(`/questionnaires/${id}/summary-prompt?visit_type=initial`).then((r) => r.json()),
-      fetch(`/questionnaires/${id}/summary-prompt?visit_type=followup`).then((r) => r.json()),
-      fetch(`/questionnaires/${id}/followup-prompt?visit_type=initial`).then((r) => r.json()),
-      fetch(`/questionnaires/${id}/followup-prompt?visit_type=followup`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/template?visit_type=initial`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/template?visit_type=followup`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/summary-prompt?visit_type=initial`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/summary-prompt?visit_type=followup`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/followup-prompt?visit_type=initial`).then((r) => r.json()),
+      adminFetch(`/questionnaires/${id}/followup-prompt?visit_type=followup`).then((r) => r.json()),
     ]).then(([init, follow, pInit, pFollow, fInit, fFollow]) => {
       const map = new Map<string, Item>();
       (init.items || []).forEach((it: any) =>
@@ -1159,33 +1160,33 @@ type FollowupState = {
           ...rest,
           ...(description ? { description } : {}),
         }));
-      await fetch('/questionnaires', {
+      await adminFetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: templateId, visit_type: 'initial', items: initialItems, llm_followup_enabled: llmFollowupEnabled, llm_followup_max_questions: initialLlmMax }),
       });
-      await fetch('/questionnaires', {
+      await adminFetch('/questionnaires', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: templateId, visit_type: 'followup', items: followupItems, llm_followup_enabled: llmFollowupEnabled, llm_followup_max_questions: followupLlmMax }),
       });
       // サマリー用プロンプトも保存（有効/無効を含む）
-      await fetch(`/questionnaires/${templateId}/summary-prompt`, {
+      await adminFetch(`/questionnaires/${templateId}/summary-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: 'initial', prompt: initialPrompt || '', enabled: initialEnabled }),
       });
-      await fetch(`/questionnaires/${templateId}/summary-prompt`, {
+      await adminFetch(`/questionnaires/${templateId}/summary-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: 'followup', prompt: followupPrompt || '', enabled: followupEnabled }),
       });
-      await fetch(`/questionnaires/${templateId}/followup-prompt`, {
+      await adminFetch(`/questionnaires/${templateId}/followup-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: 'initial', prompt: initialFollowupPrompt || DEFAULT_FOLLOWUP_PROMPT, enabled: followupAdvanced }),
       });
-      await fetch(`/questionnaires/${templateId}/followup-prompt`, {
+      await adminFetch(`/questionnaires/${templateId}/followup-prompt`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ visit_type: 'followup', prompt: followupFollowupPrompt || DEFAULT_FOLLOWUP_PROMPT, enabled: followupAdvanced }),
@@ -1214,8 +1215,8 @@ type FollowupState = {
     if (!confirmed) return;
     try {
       await Promise.all([
-        fetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
-        fetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
+        adminFetch(`/questionnaires/${id}?visit_type=initial`, { method: 'DELETE' }),
+        adminFetch(`/questionnaires/${id}?visit_type=followup`, { method: 'DELETE' }),
       ]);
 
       const newTemplates = templates.filter((t) => t.id !== id);
@@ -1249,7 +1250,7 @@ type FollowupState = {
     if (result === null) return;
     const newId = result.trim();
     try {
-      await fetch(`/questionnaires/${id}/duplicate`, {
+      await adminFetch(`/questionnaires/${id}/duplicate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_id: newId }),
@@ -1283,7 +1284,7 @@ type FollowupState = {
     if (result === null) return;
     const newId = result.trim();
     try {
-      const res = await fetch(`/questionnaires/${id}/rename`, {
+      const res = await adminFetch(`/questionnaires/${id}/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ new_id: newId }),
@@ -1329,7 +1330,7 @@ type FollowupState = {
     });
     if (!confirmed) return;
     try {
-      await fetch(`/questionnaires/${id}/reset`, { method: 'POST' });
+      await adminFetch(`/questionnaires/${id}/reset`, { method: 'POST' });
       notify({
         title: `テンプレート「${id}」をリセットしました。`,
         status: 'success',

@@ -4,10 +4,10 @@ services:
     image: couchdb:3
     restart: unless-stopped
     ports:
-      - "5984:5984"
+      - "127.0.0.1:5984:5984"
     environment:
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=admin
+      - COUCHDB_USER=${COUCHDB_USER:?Set a dedicated CouchDB user}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:?Set a strong CouchDB password}
     volumes:
       - ./data/couchdb:/opt/couchdb/data
     healthcheck:
@@ -22,16 +22,20 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     volumes:
-      - ./backend/app:/app/app
       - ./data/sqlite:/app/data/sqlite
     ports:
-      - "8001:8001"
+      - "127.0.0.1:8001:8001"
     environment:
       - COUCHDB_URL=http://couchdb:5984/
       - COUCHDB_DB=monshin_sessions
-      - COUCHDB_USER=admin
-      - COUCHDB_PASSWORD=admin
+      - COUCHDB_USER=${COUCHDB_USER:?Set a dedicated CouchDB user}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:?Set a strong CouchDB password}
       - MONSHINMATE_DB=/app/data/sqlite/app.sqlite3
+      - MONSHINMATE_ENV=production
+      - MONSHINMATE_ADMIN_REQUIRE_MFA=${MONSHINMATE_ADMIN_REQUIRE_MFA:?Set 0 for reviewed password-only or 1 for mandatory MFA}
+      - SECRET_KEY=${SECRET_KEY:?Set a random JWT signing key}
+      - TOTP_ENC_KEY=${TOTP_ENC_KEY:?Set the backed-up Fernet key}
+      - MIGRATE_LEGACY_ASSETS_ON_STARTUP=0
     depends_on:
       couchdb:
         condition: service_healthy
@@ -43,4 +47,4 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_HTTP_PORT:-5173}:8080"
+      - "127.0.0.1:${FRONTEND_HTTP_PORT:-5173}:8080"

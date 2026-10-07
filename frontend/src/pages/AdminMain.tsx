@@ -1,3 +1,4 @@
+import { adminFetch, adminDownload } from '../utils/adminApi';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Box,
@@ -54,7 +55,6 @@ import {
 } from 'react-icons/fi';
 import AccentOutlineBox from '../components/AccentOutlineBox';
 import { LlmStatus, refreshLlmStatus } from '../utils/llmStatus';
-import { adminFetch } from '../utils/adminApi';
 import SystemStatusCard from '../components/SystemStatusCard';
 import { loadSystemBootstrap } from '../systemBootstrap';
 import { useTimezone } from '../contexts/TimezoneContext';
@@ -270,7 +270,7 @@ export default function AdminMain() {
           params.append('visit_type', filters.visitType);
         }
         const query = params.toString();
-        const res = await fetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=100');
+        const res = await adminFetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=100');
         if (!res.ok) {
           throw new Error('failed to load sessions');
         }
@@ -340,7 +340,7 @@ export default function AdminMain() {
     setTemplateError(null);
     try {
       const [tplRes, bootstrap] = await Promise.all([
-        fetch('/questionnaires'),
+        adminFetch('/questionnaires'),
         loadSystemBootstrap(),
       ]);
       if (!tplRes.ok) {
@@ -361,7 +361,7 @@ export default function AdminMain() {
   const loadDatabaseStatus = useCallback(async () => {
     setDbLoading(true);
     try {
-      const res = await fetch('/system/database-status');
+      const res = await adminFetch('/system/database-status');
       if (!res.ok) {
         throw new Error('failed to fetch db status');
       }
@@ -469,7 +469,7 @@ export default function AdminMain() {
   };
 
   const fetchSessionMarkdown = async (id: string) => {
-    const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
+    const res = await adminFetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
     if (!res.ok) {
       throw new Error('failed to fetch markdown');
     }
@@ -507,9 +507,9 @@ export default function AdminMain() {
       setSelectedDetail(null);
       setSelectedItems([]);
       preview.onOpen();
-      const res = await fetch(`/admin/sessions/${id}`);
+      const res = await adminFetch(`/admin/sessions/${id}`);
       const detail = await res.json();
-      const tpl = await fetch(
+      const tpl = await adminFetch(
         `/questionnaires/${detail.questionnaire_id}/template?visit_type=${detail.visit_type}`
       ).then((r) => r.json());
       setSelectedDetail({ ...detail, id });
@@ -801,11 +801,7 @@ export default function AdminMain() {
                         <MenuList>
                           <MenuItem
                             onClick={() =>
-                              window.open(
-                                `/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`,
-                                '_blank',
-                                'noopener,noreferrer'
-                              )
+                              adminDownload(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`)
                             }
                           >
                             PDF
@@ -815,11 +811,7 @@ export default function AdminMain() {
                           </MenuItem>
                           <MenuItem
                             onClick={() =>
-                              window.open(
-                                `/admin/sessions/${encodeURIComponent(s.id)}/download/csv`,
-                                '_blank',
-                                'noopener,noreferrer'
-                              )
+                              adminDownload(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`)
                             }
                           >
                             CSV
@@ -895,10 +887,7 @@ export default function AdminMain() {
                       variant="outline"
                       leftIcon={<FiFile />}
                       onClick={() =>
-                        window.open(
-                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/pdf`,
-                          '_blank'
-                        )
+                        adminDownload(`/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/pdf`)
                       }
                     >
                       PDF
@@ -923,10 +912,7 @@ export default function AdminMain() {
                       variant="outline"
                       leftIcon={<FiTable />}
                       onClick={() =>
-                        window.open(
-                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/csv`,
-                          '_blank'
-                        )
+                        adminDownload(`/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/csv`)
                       }
                     >
                       CSV

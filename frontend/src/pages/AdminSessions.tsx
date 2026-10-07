@@ -1,3 +1,4 @@
+import { adminFetch, adminDownload } from '../utils/adminApi';
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Table,
@@ -142,7 +143,7 @@ export default function AdminSessions() {
           params.append('visit_type', filters.visitType);
         }
         const query = params.toString();
-        const response = await fetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=200');
+        const response = await adminFetch(query ? `/admin/sessions?${query}` : '/admin/sessions/page?limit=200');
         if (!response.ok) {
           throw new Error('failed to load sessions');
         }
@@ -176,7 +177,7 @@ export default function AdminSessions() {
     if (!nextCursor || listLoading) return;
     setListLoading(true);
     try {
-      const response = await fetch(`/admin/sessions/page?limit=200&cursor=${encodeURIComponent(nextCursor)}`);
+      const response = await adminFetch(`/admin/sessions/page?limit=200&cursor=${encodeURIComponent(nextCursor)}`);
       if (!response.ok) throw new Error('failed to load more sessions');
       const payload: { items: SessionSummary[]; next_cursor?: string | null } = await response.json();
       setSessions((current) => [...current, ...payload.items]);
@@ -291,7 +292,7 @@ export default function AdminSessions() {
   };
 
   const fetchSessionMarkdown = async (id: string) => {
-    const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
+    const res = await adminFetch(`/admin/sessions/${encodeURIComponent(id)}/download/md`);
     if (!res.ok) {
       throw new Error('failed to fetch markdown');
     }
@@ -370,7 +371,7 @@ export default function AdminSessions() {
 
     const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
     const url = `/admin/sessions/bulk/download/${fmt}?${qs}`;
-    window.open(url, '_blank');
+    adminDownload(url);
   };
 
   const openPreview = async (id: string) => {
@@ -379,9 +380,9 @@ export default function AdminSessions() {
       setSelectedDetail(null);
       setSelectedItems([]);
       preview.onOpen();
-      const res = await fetch(`/admin/sessions/${id}`);
+      const res = await adminFetch(`/admin/sessions/${id}`);
       const detail = await res.json();
-      const tpl = await fetch(
+      const tpl = await adminFetch(
         `/questionnaires/${detail.questionnaire_id}/template?visit_type=${detail.visit_type}`
       ).then((r) => r.json());
       setSelectedDetail({ ...detail, id });
@@ -530,7 +531,7 @@ export default function AdminSessions() {
     if (displayedSessionIds.length === 0) return;
     try {
       const qs = displayedSessionIds.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-      const res = await fetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
+      const res = await adminFetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
       if (!res.ok) throw new Error('failed');
       const body = await res.json().catch(() => ({} as any));
       const deleted = body?.deleted ?? displayedSessionIds.length;
@@ -557,7 +558,7 @@ export default function AdminSessions() {
     if (ids.length === 0) return;
     try {
       const qs = ids.map((id) => `ids=${encodeURIComponent(id)}`).join('&');
-      const res = await fetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
+      const res = await adminFetch(`/admin/sessions/bulk/delete?${qs}`, { method: 'POST' });
       if (!res.ok) throw new Error('failed');
       const body = await res.json().catch(() => ({} as any));
       const deleted = body?.deleted ?? ids.length;
@@ -582,7 +583,7 @@ export default function AdminSessions() {
 
   const deleteSessionNoConfirm = async (id: string) => {
     try {
-      const res = await fetch(`/admin/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const res = await adminFetch(`/admin/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('failed');
       notify({ title: '削除しました', status: 'success', channel: 'admin', duration: 3000 });
       reloadWithCurrentFilters();
@@ -812,11 +813,11 @@ export default function AdminSessions() {
                             />
                           </Tooltip>
                           <MenuList>
-                            <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`, '_blank')}>
+                            <MenuItem onClick={() => adminDownload(`/admin/sessions/${encodeURIComponent(s.id)}/download/pdf`)}>
                               PDF
                             </MenuItem>
                             <MenuItem onClick={() => copyMarkdownForSession(s.id, 'row')}>Markdown</MenuItem>
-                            <MenuItem onClick={() => window.open(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`, '_blank')}>
+                            <MenuItem onClick={() => adminDownload(`/admin/sessions/${encodeURIComponent(s.id)}/download/csv`)}>
                               CSV
                             </MenuItem>
                           </MenuList>
@@ -922,10 +923,7 @@ export default function AdminSessions() {
                       variant="outline"
                       leftIcon={<FiFile />}
                       onClick={() =>
-                        window.open(
-                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/pdf`,
-                          '_blank'
-                        )
+                        adminDownload(`/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/pdf`)
                       }
                     >
                       PDF
@@ -950,10 +948,7 @@ export default function AdminSessions() {
                       variant="outline"
                       leftIcon={<FiTable />}
                       onClick={() =>
-                        window.open(
-                          `/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/csv`,
-                          '_blank'
-                        )
+                        adminDownload(`/admin/sessions/${encodeURIComponent(selectedDetail.id)}/download/csv`)
                       }
                     >
                       CSV

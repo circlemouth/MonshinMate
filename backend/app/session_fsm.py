@@ -6,6 +6,8 @@ import logging
 
 from .validator import Validator
 from .structured_context import StructuredContextManager
+from .clinical_context import clinical_answers
+from fastapi import HTTPException
 
 
 class SessionFSM:
@@ -18,8 +20,15 @@ class SessionFSM:
     # ---- 回答処理 ----
     def step(self, item_id: str, answer: Any) -> None:
         """回答を検証・保存し状態を更新する。"""
-        Validator.validate_partial(self.session.template_items, {item_id: answer})
-        StructuredContextManager.update_structured_context(self.session, item_id, answer)
+        if self.session.completion_status == "finalized":
+            raise HTTPException(409, "session finalized")
+        specifications = list(self.session.template_items)
+        if item_id in (getattr(self.session, "llm_question_texts", {}) or {}):
+            specifications.append({"id": item_id, "type": "string"})
+        partial = {item_id: answer}
+        Validator.validate_partial(specifications, partial)
+        Validator.validate_shape({**self.session.answers, **partial})
+        StructuredContextManager.update_structured_context(self.session, item_id, partial[item_id])
         self._finalize_item()
 
     def _finalize_item(self) -> None:
@@ -45,7 +54,7 @@ class SessionFSM:
                 if remaining_slots <= 0:
                     return None
                 texts = self.llm_gateway.generate_followups(
-                    context=self.session.answers,
+                    context=clinical_answers(self.session),
                     max_questions=remaining_slots,
                     prompt=self.session.followup_prompt,
                     lock_key=getattr(self.session, "id", None),
@@ -89,7 +98,7 @@ class SessionFSM:
                     except Exception:
                         pass
             except Exception:
-                logging.getLogger("llm").exception("generate_followups_failed")
+                logging.getLogger("llm").warning("generate_followups_failed")
                 self.session.pending_llm_questions = []
 
         if not self.session.pending_llm_questions:

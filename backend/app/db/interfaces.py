@@ -1,4 +1,4 @@
-﻿"""永続化レイヤーのインターフェース定義。
+"""永続化レイヤーのインターフェース定義。
 
 Cloud Run + Firebase への移行では、SQLite/CouchDB ベースの
 ローカル実装と Firestore 実装を並行して運用する必要がある。
@@ -17,6 +17,16 @@ class PersistenceAdapter(Protocol):
     couch_db: Any | None
     couchdb_url: str | None
     default_db_path: str | None
+
+    def security_get_state(self, key: str) -> tuple[str | int | None, dict[str, Any] | None]:
+        """Read an opaque revision and JSON state, or (None, None). Never fallback."""
+        ...
+
+    def security_compare_and_swap_state(
+        self, key: str, revision: str | int | None, value: dict[str, Any]
+    ) -> bool:
+        """Atomically create if revision is None, otherwise replace matching revision."""
+        ...
 
     def init(self) -> None:
         """起動時初期化処理を実行する。"""
@@ -91,6 +101,15 @@ class PersistenceAdapter(Protocol):
         ...
 
     def import_questionnaire_settings(self, *args: Any, **kwargs: Any) -> None:
+        ...
+
+    def atomic_import_questionnaire_settings(
+        self, data: dict[str, Any], *, images: dict[str, dict[str, Any]],
+        logos: dict[str, dict[str, Any]], mode: str,
+    ) -> dict[str, Any]:
+        ...
+
+    def atomic_import_sessions_data(self, records: list[dict[str, Any]], *, mode: str) -> dict[str, Any]:
         ...
 
     def export_sessions_data(self, *args: Any, **kwargs: Any) -> dict[str, Any]:

@@ -1,7 +1,8 @@
 import { Container, Heading, Box, Flex, Button, Spinner, Center, Text, useDisclosure, Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton } from '@chakra-ui/react';
 import { Routes, Route, Link as RouterLink, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { flushQueue } from './retryQueue';
+import PatientSafety, { PatientGuard } from './components/PatientSafety';
+import { clearPatientSession } from './utils/patientSession';
 import FlowProgress from './components/FlowProgress';
 import { useAuth } from './contexts/AuthContext';
 
@@ -47,7 +48,7 @@ export default function App() {
   const { isLoading, isInitialPassword, showTotpSetup, isAuthenticated, logout } = useAuth();
 
   useEffect(() => {
-    flushQueue();
+    // Retry only within the active patient flow, never on an anonymous/top screen.
     // ページ遷移時に認証状態をチェック（セッションが切れている場合などに対応）
     // checkAuthStatus(); // AuthProvider内で初回実行済み。必要に応じて追加。
     // サブページをリロードした場合はトップページへリダイレクト
@@ -55,16 +56,19 @@ export default function App() {
       const navs: any = (performance as any).getEntriesByType?.('navigation') || [];
       const navType = navs[0]?.type ?? (performance as any).navigation?.type; // 1 = reload (deprecated API)
       const isReload = navType === 'reload' || navType === 1;
-      if (isReload && location.pathname !== '/') {
-        navigate('/');
+      if (isReload && location.pathname !== '/' && !location.pathname.startsWith('/admin') && location.pathname !== '/chat') {
+        clearPatientSession();
+        navigate('/', { replace: true });
       }
     } catch {}
   }, []);
 
   // 管理画面以外へ遷移したら自動的にログアウト（セッションストレージのフラグのみクリア）
   useEffect(() => {
-    if (!location.pathname.startsWith('/admin')) {
+    if (!location.pathname.startsWith('/admin') && location.pathname !== '/chat') {
       logout();
+    } else if (sessionStorage.getItem('visit_type')) {
+      clearPatientSession();
     }
   }, [location.pathname]);
 
@@ -214,17 +218,18 @@ export default function App() {
         </Flex>
       )}
 
+      <PatientSafety />
       <Box flex="1" overflowY={isAdminPage ? 'visible' : 'auto'}>
         {!isChatPage && <FlowProgress />}
         <Suspense fallback={<Center minH="40vh"><Spinner size="lg" /></Center>}>
           <Routes>
             <Route path="/" element={<Entry />} />
-            <Route path="/basic-info" element={<BasicInfo />} />
-            <Route path="/questionnaire" element={<QuestionnaireForm />} />
-            <Route path="/llm-wait" element={<LlmWait />} />
-            <Route path="/questions" element={<Questions />} />
+            <Route path="/basic-info" element={<PatientGuard entry><BasicInfo /></PatientGuard>} />
+            <Route path="/questionnaire" element={<PatientGuard><QuestionnaireForm /></PatientGuard>} />
+            <Route path="/llm-wait" element={<PatientGuard><LlmWait /></PatientGuard>} />
+            <Route path="/questions" element={<PatientGuard><Questions /></PatientGuard>} />
             <Route path="/done" element={<Done />} />
-            <Route path="/chat" element={<LLMChat />} />
+            <Route path="/chat" element={isAuthenticated ? <LLMChat /> : <Navigate to="/admin/login" replace />} />
 
             {/* 管理者系 */}
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -265,7 +270,7 @@ export default function App() {
         <ModalContent>
           <ModalCloseButton />
           <ModalBody>
-            <AdminLogin inModal onSuccess={closeLogin} />
+            {isLoginOpen && <AdminLogin inModal onSuccess={closeLogin} />}
           </ModalBody>
         </ModalContent>
       </Modal>

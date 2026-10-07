@@ -1,4 +1,4 @@
-﻿"""FastAPI バックエンドのエントリポイント。
+"""FastAPI バックエンドのエントリポイント。
 
 問診テンプレート取得やチャット応答を含む簡易 API を提供する。
 """
@@ -165,35 +165,16 @@ def _external_url_for(request: Request, route_name: str) -> str:
         return str(url.replace(scheme="https"))
     return str(url)
 
-# JWT settings for password reset
-SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed")
+# Purpose-bound JWTs and persistent revocation are owned by admin_security.
+from . import admin_security
+from .security_config import SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
-ADMIN_PUSH_TOKEN_EXPIRE_MINUTES = 8 * 60
-
-
-def _create_admin_access_token() -> str:
-    """管理画面とPush購読管理に共通の短期JWTを発行する。"""
-
-    expires_at = datetime.now(UTC) + timedelta(minutes=ADMIN_PUSH_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode(
-        {"sub": "admin", "scope": "admin push:manage", "exp": expires_at},
-        SECRET_KEY,
-        algorithm=ALGORITHM,
-    )
+ADMIN_PUSH_TOKEN_EXPIRE_MINUTES = 15
 
 
 def _decode_admin_access_token(authorization: str | None) -> dict[str, Any]:
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="authentication required")
-    token = authorization.split(" ", 1)[1].strip()
-    try:
-        claims = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-    except JWTError as exc:
-        raise HTTPException(status_code=401, detail="invalid access token") from exc
-    if claims.get("sub") != "admin":
-        raise HTTPException(status_code=403, detail="insufficient scope")
-    return claims
+    return admin_security.decode_access(authorization)
 
 
 def require_admin_access(
@@ -208,12 +189,16 @@ def require_admin_access(
     return claims
 
 init_db()
-app = FastAPI(title="MonshinMate API")
+from .api_policy import protected_route_class, RequestBoundaryMiddleware
+from .patient_security import issue_capability, finalize_receipt, rate_limit
+
+app = FastAPI(title="MonshinMate API", docs_url=None, redoc_url=None, openapi_url=None)
+app.router.route_class = protected_route_class(require_admin_access)
+app.add_middleware(RequestBoundaryMiddleware)
 
 _allowed_origins = _resolve_allowed_origins()
 _allowed_origin_regex = os.getenv("FRONTEND_ALLOWED_ORIGIN_REGEX")
-if not _allowed_origin_regex:
-    _allowed_origin_regex = r"^chrome-extension://.*$"
+# Extension origins must be listed explicitly; do not authorize every installed extension.
 if _allowed_origins or _allowed_origin_regex:
     app.add_middleware(
         CORSMiddleware,
@@ -256,6 +241,13 @@ def _ensure_default_prompts() -> None:
             upsert_followup_prompt("default", visit_type, DEFAULT_FOLLOWUP_PROMPT, False)
 
 
+from .transfer_security import (
+    MAX_ASSET_BYTES, MAX_IMPORT_BYTES, MAX_IMPORT_RECORDS, SAFE_HEADERS,
+    SafeCSVWriter, clean_raster, read_import, portable_app_settings,
+    portable_session, validate_assets, validate_questionnaires, validate_sessions,
+    atomic_import,
+)
+
 EXPORT_PBKDF_ITERATIONS = 390_000
 IMAGE_FILENAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 IMAGE_STORAGE_SEGMENT = "questionnaire-item-images/files/"
@@ -271,6 +263,8 @@ def _build_export_envelope(data: Any, export_type: str, password: str | None) ->
         "exported_at": datetime.now(UTC).isoformat(),
     }
     if password:
+        if len(password) > 1024:
+            raise HTTPException(status_code=400, detail="invalid_password")
         salt = secrets.token_bytes(16)
         key_material = hashlib.pbkdf2_hmac(
             "sha256", password.encode("utf-8"), salt, EXPORT_PBKDF_ITERATIONS, dklen=32
@@ -295,6 +289,10 @@ def _build_export_envelope(data: Any, export_type: str, password: str | None) ->
 def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str, Any]:
     """エクスポートファイルを復号し、中身の種別とデータを返す。"""
 
+    if len(raw_bytes) > MAX_IMPORT_BYTES:
+        raise HTTPException(status_code=413, detail="import_too_large")
+    if password and len(password) > 1024:
+        raise HTTPException(status_code=400, detail="invalid_password")
     try:
         try:
             text = raw_bytes.decode("utf-8")
@@ -305,22 +303,36 @@ def _parse_import_envelope(raw_bytes: bytes, password: str | None) -> tuple[str,
         envelope = json.loads(text)
     except Exception:
         raise HTTPException(status_code=400, detail="invalid_export_file")
-    if not isinstance(envelope, dict):
+    if (not isinstance(envelope, dict) or type(envelope.get("version")) is not int
+            or envelope.get("version") != 1 or envelope.get("type") not in {"questionnaire_settings", "session_data"}
+            or "payload" not in envelope or "encryption" not in envelope):
         raise HTTPException(status_code=400, detail="invalid_export_file")
     export_type = envelope.get("type")
     encryption = envelope.get("encryption")
     payload = envelope.get("payload")
-    if encryption:
+    if encryption is not None:
+        if (not isinstance(encryption, dict) or encryption.get("algorithm") != "fernet"
+                or encryption.get("kdf") != "pbkdf2_hmac"
+                or type(encryption.get("iterations")) is not int
+                or encryption.get("iterations") != EXPORT_PBKDF_ITERATIONS
+                or not isinstance(encryption.get("salt"), str)
+                or not isinstance(payload, str)):
+            raise HTTPException(status_code=400, detail="invalid_export_encryption")
+        try:
+            salt = base64.b64decode(encryption["salt"], validate=True)
+            ciphertext = base64.b64decode(payload, validate=True)
+            if len(salt) != 16 or len(ciphertext) < 100:
+                raise ValueError("invalid encryption metadata")
+        except (ValueError, TypeError):
+            raise HTTPException(status_code=400, detail="invalid_export_encryption")
         if not password:
             raise HTTPException(status_code=400, detail="password_required")
         try:
-            salt = base64.b64decode(encryption.get("salt") or "")
-            iterations = int(encryption.get("iterations") or EXPORT_PBKDF_ITERATIONS)
             key_material = hashlib.pbkdf2_hmac(
-                "sha256", password.encode("utf-8"), salt, iterations, dklen=32
+                "sha256", password.encode("utf-8"), salt, EXPORT_PBKDF_ITERATIONS, dklen=32
             )
             cipher = Fernet(base64.urlsafe_b64encode(key_material))
-            decrypted = cipher.decrypt(base64.b64decode(payload or ""))
+            decrypted = cipher.decrypt(ciphertext)
             payload_data = json.loads(decrypted.decode("utf-8"))
         except InvalidToken:
             raise HTTPException(status_code=400, detail="invalid_password")
@@ -451,10 +463,14 @@ def _load_image_payloads(image_names: set[str]) -> dict[str, str]:
             content = bytes(raw_content) if isinstance(raw_content, (bytes, bytearray)) else None
         else:
             legacy_path = IMAGE_DIR / sanitized
-            content = legacy_path.read_bytes() if legacy_path.exists() else None
+            content = None
+            if legacy_path.is_file() and not legacy_path.is_symlink():
+                with legacy_path.open("rb") as source:
+                    content = source.read(MAX_ASSET_BYTES + 1)
         if not content:
             continue
-        payloads[sanitized] = base64.b64encode(bytes(content)).decode("ascii")
+        content, _, _ = clean_raster(bytes(content))
+        payloads[sanitized] = base64.b64encode(content).decode("ascii")
     return payloads
 
 
@@ -477,14 +493,15 @@ def _canonicalize_logo_url(raw_url: Any) -> tuple[str | None, dict[str, str]]:
     content = asset.get("content")
     if not isinstance(content, (bytes, bytearray)):
         return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {}
-    encoded = base64.b64encode(bytes(content)).decode("ascii")
+    content, _, _ = clean_raster(bytes(content))
+    encoded = base64.b64encode(content).decode("ascii")
     return f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}", {sanitized: encoded}
 
 
 def _normalize_app_settings_for_transfer(settings: Any) -> tuple[dict[str, Any], dict[str, str]]:
     if not isinstance(settings, dict):
         return {}, {}
-    normalized = dict(settings)
+    normalized = portable_app_settings(settings)
     logo_payloads: dict[str, str] = {}
     if "logo_url" in normalized:
         normalized_logo, payload = _canonicalize_logo_url(normalized.get("logo_url"))
@@ -500,7 +517,7 @@ def _normalize_app_settings_for_transfer(settings: Any) -> tuple[dict[str, Any],
 def _sanitize_app_settings_payload(settings: Any) -> dict[str, Any]:
     if not isinstance(settings, dict):
         return {}
-    sanitized = dict(settings)
+    sanitized = portable_app_settings(settings)
     logo_url = sanitized.get("logo_url")
     if isinstance(logo_url, str):
         normalized_logo, _ = _canonicalize_logo_url(logo_url)
@@ -513,94 +530,27 @@ def _sanitize_app_settings_payload(settings: Any) -> dict[str, Any]:
 
 
 def _restore_logo_files(logo_payloads: Any, mode: str) -> int:
-    if mode == "replace":
-        for asset in list_binary_assets(SYSTEM_LOGO_CATEGORY):
-            asset_id = asset.get("id")
-            if asset_id:
-                delete_binary_asset(SYSTEM_LOGO_CATEGORY, str(asset_id))
-    if not logo_payloads:
-        return 0
-    if not isinstance(logo_payloads, dict):
-        raise HTTPException(status_code=400, detail="invalid_logo_payload")
-    restored = 0
-    for name, encoded in logo_payloads.items():
-        if not isinstance(name, str) or not isinstance(encoded, str):
-            continue
-        try:
-            sanitized = _sanitize_image_filename(name)
-        except ValueError:
-            continue
-        try:
-            data = base64.b64decode(encoded)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="invalid_logo_payload") from exc
-        media_type = mimetypes.guess_type(sanitized)[0]
-        save_binary_asset(
-            SYSTEM_LOGO_CATEGORY,
-            data,
-            sanitized,
-            content_type=media_type,
-            asset_id=sanitized,
-        )
-        try:
-            LOGO_DIR.mkdir(parents=True, exist_ok=True)
-            (LOGO_DIR / sanitized).write_bytes(bytes(data))
-        except Exception:
-            logger.exception("failed_to_restore_logo_file filename=%s", sanitized)
-        restored += 1
-    return restored
+    # Per-asset writes cannot satisfy the import transaction contract.
+    validate_assets(logo_payloads)
+    raise HTTPException(status_code=501, detail="atomic_import_not_supported")
 
 
 def _restore_images(image_payloads: Any, mode: str) -> int:
-    if mode == "replace":
-        for asset in list_binary_assets(QUESTIONNAIRE_IMAGE_CATEGORY):
-            asset_id = asset.get("id")
-            if asset_id:
-                delete_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, str(asset_id))
-    if not image_payloads:
-        return 0
-    if not isinstance(image_payloads, dict):
-        raise HTTPException(status_code=400, detail="invalid_image_payload")
-    restored = 0
-    for name, encoded in image_payloads.items():
-        if not isinstance(name, str) or not isinstance(encoded, str):
-            continue
-        try:
-            sanitized = _sanitize_image_filename(name)
-        except ValueError:
-            continue
-        try:
-            data = base64.b64decode(encoded)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="invalid_image_payload") from exc
-        media_type = mimetypes.guess_type(sanitized)[0]
-        save_binary_asset(
-            QUESTIONNAIRE_IMAGE_CATEGORY,
-            data,
-            sanitized,
-            content_type=media_type,
-            asset_id=sanitized,
-        )
-        try:
-            IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-            (IMAGE_DIR / sanitized).write_bytes(bytes(data))
-        except Exception:
-            logger.exception("failed_to_restore_image_file filename=%s", sanitized)
-        restored += 1
-    return restored
-
+    validate_assets(image_payloads)
+    raise HTTPException(status_code=501, detail="atomic_import_not_supported")
 
 
 def _build_binary_asset_response(asset: dict[str, Any], fallback_name: str) -> Response:
     content = asset.get("content")
     if not isinstance(content, (bytes, bytearray)):
         raise HTTPException(status_code=404, detail="asset_not_found")
-    filename = asset.get("filename") or fallback_name
-    media_type = asset.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-    headers = {"Cache-Control": "public, max-age=86400"}
-    if filename:
-        headers["Content-Disposition"] = f"inline; filename={filename}"
-    return Response(content=bytes(content), media_type=media_type, headers=headers)
+    try:
+        data, media_type, _ = clean_raster(bytes(content))
+    except HTTPException:
+        raise HTTPException(status_code=404, detail="asset_not_found") from None
+    return Response(content=data, media_type=media_type, headers={
+        **SAFE_HEADERS, "Cache-Control": "private, max-age=86400",
+    })
 
 
 @app.get("/questionnaire-item-images/files/{filename}")
@@ -632,12 +582,12 @@ async def log_middleware(request: Request, call_next):
     try:
         response = await call_next(request)
     except Exception:  # noqa: BLE001 - ログ出力後に再送出
-        logger.exception("api_error path=%s method=%s", request.url.path, request.method)
+        logger.error("api_error route=%s method=%s", getattr(request.scope.get("route"), "path", "unmatched"), request.method)
         raise
     duration = (time.perf_counter() - start) * 1000
     logger.info(
         "api_call path=%s method=%s status=%d duration_ms=%.1f",
-        request.url.path,
+        getattr(request.scope.get("route"), "path", "unmatched"),
         request.method,
         response.status_code,
         duration,
@@ -1149,7 +1099,7 @@ def readyz() -> dict:
     if db_ok and llm_ok:
         return {"status": "ready"}
 
-    return {"status": "not_ready", "detail": f"db={db_ok} llm={llm_ok} ({llm_detail})"}
+    return {"status": "not_ready"}
 
 
 @app.get("/")
@@ -1415,7 +1365,7 @@ def rename_questionnaire_api(questionnaire_id: str, payload: QuestionnaireRename
     except ValueError:
         raise HTTPException(status_code=400, detail="id already exists") from None
     except Exception as exc:  # pragma: no cover - 予期せぬエラー時
-        logger.exception("rename_template_failed", exc_info=exc)
+        logger.error("rename_template_failed")
         raise HTTPException(status_code=500, detail="failed to rename template") from exc
 
     return {"status": "ok", "id": new_id}
@@ -1523,7 +1473,7 @@ def export_questionnaire_settings_api(
         raw_templates if isinstance(raw_templates, list) else []
     )
     images = _load_image_payloads(image_names)
-    export_payload = dict(data)
+    export_payload = {key: data[key] for key in ("templates", "summary_prompts", "followup_prompts", "default_questionnaire_id", "app_settings", "llm_settings") if key in data}
     export_payload["templates"] = normalized_templates
     export_payload["images"] = images
     app_settings = data.get("app_settings") if isinstance(data, dict) else None
@@ -1541,7 +1491,7 @@ def export_questionnaire_settings_api(
     return StreamingResponse(
         io.BytesIO(content),
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -1554,7 +1504,7 @@ async def import_questionnaire_settings_api(
 ) -> dict[str, Any]:
     """問診テンプレート設定一式をインポートする。"""
 
-    raw = await file.read()
+    raw = await read_import(file)
     export_type, payload = _parse_import_envelope(raw, password or None)
     if export_type != "questionnaire_settings":
         raise HTTPException(status_code=400, detail="invalid_export_type")
@@ -1563,46 +1513,29 @@ async def import_questionnaire_settings_api(
     mode_value = (mode or "merge").lower()
     if mode_value not in {"merge", "replace"}:
         raise HTTPException(status_code=400, detail="invalid_mode")
-    payload_data = dict(payload)
-    raw_templates = payload_data.get("templates")
-    normalized_templates, _ = _normalize_templates_for_transfer(
-        raw_templates if isinstance(raw_templates, list) else []
-    )
+    payload_data = validate_questionnaires(payload)
+    images = validate_assets(payload.get("images", {}))
+    logos = validate_assets(payload.get("logo_files", {}))
+    if len(images) + len(logos) + sum(len(payload_data.get(k, [])) for k in ("templates", "summary_prompts", "followup_prompts")) > MAX_IMPORT_RECORDS:
+        raise HTTPException(status_code=400, detail="too_many_records")
+    normalized_templates, _ = _normalize_templates_for_transfer(payload_data.get("templates", []))
     payload_data["templates"] = normalized_templates
-    payload_data["app_settings"] = _sanitize_app_settings_payload(payload_data.get("app_settings"))
-    images_payload = payload_data.pop("images", {}) or {}
-    restored_images = _restore_images(images_payload, mode_value)
-    logo_payload = payload_data.pop("logo_files", {}) or {}
-    restored_logos = _restore_logo_files(logo_payload, mode_value)
-    try:
-        stats = import_questionnaire_settings(payload_data, mode=mode_value)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="invalid_mode")
-    except sqlite3.OperationalError as exc:
-        if "no such table" in str(exc).lower():
-            logger.warning("import_questionnaire_settings missing tables; re-running init_db()")
-            init_db()
-            stats = import_questionnaire_settings(payload_data, mode=mode_value)
-        else:
-            logger.exception("import_questionnaire_settings failed")
-            raise
-    try:
-        stored_llm = load_llm_settings()
-        if stored_llm:
-            llm_gateway.update_settings(
-                LLMSettings(**sanitize_llm_settings_for_storage(stored_llm))
-            )
-            llm_gateway.settings.sync_from_active_profile()
-    except Exception:
-        logger.exception("apply_imported_llm_settings_failed")
-
-    return {
-        "status": "ok",
-        "imported": stats,
-        "images_restored": restored_images,
-        "logos_restored": restored_logos,
-        "mode": mode_value,
-    }
+    if "llm_settings" in payload_data and payload_data["llm_settings"]:
+        try:
+            # Portable settings never accept credentials, even in old exports.
+            safe_llm = _sanitize_llm_settings_for_read(payload_data["llm_settings"]).model_dump()
+            validated_llm = LLMSettings(**sanitize_llm_settings_for_storage(safe_llm))
+            validated_llm.sync_from_active_profile()
+            if validated_llm.enabled:
+                from .llm_data_security import validate_profile_destination
+                validate_profile_destination(validated_llm.provider, validated_llm.get_profile().model_dump())
+            payload_data["llm_settings"] = validated_llm.model_dump()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_llm_settings") from None
+    stats = atomic_import("questionnaire_settings", payload_data, mode=mode_value, images=images, logos=logos)
+    # No automatic model call, history resend, or separate asset/settings write.
+    return {"status": "ok", "imported": stats, "images_restored": len(images),
+            "logos_restored": len(logos), "mode": mode_value}
 
 
 
@@ -1612,7 +1545,7 @@ def _migrate_legacy_assets() -> None:
     try:
         if IMAGE_DIR.exists():
             for path in IMAGE_DIR.glob("*"):
-                if not path.is_file():
+                if not path.is_file() or path.is_symlink():
                     continue
                 try:
                     asset_id = _sanitize_image_filename(path.name)
@@ -1620,10 +1553,11 @@ def _migrate_legacy_assets() -> None:
                     continue
                 if load_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, asset_id):
                     continue
-                data = path.read_bytes()
-                if not data:
+                try:
+                    with path.open("rb") as source:
+                        data, media_type, _ = clean_raster(source.read(MAX_ASSET_BYTES + 1))
+                except HTTPException:
                     continue
-                media_type = mimetypes.guess_type(asset_id)[0]
                 save_binary_asset(
                     QUESTIONNAIRE_IMAGE_CATEGORY,
                     data,
@@ -1634,7 +1568,7 @@ def _migrate_legacy_assets() -> None:
                 migrated += 1
         if LOGO_DIR.exists():
             for path in LOGO_DIR.glob("*"):
-                if not path.is_file():
+                if not path.is_file() or path.is_symlink():
                     continue
                 try:
                     asset_id = _sanitize_image_filename(path.name)
@@ -1642,10 +1576,11 @@ def _migrate_legacy_assets() -> None:
                     continue
                 if load_binary_asset(SYSTEM_LOGO_CATEGORY, asset_id):
                     continue
-                data = path.read_bytes()
-                if not data:
+                try:
+                    with path.open("rb") as source:
+                        data, media_type, _ = clean_raster(source.read(MAX_ASSET_BYTES + 1))
+                except HTTPException:
                     continue
-                media_type = mimetypes.guess_type(asset_id)[0]
                 save_binary_asset(
                     SYSTEM_LOGO_CATEGORY,
                     data,
@@ -1657,30 +1592,14 @@ def _migrate_legacy_assets() -> None:
         if migrated:
             logger.info("legacy_asset_migration_completed count=%d", migrated)
     except Exception:
-        logger.exception("legacy_asset_migration_failed")
+        logger.error("legacy_asset_migration_failed")
 @app.post("/questionnaire-item-images")
 def upload_questionnaire_item_image(file: UploadFile = File(...)) -> dict:
     """問診項目に添付する画像をアップロードし、URL を返す。"""
-    suffix = Path(file.filename or "").suffix or ".png"
-    raw_name = f"{uuid4().hex}{suffix}"
-    try:
-        sanitized = _sanitize_image_filename(raw_name)
-    except ValueError:
-        sanitized = _sanitize_image_filename(f"{uuid4().hex}.png")
-    try:
-        data = file.file.read()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="failed_to_read_image") from exc
-    if not data:
-        raise HTTPException(status_code=400, detail="empty_image_payload")
-    media_type = file.content_type or mimetypes.guess_type(sanitized)[0]
-    save_binary_asset(
-        QUESTIONNAIRE_IMAGE_CATEGORY,
-        data,
-        sanitized,
-        content_type=media_type,
-        asset_id=sanitized,
-    )
+    data, media_type, suffix = clean_raster(file.file.read(MAX_ASSET_BYTES + 1))
+    sanitized = f"{uuid4().hex}{suffix}"
+    save_binary_asset(QUESTIONNAIRE_IMAGE_CATEGORY, data, sanitized,
+                      content_type=media_type, asset_id=sanitized)
     return {"url": f"/{IMAGE_STORAGE_SEGMENT}{sanitized}"}
 
 
@@ -1880,7 +1799,7 @@ def get_llm_settings(
                 llm_gateway.settings.model_dump()
             )
     except Exception:
-        logger.exception("failed_to_load_llm_settings_on_get")
+        logger.error("failed_to_load_llm_settings_on_get")
     llm_gateway.settings.sync_from_active_profile()
     return _sanitize_llm_settings_for_read(llm_gateway.settings.model_dump())
 
@@ -1891,135 +1810,27 @@ def update_llm_settings(
     background: BackgroundTasks,
     _admin: dict[str, Any] = Depends(require_admin_access),
 ) -> LLMSettingsRead:
-    """LLM 設定を更新する。必要条件を満たす場合は既存セッションのサマリーをBG再生成。"""
+    """LLM 設定だけを更新する。既存患者記録の再送は行わない。"""
     settings = _merge_preserved_api_keys(submitted)
     # バリデーション: LLM を使用する場合はモデル名が必須
     if settings.enabled and (not settings.model or not str(settings.model).strip()):
         raise HTTPException(status_code=400, detail="LLM有効時はモデル名が必須です")
 
     settings.sync_to_active_profile()
-    llm_gateway.update_settings(settings)
+    try:
+        llm_gateway.update_settings(settings)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="llm_destination_not_allowed") from None
     try:
         # DB にも保存（永続化）
         save_llm_settings(
             sanitize_llm_settings_for_storage(settings.model_dump())
         )
     except Exception:
-        logger.exception("failed to persist llm settings")
+        logger.error("failed_to_persist_llm_settings")
+        raise HTTPException(status_code=503, detail="llm_settings_save_failed") from None
 
-    def _bg_regen_summaries() -> None:
-        try:
-            rows = db_list_sessions()
-            for r in rows:
-                sid = r.get("id")
-                if not sid:
-                    continue
-                srow = db_get_session(sid)
-                if not srow:
-                    continue
-                # finalized のみ対象
-                if srow.get("completion_status") != "finalized":
-                    continue
-                # サマリー設定（テンプレID→default）
-                cfg = get_summary_config(srow.get("questionnaire_id"), srow.get("visit_type")) or get_summary_config(
-                    "default", srow.get("visit_type")
-                )
-                if not cfg or not bool(cfg.get("enabled")):
-                    continue
-                prompt = cfg.get("prompt") or ""
-                # ラベルはテンプレから取得
-                tpl = db_get_template(srow.get("questionnaire_id"), srow.get("visit_type")) or db_get_template(
-                    "default", srow.get("visit_type")
-                )
-                labels = {}
-                try:
-                    for it in (tpl.get("items") or []):
-                        labels[it.get("id")] = it.get("label")
-                except Exception:
-                    labels = {}
-                # 生成（セッション単位で直列化・簡易リトライ付き）
-                new_summary = llm_gateway.summarize_with_prompt(
-                    prompt,
-                    srow.get("answers", {}),
-                    labels,
-                    lock_key=sid,
-                    retry=1,
-                )
-                # 保存（必要フィールドを埋めて save_session を再利用）
-                from types import SimpleNamespace
-
-                finalized_at_val = None
-
-                try:
-
-                    finalized_at = srow.get("finalized_at")
-
-                    if finalized_at:
-
-                        finalized_at_val = datetime.fromisoformat(finalized_at)
-
-                except Exception:
-
-                    finalized_at_val = None
-
-
-
-                started_at_val = None
-
-                try:
-
-                    started_at_raw = srow.get("started_at")
-
-                    if started_at_raw:
-
-                        started_at_val = datetime.fromisoformat(started_at_raw)
-
-                except Exception:
-
-                    started_at_val = finalized_at_val
-
-
-
-                session_obj = SimpleNamespace(
-                    id=srow.get("id"),
-                    patient_name=srow.get("patient_name"),
-                    dob=srow.get("dob"),
-                    # 保存には gender が必須
-                    gender=srow.get("gender"),
-                    visit_type=srow.get("visit_type"),
-                    questionnaire_id=srow.get("questionnaire_id"),
-                    answers=srow.get("answers", {}),
-                    summary=new_summary,
-                    remaining_items=srow.get("remaining_items", []),
-                    completion_status=srow.get("completion_status"),
-                    attempt_counts=srow.get("attempt_counts", {}),
-                    additional_questions_used=srow.get("additional_questions_used", 0),
-                    max_additional_questions=srow.get("max_additional_questions", 5),
-                    # 追問プロンプトは空の可能性があるため、デフォルトを補う
-                    followup_prompt=srow.get("followup_prompt") or DEFAULT_FOLLOWUP_PROMPT,
-                    started_at=started_at_val,
-                    finalized_at=finalized_at_val,
-                )
-                save_session(session_obj)
-                logger.info("summary_regenerated id=%s", sid)
-        except Exception:
-            logger.exception("bg_regen_summaries_failed")
-
-    # 保存後に疎通テストを実施（base_url 指定時のみ）。
-    # 成功時のみバックグラウンドで再生成を起動
-    try:
-        if settings.enabled and settings.base_url:
-            res = llm_gateway.test_connection(source="settings_put")
-            if res.get("status") == "ok":
-                background.add_task(_bg_regen_summaries)
-            else:
-                logging.getLogger("llm").warning(
-                    "llm_settings_test_failed_on_save: %s", res.get("detail")
-                )
-    except HTTPException:
-        raise
-    except Exception:
-        logger.exception("llm_settings_post_update_check_failed")
+    # Saving settings must not resend previously collected patient records.
     llm_gateway.settings.sync_from_active_profile()
     return _sanitize_llm_settings_for_read(llm_gateway.settings.model_dump())
 
@@ -2265,24 +2076,19 @@ def _is_patient_summary_api_key_valid(provided: str | None) -> bool:
     return secrets.compare_digest(candidate, stored_hash)
 
 
-_PATIENT_SUMMARY_RATE_LOCK = threading.Lock()
-_PATIENT_SUMMARY_RATE: dict[str, list[float]] = {}
 PATIENT_SUMMARY_RATE_LIMIT = 30
-PATIENT_SUMMARY_RATE_WINDOW_SECONDS = 60.0
+PATIENT_SUMMARY_RATE_WINDOW_SECONDS = 60
 
 
 def _patient_summary_rate_allowed(request: Request) -> bool:
     source = request.client.host if request.client else "unknown"
-    source_key = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    now = time.monotonic()
-    cutoff = now - PATIENT_SUMMARY_RATE_WINDOW_SECONDS
-    with _PATIENT_SUMMARY_RATE_LOCK:
-        recent = [stamp for stamp in _PATIENT_SUMMARY_RATE.get(source_key, []) if stamp >= cutoff]
-        if len(recent) >= PATIENT_SUMMARY_RATE_LIMIT:
-            _PATIENT_SUMMARY_RATE[source_key] = recent
+    try:
+        rate_limit("integration:ip:" + source, PATIENT_SUMMARY_RATE_LIMIT, PATIENT_SUMMARY_RATE_WINDOW_SECONDS)
+        rate_limit("integration:global", 300)
+    except HTTPException as exc:
+        if exc.status_code == 429:
             return False
-        recent.append(now)
-        _PATIENT_SUMMARY_RATE[source_key] = recent
+        raise
     return True
 
 
@@ -2449,12 +2255,12 @@ def _apply_provider_profile_payload(
             changed = True
             continue
         if not isinstance(raw, dict):
-            logger.warning("llm_temp_settings_invalid_profile key=%s", key)
+            logger.warning("llm_temp_settings_invalid_profile")
             continue
         try:
             existing[key] = ProviderProfile(**raw)
         except Exception as exc:  # noqa: BLE001 - バリデーション失敗のみ
-            logger.warning("llm_temp_settings_profile_parse_failed key=%s error=%s", key, exc)
+            logger.warning("llm_temp_settings_profile_parse_failed")
             continue
         changed = True
     if not changed:
@@ -2463,11 +2269,7 @@ def _apply_provider_profile_payload(
     try:
         settings.sync_from_active_profile()
     except Exception as exc:  # noqa: BLE001 - 一時設定の同期は警告に留める
-        logger.warning(
-            "llm_temp_settings_sync_failed provider=%s error=%s",
-            settings.provider,
-            exc,
-        )
+        logger.warning("llm_temp_settings_sync_failed")
 
 
 class LLMTestRequest(BaseModel):
@@ -2658,7 +2460,7 @@ def upload_system_postal_code_dictionary(file: UploadFile = File(...)) -> Postal
     except PostalCodeImportError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        logger.exception("postal_code_dictionary_upload_failed")
+        logger.error("postal_code_dictionary_upload_failed")
         raise HTTPException(status_code=500, detail="postal_code_dictionary_upload_failed") from exc
 
 
@@ -2676,7 +2478,7 @@ def get_system_timezone() -> TimezoneSettings:
             tz = DEFAULT_TIMEZONE
         return TimezoneSettings(timezone=tz)
     except Exception:
-        logger.exception("get_timezone_failed")
+        logger.error("get_timezone_failed")
         return TimezoneSettings(timezone=DEFAULT_TIMEZONE)
 
 
@@ -2690,7 +2492,7 @@ def set_system_timezone(payload: TimezoneSettings) -> TimezoneSettings:
     except ZoneInfoNotFoundError:
         raise HTTPException(status_code=400, detail="invalid_timezone")
     except Exception as exc:
-        logger.exception("validate_timezone_failed")
+        logger.error("validate_timezone_failed")
         raise HTTPException(status_code=500, detail="timezone_validation_failed") from exc
 
     try:
@@ -2699,7 +2501,7 @@ def set_system_timezone(payload: TimezoneSettings) -> TimezoneSettings:
         save_app_settings(current)
         return TimezoneSettings(timezone=current["timezone"])
     except Exception as exc:
-        logger.exception("set_timezone_failed")
+        logger.error("set_timezone_failed")
         raise HTTPException(status_code=500, detail="save_timezone_failed") from exc
 
 
@@ -2712,7 +2514,7 @@ def get_display_name() -> DisplayNameSettings:
         name = stored.get("display_name") or DEFAULT
         return DisplayNameSettings(display_name=name)
     except Exception:
-        logger.exception("get_display_name_failed")
+        logger.error("get_display_name_failed")
         return DisplayNameSettings(display_name=DEFAULT)
 
 
@@ -2725,7 +2527,7 @@ def set_display_name(payload: DisplayNameSettings) -> DisplayNameSettings:
         save_app_settings(current)
         return DisplayNameSettings(display_name=current["display_name"])
     except Exception:
-        logger.exception("set_display_name_failed")
+        logger.error("set_display_name_failed")
         return payload
 
 
@@ -2738,7 +2540,7 @@ def get_completion_message() -> CompletionMessageSettings:
         msg = stored.get("completion_message") or DEFAULT
         return CompletionMessageSettings(message=msg)
     except Exception:
-        logger.exception("get_completion_message_failed")
+        logger.error("get_completion_message_failed")
         return CompletionMessageSettings(message=DEFAULT)
 
 
@@ -2751,7 +2553,7 @@ def set_completion_message(payload: CompletionMessageSettings) -> CompletionMess
         save_app_settings(current)
         return CompletionMessageSettings(message=current["completion_message"])
     except Exception:
-        logger.exception("set_completion_message_failed")
+        logger.error("set_completion_message_failed")
         return payload
 
 class EntryMessageSettings(BaseModel):
@@ -2766,7 +2568,7 @@ def get_entry_message() -> EntryMessageSettings:
         msg = stored.get("entry_message") or DEFAULT
         return EntryMessageSettings(message=msg)
     except Exception:
-        logger.exception("get_entry_message_failed")
+        logger.error("get_entry_message_failed")
         return EntryMessageSettings(message=DEFAULT)
 
 @app.put("/system/entry-message", response_model=EntryMessageSettings)
@@ -2778,7 +2580,7 @@ def set_entry_message(payload: EntryMessageSettings) -> EntryMessageSettings:
         save_app_settings(current)
         return EntryMessageSettings(message=current["entry_message"])
     except Exception:
-        logger.exception("set_entry_message_failed")
+        logger.error("set_entry_message_failed")
         return payload
 
 @app.get("/system/theme-color", response_model=ThemeColorSettings)
@@ -2790,7 +2592,7 @@ def get_theme_color() -> ThemeColorSettings:
         color = stored.get("theme_color") or DEFAULT
         return ThemeColorSettings(color=color)
     except Exception:
-        logger.exception("get_theme_color_failed")
+        logger.error("get_theme_color_failed")
         return ThemeColorSettings(color=DEFAULT)
 
 @app.put("/system/theme-color", response_model=ThemeColorSettings)
@@ -2802,7 +2604,7 @@ def set_theme_color(payload: ThemeColorSettings) -> ThemeColorSettings:
         save_app_settings(current)
         return ThemeColorSettings(color=current["theme_color"])
     except Exception:
-        logger.exception("set_theme_color_failed")
+        logger.error("set_theme_color_failed")
         return payload
 
 
@@ -2821,7 +2623,7 @@ def get_system_logo() -> LogoSettings:
                 crop = None
         return LogoSettings(url=url, crop=crop)
     except Exception:
-        logger.exception("get_system_logo_failed")
+        logger.error("get_system_logo_failed")
         return LogoSettings(url=None, crop=None)
 
 
@@ -2832,7 +2634,7 @@ def get_system_bootstrap() -> SystemBootstrapSettings:
     try:
         stored = load_app_settings() or {}
     except Exception:
-        logger.exception("get_system_bootstrap_failed")
+        logger.error("get_system_bootstrap_failed")
         stored = {}
 
     timezone_value = str(stored.get("timezone") or DEFAULT_TIMEZONE)
@@ -2877,32 +2679,17 @@ def set_system_logo(payload: LogoSettings) -> LogoSettings:
         )
         return out
     except Exception:
-        logger.exception("set_system_logo_failed")
+        logger.error("set_system_logo_failed")
         return payload
 
 
 @app.post("/system-logo")
 def upload_system_logo(file: UploadFile = File(...)) -> dict:
     """システムロゴ画像をアップロードし、参照 URL を返す。"""
-    filename = Path(file.filename or "").name or f"logo_{uuid4().hex}.png"
-    try:
-        sanitized = _sanitize_image_filename(filename)
-    except ValueError:
-        sanitized = _sanitize_image_filename(f"logo_{uuid4().hex}.png")
-    try:
-        data = file.file.read()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail="failed_to_read_logo") from exc
-    if not data:
-        raise HTTPException(status_code=400, detail="empty_logo_payload")
-    media_type = file.content_type or mimetypes.guess_type(sanitized)[0]
-    save_binary_asset(
-        SYSTEM_LOGO_CATEGORY,
-        data,
-        sanitized,
-        content_type=media_type,
-        asset_id=sanitized,
-    )
+    data, media_type, suffix = clean_raster(file.file.read(MAX_ASSET_BYTES + 1))
+    sanitized = f"{uuid4().hex}{suffix}"
+    save_binary_asset(SYSTEM_LOGO_CATEGORY, data, sanitized,
+                      content_type=media_type, asset_id=sanitized)
     return {"url": f"/{SYSTEM_LOGO_STORAGE_SEGMENT}{sanitized}"}
 
 @app.get("/system/pdf-layout", response_model=PDFLayoutSettings)
@@ -2915,7 +2702,7 @@ def get_pdf_layout() -> PDFLayoutSettings:
         raw = stored.get("pdf_layout_mode")
         mode = PDFLayoutMode(raw) if raw else default_mode
     except Exception:
-        logger.exception("get_pdf_layout_failed")
+        logger.error("get_pdf_layout_failed")
         mode = default_mode
     return PDFLayoutSettings(mode=mode)
 
@@ -2930,7 +2717,7 @@ def set_pdf_layout(payload: PDFLayoutSettings) -> PDFLayoutSettings:
         save_app_settings(current)
         return PDFLayoutSettings(mode=payload.mode)
     except Exception:
-        logger.exception("set_pdf_layout_failed")
+        logger.error("set_pdf_layout_failed")
         return payload
 
 @app.get("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
@@ -2942,7 +2729,7 @@ def get_default_questionnaire() -> DefaultQuestionnaireSettings:
         qid = stored.get("default_questionnaire_id") or DEFAULT
         return DefaultQuestionnaireSettings(questionnaire_id=qid)
     except Exception:
-        logger.exception("get_default_questionnaire_failed")
+        logger.error("get_default_questionnaire_failed")
         return DefaultQuestionnaireSettings(questionnaire_id=DEFAULT)
 
 @app.put("/system/default-questionnaire", response_model=DefaultQuestionnaireSettings)
@@ -2954,7 +2741,7 @@ def set_default_questionnaire(payload: DefaultQuestionnaireSettings) -> DefaultQ
         save_app_settings(current)
         return DefaultQuestionnaireSettings(questionnaire_id=current["default_questionnaire_id"])
     except Exception:
-        logger.exception("set_default_questionnaire_failed")
+        logger.error("set_default_questionnaire_failed")
         return payload
 
 
@@ -3313,466 +3100,25 @@ def get_llm_availability() -> LLMAvailabilityResponse:
 
 
 # --- 管理者認証 API ---
-
-class AdminLoginRequest(BaseModel):
-    """管理者ログインリクエスト。"""
-    password: str
-
-class AdminLoginTotpRequest(BaseModel):
-    """管理者ログイン時のTOTPコード。"""
-    totp_code: str
-
-class AdminPasswordSetRequest(BaseModel):
-    """管理者パスワード設定リクエスト。"""
-    password: str
-
-
-class AdminPasswordChangeRequest(BaseModel):
-    """管理者パスワード変更リクエスト。"""
-    current_password: str
-    new_password: str
-
-class AdminAuthStatus(BaseModel):
-    """管理者認証の状態。"""
-    is_initial_password: bool
-    is_totp_enabled: bool
-    totp_mode: str | None = None
-    # 非常用リセット用の環境変数が構成されているか
-    emergency_reset_available: bool | None = None
-    is_authenticated: bool = False
-
-
-def _totp_mode_from_user(user: dict[str, Any] | None) -> str:
-    """取得済みユーザーからTOTPモードを判定し、DBの再読取を避ける。"""
-
-    if not user or not user.get("totp_secret"):
-        return "off"
-    mode = str(user.get("totp_mode") or "off")
-    if mode in {"off", "reset_only", "login_and_reset"}:
-        return mode
-    return "login_and_reset" if user.get("is_totp_enabled") else "off"
+from .admin_security_routes import router as admin_security_router
+app.include_router(admin_security_router)
 
 
 def _require_admin_push_access(authorization: str | None) -> None:
     claims = _decode_admin_access_token(authorization)
-    scopes = set(str(claims.get("scope") or "").split())
-    if "push:manage" not in scopes:
+    if "push:manage" not in set(str(claims.get("scope") or "").split()):
         raise HTTPException(status_code=403, detail="insufficient scope")
-
-
-class TotpVerifyRequest(BaseModel):
-    """TOTP検証リクエスト。"""
-    totp_code: str
-    use_for_login: bool = True
-
-
-class PasswordResetRequest(BaseModel):
-    """パスワードリセットリクエスト（TOTPコードを含む）。"""
-    totp_code: str
-
-
-class PasswordResetConfirm(BaseModel):
-    """パスワードリセットの確認。"""
-    token: str
-    new_password: str
-
-class EmergencyPasswordResetRequest(BaseModel):
-    """非常用パスワードを用いたリセット要求。
-
-    二段階認証（TOTP）が無効の場合のみ使用可能。
-    環境変数 `ADMIN_EMERGENCY_RESET_PASSWORD` に設定されたパスワードと一致した場合、
-    管理者パスワードを新しい値に更新する。
-    """
-    emergency_password: str
-    new_password: str
-
-
-@app.get("/admin/auth/status", response_model=AdminAuthStatus)
-def get_admin_auth_status(
-    authorization: str | None = Header(default=None),
-) -> AdminAuthStatus:
-    """管理者の認証状態（初期パスワードか、TOTPが有効か）を返す。"""
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-    authenticated = False
-    if authorization:
-        try:
-            claims = _decode_admin_access_token(authorization)
-            authenticated = "admin" in set(
-                str(claims.get("scope") or "").split()
-            )
-        except HTTPException:
-            authenticated = False
-
-    result = AdminAuthStatus(
-        is_initial_password=bool(admin_user.get("is_initial_password")),
-        is_totp_enabled=bool(admin_user.get("is_totp_enabled")),
-        totp_mode=_totp_mode_from_user(admin_user),
-        emergency_reset_available=bool(os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")),
-        is_authenticated=authenticated,
-    )
-    try:
-        logging.getLogger("security").info(
-            "auth_status is_initial=%s is_totp_enabled=%s totp_mode=%s",
-            result.is_initial_password,
-            result.is_totp_enabled,
-            result.totp_mode,
-        )
-    except Exception:
-        pass
-    return result
-
-
-@app.post("/admin/password")
-def admin_set_password(payload: AdminPasswordSetRequest) -> dict:
-    """管理者パスワードを更新する。"""
-    if len(payload.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-    # 初期セットアップ時のみ直接のパスワード更新を許可（それ以外はTOTPリセットフローを使用）
-    default_pw = os.getenv("ADMIN_PASSWORD", "admin")
-    is_default_now = False
-    try:
-        is_default_now = verify_password(default_pw, admin_user.get("hashed_password"))
-    except Exception:
-        is_default_now = False
-    if not is_default_now:
-        raise HTTPException(status_code=403, detail="Direct password change is not allowed. Use reset flow.")
-    # 初期セットアップ時の直接更新。監査ログは db.update_password 内で出力される。
-    update_password("admin", payload.password)
-    try:
-        logging.getLogger("security").warning("admin_password_set_direct")
-    except Exception:
-        pass
-    return {"status": "ok"}
-
-
-@app.post("/admin/password/change")
-def admin_change_password(payload: AdminPasswordChangeRequest) -> dict:
-    """現在のパスワードを検証したうえで新しいパスワードに変更する。"""
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-    admin_user = get_user_by_username("admin")
-    if not admin_user or not verify_password(payload.current_password, admin_user["hashed_password"]):
-        try:
-            logging.getLogger("security").warning("admin_password_change_failed")
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="現在のパスワードが正しくありません")
-    update_password("admin", payload.new_password)
-    try:
-        if admin_user.get("is_totp_enabled"):
-            set_totp_status("admin", enabled=False, clear_secret=True)
-            logging.getLogger("security").warning("totp_disabled_due_to_password_change username=admin")
-    except Exception:
-        logging.getLogger(__name__).exception("failed to disable totp on password change")
-    return {"status": "ok"}
-
-
-@app.post("/admin/login")
-def admin_login(payload: AdminLoginRequest) -> dict:
-    """管理画面へのログイン（パスワード検証）。"""
-    admin_user = get_user_by_username("admin")
-    if not admin_user or not verify_password(payload.password, admin_user["hashed_password"]):
-        try:
-            logging.getLogger("security").info("admin_login_failed")
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="パスワードが間違っています")
-
-    mode = _totp_mode_from_user(admin_user)
-    if admin_user.get("is_totp_enabled") and not admin_user.get("totp_secret"):
-        # シークレットが存在しないのにフラグだけ有効な場合は自動的に無効化
-        set_totp_status("admin", enabled=False)
-        mode = "off"
-        try:
-            logging.getLogger("security").warning("totp_disabled_missing_secret username=admin")
-        except Exception:
-            pass
-
-    # ログイン時にTOTPを要求するのは totp_mode が 'login_and_reset' の場合のみ
-    if mode == "login_and_reset":
-        try:
-            logging.getLogger("security").info("admin_login_password_ok_totp_required")
-        except Exception:
-            pass
-        return {"status": "totp_required"}
-
-    # 管理者APIとPush購読管理で共用する短期JWTを発行する。
-    try:
-        logging.getLogger("security").info("admin_login_success")
-    except Exception:
-        pass
-    return {
-        "status": "ok",
-        "message": "Login successful",
-        "access_token": _create_admin_access_token(),
-        "token_type": "bearer",
-        "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
-    }
-
-
-@app.post("/admin/login/totp")
-def admin_login_totp(payload: AdminLoginTotpRequest) -> dict:
-    """管理画面へのログイン（TOTP検証）。"""
-    admin_user = get_user_by_username("admin")
-    if not admin_user or not admin_user["totp_secret"]:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    totp = pyotp.TOTP(admin_user["totp_secret"])
-    if not totp.verify(payload.totp_code):
-        try:
-            logging.getLogger("security").info("admin_login_totp_failed")
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="Invalid TOTP code")
-
-    try:
-        logging.getLogger("security").info("admin_login_totp_success")
-    except Exception:
-        pass
-    return {
-        "status": "ok",
-        "message": "Login successful",
-        "access_token": _create_admin_access_token(),
-        "token_type": "bearer",
-        "expires_in": ADMIN_PUSH_TOKEN_EXPIRE_MINUTES * 60,
-    }
-
-
-@app.get("/admin/totp/setup")
-def admin_totp_setup() -> StreamingResponse:
-    """TOTP設定用のQRコードを生成して返す。"""
-    import qrcode
-
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-
-    # 既存のシークレットがある場合は再利用し、なければ新規生成する
-    secret = admin_user.get("totp_secret")
-    if not secret:
-        secret = pyotp.random_base32()
-        update_totp_secret("admin", secret)
-
-    # プロビジョニングURIを生成
-    uri = pyotp.totp.TOTP(secret).provisioning_uri(
-        name="admin@MonshinMate", issuer_name="MonshinMate"
-    )
-
-    # QRコードを画像として生成
-    img = qrcode.make(uri)
-    buf = io.BytesIO()
-    img.save(buf, "PNG")
-    buf.seek(0)
-
-    return StreamingResponse(buf, media_type="image/png")
-
-
-@app.post("/admin/totp/verify")
-def admin_totp_verify(payload: TotpVerifyRequest) -> dict:
-    """提供されたTOTPコードを検証し、有効化する。"""
-    admin_user = get_user_by_username("admin")
-    if not admin_user or not admin_user["totp_secret"]:
-        raise HTTPException(status_code=400, detail="TOTP secret not found")
-
-    totp = pyotp.TOTP(admin_user["totp_secret"])
-    # 多少の時計ずれを許容（前後1ステップ）
-    if not totp.verify(payload.totp_code, valid_window=1):
-        raise HTTPException(status_code=400, detail="Invalid TOTP code")
-
-    # 検証成功、TOTPを有効化
-    set_totp_status("admin", enabled=True)
-
-    # TOTPの利用モードを設定
-    if payload.use_for_login:
-        set_totp_mode("admin", "login_and_reset")
-    else:
-        set_totp_mode("admin", "reset_only")
-
-    try:
-        logging.getLogger("security").warning(
-            "totp_enabled username=admin use_for_login=%s", payload.use_for_login
-        )
-    except Exception:
-        pass
-    return {"status": "ok"}
-
-@app.post("/admin/totp/disable")
-def admin_totp_disable(payload: TotpVerifyRequest) -> dict:
-    """TOTP を無効化する（管理操作）。
-
-    セキュリティ上の理由から、無効化時には現在の TOTP コードを要求し、
-    正しいコードが入力された場合のみ無効化を実行する。
-    """
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-
-    # シークレットが存在しない、もしくは未有効の場合は操作不可
-    if not admin_user.get("totp_secret") or not admin_user.get("is_totp_enabled"):
-        raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
-
-    # 入力された TOTP コードを検証
-    totp = pyotp.TOTP(admin_user["totp_secret"])
-    if not totp.verify(payload.totp_code, valid_window=1):
-        raise HTTPException(status_code=400, detail="Invalid TOTP code")
-
-    # 無効化時に既存のシークレットも削除する
-    set_totp_status("admin", enabled=False, clear_secret=True)
-    try:
-        logging.getLogger("security").warning("totp_disabled username=admin")
-    except Exception:
-        pass
-    return {"status": "ok"}
-
-@app.post("/admin/totp/regenerate")
-def admin_totp_regenerate() -> dict:
-    """TOTP の秘密鍵を再生成し、いったん無効化する。新しいQRで再設定が必要。"""
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-    secret = pyotp.random_base32()
-    update_totp_secret("admin", secret)
-    set_totp_status("admin", enabled=False)
-    try:
-        logging.getLogger("security").warning("totp_regenerated_and_disabled username=admin")
-    except Exception:
-        pass
-    return {"status": "ok"}
-
-@app.post("/admin/password/reset/request")
-def request_password_reset(payload: PasswordResetRequest) -> dict:
-    """TOTPを検証し、パスワードリセット用のトークンを発行する。"""
-    admin_user = get_user_by_username("admin")
-    # TOTPの利用モードが 'off' の場合はリセット要求不可
-    mode = _totp_mode_from_user(admin_user)
-    if not admin_user or mode == "off" or not admin_user["totp_secret"]:
-        raise HTTPException(status_code=400, detail="TOTP is not enabled for this account")
-
-    totp = pyotp.TOTP(admin_user["totp_secret"])
-    if not totp.verify(payload.totp_code):
-        try:
-            logging.getLogger("security").info("password_reset_request_totp_failed")
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="Invalid TOTP code")
-
-    # トークンを生成
-    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode = {"sub": "admin", "exp": expire}
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    try:
-        logging.getLogger("security").warning("password_reset_token_issued exp_minutes=%s", ACCESS_TOKEN_EXPIRE_MINUTES)
-    except Exception:
-        pass
-    return {"reset_token": encoded_jwt}
-
-
-@app.post("/admin/password/reset/confirm")
-def confirm_password_reset(payload: PasswordResetConfirm) -> dict:
-    """リセットトークンを検証し、パスワードを更新する。"""
-    try:
-        decoded_token = jwt.decode(payload.token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str | None = decoded_token.get("sub")
-        if username != "admin":
-            raise HTTPException(status_code=401, detail="Invalid token")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    # 新しいパスワードのバリデーション
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-
-    # リセットトークンを介した更新。監査ログは db.update_password 内で出力される。
-    update_password("admin", payload.new_password)
-    try:
-        logging.getLogger("security").warning("password_reset_confirmed username=admin")
-    except Exception:
-        pass
-    return {"status": "ok", "message": "Password has been reset successfully"}
-
-
-@app.post("/admin/password/reset/emergency")
-def emergency_password_reset(payload: EmergencyPasswordResetRequest) -> dict:
-    """TOTP 無効時に、環境変数ベースの非常用パスワードでリセットする。
-
-    前提:
-    - 環境変数 `ADMIN_EMERGENCY_RESET_PASSWORD` が設定されていること。
-    - 管理者の TOTP が無効（`is_totp_enabled=0` または `totp_mode='off'`）であること。
-    セキュリティ上、成功時には TOTP を無効化し、再設定を促す運用を想定する。
-    """
-    admin_user = get_user_by_username("admin")
-    if not admin_user:
-        raise HTTPException(status_code=500, detail="Admin user not found")
-
-    # TOTP が無効であることを確認
-    mode = _totp_mode_from_user(admin_user)
-    if admin_user.get("is_totp_enabled") or mode != "off":
-        raise HTTPException(status_code=403, detail="Emergency reset is allowed only when TOTP is disabled")
-
-    emergency_pw = os.getenv("ADMIN_EMERGENCY_RESET_PASSWORD")
-    if not emergency_pw:
-        raise HTTPException(status_code=400, detail="Emergency reset password is not configured")
-
-    if payload.emergency_password != emergency_pw:
-        try:
-            logging.getLogger("security").warning("emergency_reset_failed_bad_password")
-        except Exception:
-            pass
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long")
-
-    # パスワード更新と TOTP の無効化（秘密のクリア）
-    update_password("admin", payload.new_password)
-    try:
-        set_totp_status("admin", enabled=False, clear_secret=True)
-        logging.getLogger("security").warning("emergency_password_reset username=admin")
-    except Exception:
-        logging.getLogger(__name__).exception("failed to disable totp on emergency reset")
-    return {"status": "ok", "message": "Password has been reset successfully"}
-
-
-class TotpModePayload(BaseModel):
-    mode: str  # 'off' | 'reset_only' | 'login_and_reset'
-
-
-@app.get("/admin/totp/mode")
-def get_admin_totp_mode() -> dict:
-    """現在の TOTP モードを返す。"""
-    return {"mode": get_totp_mode("admin")}
-
-
-@app.put("/admin/totp/mode")
-def set_admin_totp_mode(payload: TotpModePayload) -> dict:
-    """TOTP の利用モードを設定する。"""
-    try:
-        set_totp_mode("admin", payload.mode)
-        try:
-            logging.getLogger("security").warning("totp_mode_set username=admin mode=%s", payload.mode)
-        except Exception:
-            pass
-        return {"status": "ok", "mode": get_totp_mode("admin")}
-    except ValueError:
-        raise HTTPException(status_code=400, detail="invalid totp mode")
-
-
 
 
 class SessionCreateRequest(BaseModel):
     """セッション作成時に受け取る情報。"""
 
-    patient_name: str
-    dob: str
-    gender: str
-    visit_type: str
+    patient_name: str = Field(min_length=1, max_length=128)
+    dob: str = Field(min_length=1, max_length=32)
+    gender: str = Field(max_length=32)
+    visit_type: Literal["initial", "followup"]
     answers: dict[str, Any]
-    questionnaire_id: str | None = None
+    questionnaire_id: str | None = Field(default=None, max_length=128)
 
 
 def _collect_question_texts_from_items(items: Iterable[Any] | None) -> dict[str, str]:
@@ -3892,7 +3238,7 @@ def _restore_session(session_id: str) -> Session | None:
         completion_status=str(row.get("completion_status") or "in_progress"),
         attempt_counts=row.get("attempt_counts") or {},
         additional_questions_used=int(row.get("additional_questions_used") or 0),
-        max_additional_questions=int(row.get("max_additional_questions") or 5),
+        max_additional_questions=int(row.get("max_additional_questions") if row.get("max_additional_questions") is not None else 5),
         pending_llm_questions=list(row.get("pending_llm_questions") or []),
         started_at=_parse_session_datetime(row.get("started_at")),
         finalized_at=_parse_session_datetime(row.get("finalized_at")),
@@ -3904,26 +3250,18 @@ def _restore_session(session_id: str) -> Session | None:
 
 
 def _get_session(session_id: str) -> Session | None:
-    session = sessions.get(session_id)
-    if session is not None:
-        return session
-    session = _restore_session(session_id)
-    if session is not None and session.completion_status != "finalized":
-        max_cached = max(10, int(os.getenv("SESSION_MEMORY_CACHE_MAX", "500")))
-        if len(sessions) >= max_cached:
-            oldest_id = min(
-                sessions,
-                key=lambda key: sessions[key].started_at or datetime.min.replace(tzinfo=UTC),
-            )
-            sessions.pop(oldest_id, None)
-        sessions[session_id] = session
-    return session
+    # A persistent capability lease serializes callers across instances. Always
+    # reload inside that lease; an instance-local cache may contain stale data.
+    sessions.pop(session_id, None)
+    return _restore_session(session_id)
 
 
 class SessionCreateResponse(BaseModel):
-    """セッション作成時のレスポンス。"""
+    """セッション作成時のレスポンス。credentialはこの応答だけで発行する。"""
 
     id: str
+    session_token: str
+    expires_at: str
     patient_name: str
     dob: str
     gender: str
@@ -4049,7 +3387,7 @@ def _send_push_finalize_notification(event: dict[str, Any]) -> None:
                 delete_push_subscription(token)
         logger.info("push_notification_sent success=%s failure=%s", response.success_count, response.failure_count)
     except Exception:
-        logger.exception("push_notification_failed")
+        logger.error("push_notification_failed")
 
 
 class SessionDetail(BaseModel):
@@ -4110,7 +3448,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
             stored = load_app_settings() or {}
             questionnaire_id = stored.get("default_questionnaire_id") or "default"
         except Exception:
-            logger.exception("get_default_questionnaire_failed_in_session_create")
+            logger.error("get_default_questionnaire_failed_in_session_create")
             questionnaire_id = "default"
 
     tpl = db_get_template(questionnaire_id, req.visit_type)
@@ -4171,13 +3509,15 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     fsm = SessionFSM(session, llm_gateway)
     fsm.update_completion()
     session.interrupted = session.completion_status != "finalized"
-    sessions[session_id] = session
     save_session(session)
+    session_token, expires_at = issue_capability(session_id)
     global METRIC_SESSIONS_CREATED
     METRIC_SESSIONS_CREATED += 1
     logger.info("session_created id=%s visit_type=%s", session_id, req.visit_type)
     return SessionCreateResponse(
         id=session.id,
+        session_token=session_token,
+        expires_at=expires_at,
         patient_name=session.patient_name,
         dob=session.dob,
         gender=session.gender,
@@ -4261,6 +3601,10 @@ def get_llm_questions(session_id: str) -> dict:
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
 
+    if session.completion_status == "finalized":
+        raise HTTPException(409, "session finalized")
+    rate_limit("llm:session:" + session_id, 10)
+    rate_limit("llm:global", 120)
     fsm = SessionFSM(session, llm_gateway)
     before = (
         session.additional_questions_used,
@@ -4284,79 +3628,53 @@ def get_llm_questions(session_id: str) -> dict:
 
 
 @app.post("/sessions/{session_id}/finalize")
-async def finalize_session(
-    session_id: str, background: BackgroundTasks, payload: FinalizeRequest | None = None
+def finalize_session(
+    session_id: str, request: Request, background: BackgroundTasks,
+    payload: FinalizeRequest | None = None,
 ) -> dict:
-    """セッションを確定し要約を返す。"""
-
+    """確定処理は永続lease内で完了し、患者へ受付結果だけ返す。"""
+    receipt = getattr(request.state, "patient_receipt", None)
+    if receipt:
+        return receipt
     session = _get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="session not found")
+    operation = request.state.patient_operation
+    # Recover a response after DB save without rerunning the model.
     if session.completion_status == "finalized" and session.finalized_at is not None:
-        return {
-            "summary": session.summary or "",
-            "answers": session.answers,
-            "finalized_at": session.finalized_at.isoformat(),
-            "status": session.completion_status,
-        }
+        return finalize_receipt(session_id, session.finalized_at.isoformat(), operation)
     SessionFSM(session, llm_gateway).update_completion()
-    # サマリー生成の有効設定（テンプレID→default の順に確認）
     cfg = get_summary_config(session.questionnaire_id, session.visit_type) or get_summary_config(
         "default", session.visit_type
     )
-    summary_enabled = bool(cfg and cfg.get("enabled"))
-    # 必須が未完了の場合も、フェイルセーフとして現状で要約を返し進行可能とする
-    if summary_enabled:
-        session.summary = llm_gateway.summarize(session.answers)
+    from .clinical_context import clinical_answers
+    context = clinical_answers(session)
+    session.summary = ""
+    if cfg and cfg.get("enabled"):
+        rate_limit("llm:global", 120)
+        rate_limit("llm:session:" + session_id, 10)
+        if llm_gateway.has_remote_backend() and not (payload and payload.llm_error):
+            labels = {key: value for key, value in session.question_texts.items() if key in context}
+            prompt = cfg.get("prompt") or "問診項目と回答をもとに簡潔な日本語のサマリーを作成してください。"
+            session.summary = llm_gateway.summarize_with_prompt(prompt, context, labels, lock_key=session.id, retry=0)
+        else:
+            session.summary = llm_gateway.summarize(context)
         global METRIC_SUMMARIES
         METRIC_SUMMARIES += 1
-    else:
-        session.summary = ""
     if payload and payload.llm_error:
-        suffix = f"[LLMエラー]: {payload.llm_error}"
-        session.summary = f"{session.summary}\n{suffix}" if session.summary else suffix
-    if not session.started_at:
-        session.started_at = datetime.now(UTC)
+        # Never persist client-supplied exception bodies.
+        session.summary = (session.summary or "") + "\n[LLM追加質問は利用できませんでした]"
+    session.started_at = session.started_at or datetime.now(UTC)
     session.finalized_at = datetime.now(UTC)
     session.interrupted = False
     session.completion_status = "finalized"
-    logger.info("session_finalized id=%s", session_id)
     save_session(session)
+    receipt = finalize_receipt(session_id, session.finalized_at.isoformat(), operation)
+    logger.info("session_finalized id=%s", session_id)
     event = _build_finalize_event_from_session(session)
-    # LLM が有効かつ base_url が設定されている場合、バックグラウンドで詳細サマリーを生成
-    def _bg_summary_task(s: Session) -> None:
-        labels = {it.id: it.label for it in s.template_items}
-        prompt = (
-            get_summary_prompt(s.questionnaire_id, s.visit_type)
-            or get_summary_prompt("default", s.visit_type)
-            or (
-                "以下の問診項目と回答をもとに、簡潔で読みやすい日本語のサマリーを作成してください。"
-                "重要項目（主訴・発症時期）は冒頭にまとめてください。"
-            )
-        )
-        if getattr(llm_gateway.settings, "enabled", True):
-            new_summary = llm_gateway.summarize_with_prompt(
-                prompt,
-                s.answers,
-                labels,
-                lock_key=s.id,
-                retry=1,
-            )
-            s.summary = new_summary
-            save_session(s)
-
-    if summary_enabled and llm_gateway.has_remote_backend() and not (payload and payload.llm_error):
-        background.add_task(_bg_summary_task, session)
-
-    background.add_task(_send_push_finalize_notification, event.dict())
+    background.add_task(_send_push_finalize_notification, event.model_dump())
     sessions.pop(session_id, None)
-
-    return {
-        "summary": session.summary,
-        "answers": session.answers,
-        "finalized_at": session.finalized_at.isoformat(),
-        "status": session.completion_status,
-    }
+    return receipt
 
 
 @app.post("/admin/sessions/export")
@@ -4370,7 +3688,7 @@ def export_sessions_api(payload: SessionsExportRequest) -> StreamingResponse:
         visit_type=payload.visit_type,
     )
     export_payload = {
-        "sessions": sessions_data,
+        "sessions": [portable_session(record) for record in sessions_data],
         "count": len(sessions_data),
         "filters": {
             "session_ids": payload.session_ids or None,
@@ -4385,7 +3703,7 @@ def export_sessions_api(payload: SessionsExportRequest) -> StreamingResponse:
     return StreamingResponse(
         io.BytesIO(content),
         media_type="application/json",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename={filename}"},
     )
 
 
@@ -4395,28 +3713,16 @@ async def import_sessions_api(
 ) -> dict[str, Any]:
     """問診結果データをインポートする。"""
 
-    raw = await file.read()
+    raw = await read_import(file)
     export_type, payload = _parse_import_envelope(raw, password or None)
     if export_type != "session_data":
         raise HTTPException(status_code=400, detail="invalid_export_type")
     if not isinstance(payload, dict):
         raise HTTPException(status_code=400, detail="invalid_export_payload")
-    sessions_payload = payload.get("sessions") or []
-    if not isinstance(sessions_payload, list):
-        raise HTTPException(status_code=400, detail="invalid_export_payload")
+    sessions_payload = validate_sessions(payload.get("sessions", []))
     mode_value = (mode or "merge").lower()
-    if mode_value not in {"merge", "replace"}:
-        raise HTTPException(status_code=400, detail="invalid_mode")
-    try:
-        stats = import_sessions_data(sessions_payload, mode=mode_value)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="invalid_mode")
-    return {
-        "status": "ok",
-        "imported": stats,
-        "mode": mode_value,
-        "count": len(sessions_payload),
-    }
+    stats = atomic_import("sessions_data", sessions_payload, mode=mode_value)
+    return {"status": "ok", "imported": stats, "mode": mode_value, "count": len(sessions_payload)}
 
 
 @app.get("/admin/sessions", response_model=list[SessionSummary])
@@ -4504,16 +3810,19 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         raise HTTPException(status_code=400, detail="unsupported format")
     if not ids:
         raise HTTPException(status_code=400, detail="ids is required")
+    if len(ids) > MAX_IMPORT_RECORDS:
+        raise HTTPException(status_code=400, detail="too_many_records")
 
     def sanitize_filename(name: str) -> str:
         name = re.sub(r"[\\/:*?\"<>|]", "_", name)
-        name = name.strip().replace(" ", "_")
+        name = "".join(char for char in name if not unicodedata.category(char).startswith("C"))
+        name = name.strip(" .").replace(" ", "_")[:180]
         return name or "session"
 
     # CSV は「全件を1枚の集計CSV」で返す
     if fmt == "csv":
         sbuf = io.StringIO()
-        writer = csv.writer(sbuf)
+        writer = SafeCSVWriter(sbuf)
         # 共通セクション列 + 回答一覧（まとめ） + サマリー
         writer.writerow(["セッションID", "患者名", "生年月日", "受診種別", "テンプレートID", "確定日時", "回答一覧", "自動生成サマリー"])
         for sid in ids:
@@ -4538,7 +3847,7 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
         return Response(
             content,
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=sessions-{ts}.csv"},
+            headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename=sessions-{ts}.csv"},
         )
 
     # md / pdf は ZIP にまとめて返す
@@ -4574,7 +3883,7 @@ def admin_bulk_download(fmt: str, ids: list[str] = Query(default=[])) -> Respons
     return StreamingResponse(
         zip_buf,
         media_type="application/zip",
-        headers={"Content-Disposition": f"attachment; filename=sessions-{ts}.zip"},
+        headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename=sessions-{ts}.zip"},
     )
 
 
@@ -4591,11 +3900,11 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
         return Response(
             content,
             media_type="text/markdown; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.md"},
+            headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename=session-{quote(session_id, safe='')}.md"},
         )
     if fmt == "csv":
         buf = io.StringIO()
-        writer = csv.writer(buf)
+        writer = SafeCSVWriter(buf)
         writer.writerow(["項目", "回答"])
         for label, ans in rows:
             writer.writerow([label, ans])
@@ -4603,7 +3912,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
         return Response(
             content,
             media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.csv"},
+            headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename=session-{quote(session_id, safe='')}.csv"},
         )
     if fmt == "pdf":
         layout_mode, facility_name = _resolve_pdf_render_config()
@@ -4621,7 +3930,7 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
         return StreamingResponse(
             io.BytesIO(pdf_bytes),
             media_type="application/pdf",
-            headers={"Content-Disposition": f"attachment; filename=session-{session_id}.pdf"},
+            headers={**SAFE_HEADERS, "Content-Disposition": f"attachment; filename=session-{quote(session_id, safe='')}.pdf"},
         )
     raise HTTPException(status_code=400, detail="unsupported format")
 
@@ -4629,6 +3938,9 @@ def admin_download_session(session_id: str, fmt: str) -> Response:
 @app.delete("/admin/sessions/{session_id}")
 def admin_delete_session(session_id: str) -> dict[str, Any]:
     """指定セッションを削除する。"""
+    from .patient_security import revoke_capability
+    revoke_capability(session_id)
+    sessions.pop(session_id, None)
     deleted = db_delete_session(session_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="session not found")
@@ -4644,6 +3956,12 @@ def admin_bulk_delete(ids: list[str] = Query(default=[])) -> dict[str, Any]:
     """
     if not ids:
         raise HTTPException(status_code=400, detail="ids is required")
+    if len(ids) > MAX_IMPORT_RECORDS:
+        raise HTTPException(status_code=400, detail="too_many_records")
+    from .patient_security import revoke_capability
+    for session_id in dict.fromkeys(ids):
+        revoke_capability(session_id)
+        sessions.pop(session_id, None)
     count = db_delete_sessions(ids)
     return {"status": "ok", "deleted": int(count)}
 

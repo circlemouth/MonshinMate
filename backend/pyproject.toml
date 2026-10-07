@@ -19,6 +19,7 @@ dependencies = [
     "bcrypt<4",
     "google-auth",
     "requests",
+    "urllib3>=2.8.0",  # security floor for streaming/proxy TLS advisories
 ]
 
 [build-system]

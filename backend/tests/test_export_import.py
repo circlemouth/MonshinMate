@@ -1,321 +1,151 @@
+"""Portability tests use only isolated synthetic fixtures; never clean source DB/assets."""
+import asyncio
 import base64
-import hashlib
+import io
 import json
-import sqlite3
-import sys
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
-from cryptography.fernet import Fernet
-from fastapi.testclient import TestClient
-
-
-DB_PATH = Path(__file__).resolve().parents[1] / "app" / "app.sqlite3"
-
-
-def _reset_database() -> None:
-    if DB_PATH.exists():
-        DB_PATH.unlink()
+import pytest
+from fastapi import HTTPException, UploadFile
+from PIL import Image
 
 
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-from app.main import app, IMAGE_DIR, LOGO_DIR, _create_admin_access_token  # noqa: E402
-from app.db import init_db, get_session as db_get_session, get_template as db_get_template, load_llm_settings  # noqa: E402
+@pytest.fixture
+def main(monkeypatch):
+    # Importing main initializes persistence. Refuse the real checkout outright.
+    root = Path(__file__).resolve().parents[2]
+    if not root.name.startswith("monshinmate-security-tests-") or os.getenv("MONSHINMATE_ENV") != "test":
+        pytest.skip("Run with backend/tools/run_security_tests.py (source-only isolated harness)")
+    from app import main as module
+    monkeypatch.setattr(module, "save_binary_asset", lambda *a, **k: pytest.fail("unexpected asset write"))
+    monkeypatch.setattr(module, "import_sessions_data", lambda *a, **k: pytest.fail("legacy non-atomic import"))
+    monkeypatch.setattr(module, "import_questionnaire_settings", lambda *a, **k: pytest.fail("legacy non-atomic import"))
+    return module
 
 
-client = TestClient(app)
+def raster():
+    stream = io.BytesIO()
+    Image.new("RGB", (2, 2), "red").save(stream, format="PNG")
+    return stream.getvalue()
 
 
-def _admin_headers() -> dict[str, str]:
-    return {"Authorization": f"Bearer {_create_admin_access_token()}"}
+def upload(envelope):
+    return UploadFile(filename="test.json", file=io.BytesIO(json.dumps(envelope).encode()))
 
 
-def _clean_images() -> None:
-    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    for child in IMAGE_DIR.glob("*"):
-        if child.is_file():
-            child.unlink()
+def test_export_password_roundtrip(main):
+    data = {"sessions": []}
+    envelope = main._build_export_envelope(data, "session_data", "synthetic-passphrase")
+    assert main._parse_import_envelope(json.dumps(envelope).encode(), "synthetic-passphrase") == ("session_data", data)
+    with pytest.raises(HTTPException) as exc:
+        main._parse_import_envelope(json.dumps(envelope).encode(), "incorrect")
+    assert exc.value.detail == "invalid_password"
 
 
-def _clean_logos() -> None:
-    LOGO_DIR.mkdir(parents=True, exist_ok=True)
-    for child in LOGO_DIR.glob("*"):
-        if child.is_file():
-            child.unlink()
+@pytest.mark.parametrize("change", [
+    {"iterations": 1}, {"iterations": 390001}, {"iterations": True},
+    {"iterations": "390000"}, {"algorithm": "other"}, {"kdf": "other"},
+    {"salt": "%%%"}, {"salt": base64.b64encode(b"short").decode()},
+])
+def test_invalid_encryption_rejected_before_kdf(main, monkeypatch, change):
+    envelope = main._build_export_envelope({"sessions": []}, "session_data", "pass")
+    envelope["encryption"].update(change)
+    monkeypatch.setattr(main.hashlib, "pbkdf2_hmac", lambda *a, **k: pytest.fail("untrusted KDF work"))
+    with pytest.raises(HTTPException):
+        main._parse_import_envelope(json.dumps(envelope).encode(), "pass")
 
 
-def _prepare_sample_template() -> None:
-    image_path = IMAGE_DIR / "export-test.png"
-    image_path.write_bytes(b"fake-image")
-    payload = {
-        "id": "default",
-        "visit_type": "initial",
-        "items": [
-            {
-                "id": "symptom",
-                "label": "症状",
-                "type": "string",
-                "required": True,
-                "allow_freetext": False,
-                "description": "テスト用",
-                "image": "/questionnaire-item-images/files/export-test.png",
-            }
-        ],
-        "llm_followup_enabled": True,
-        "llm_followup_max_questions": 3,
-    }
-    client.post("/questionnaires", json=payload)
-    followup_payload = {**payload, "visit_type": "followup"}
-    client.post("/questionnaires", json=followup_payload)
+@pytest.mark.parametrize("mode", ["merge", "replace"])
+def test_import_requires_atomic_adapter(main, monkeypatch, mode):
+    from app import db
+    monkeypatch.setattr(db, "get_active_adapter", lambda: SimpleNamespace())
+    for kind, function, payload in [
+        ("session_data", main.import_sessions_api, {"sessions": []}),
+        ("questionnaire_settings", main.import_questionnaire_settings_api, {"templates": []}),
+    ]:
+        envelope = main._build_export_envelope(payload, kind, None)
+        with pytest.raises(HTTPException) as exc:
+            asyncio.run(function(file=upload(envelope), password=None, mode=mode))
+        assert exc.value.status_code == 501
+        assert exc.value.detail == "atomic_import_not_supported"
 
 
-def test_questionnaire_export_import_roundtrip_with_password() -> None:
-    _reset_database()
-    init_db()
-    _clean_images()
-    _clean_logos()
-    _prepare_sample_template()
-
-    initial_llm = client.get("/llm/settings", headers=_admin_headers())
-    assert initial_llm.status_code == 200
-    original_llm_settings = initial_llm.json()
-
-    display_name_res = client.put("/system/display-name", json={"display_name": "テスト医院"})
-    assert display_name_res.status_code == 200
-    theme_res = client.put("/system/theme-color", json={"color": "#123abc"})
-    assert theme_res.status_code == 200
-    logo_upload = client.post(
-        "/system-logo",
-        files={"file": ("clinic-logo.png", b"logo-data", "image/png")},
-    )
-    assert logo_upload.status_code == 200
-    logo_url = logo_upload.json()["url"]
-    logo_set = client.put(
-        "/system/logo",
-        json={"url": logo_url, "crop": {"x": 0, "y": 0, "w": 1, "h": 1}},
-    )
-    assert logo_set.status_code == 200
-    llm_payload = {
-        "provider": "openai",
-        "model": "gpt-test",
-        "temperature": 0.2,
-        "system_prompt": "test",
-        "enabled": True,
-        "base_url": "http://localhost",  # pragma: allowlist secret
-        "api_key": "dummy-key",  # pragma: allowlist secret
-        "followup_timeout_seconds": 45,
-        "provider_profiles": {
-            "openai": {
-                "model": "gpt-test",
-                "temperature": 0.2,
-                "system_prompt": "test",
-                "base_url": "http://localhost",
-                "api_key": "dummy-key",  # pragma: allowlist secret
-                "followup_timeout_seconds": 45,
-            },
-            "gcp_vertex": {
-                "model": "gemini-2.5-flash",
-                "project_id": "synthetic-project",
-                "location": "asia-northeast1",
-                "service_account_json": "SYNTHETIC_PRIVATE_KEY_MATERIAL",
-            },
-        },
-    }
-    llm_res = client.put(
-        "/llm/settings", json=llm_payload, headers=_admin_headers()
-    )
-    assert llm_res.status_code == 200
-    assert "SYNTHETIC_PRIVATE_KEY_MATERIAL" not in llm_res.text
-    assert "service_account_json" not in json.dumps(load_llm_settings())
-
-    assert client.post("/admin/questionnaires/export", json={}).status_code == 401
-    export_res = client.post(
-        "/admin/questionnaires/export",
-        json={"password": "secret"},
-        headers=_admin_headers(),
-    )
-    assert export_res.status_code == 200
-    envelope = json.loads(export_res.content)
-    assert envelope["encryption"] is not None
-    enc_info = envelope["encryption"]
-    salt = base64.b64decode(enc_info["salt"])
-    iterations = int(enc_info["iterations"])
-    key_material = base64.urlsafe_b64encode(
-        hashlib.pbkdf2_hmac("sha256", b"secret", salt, iterations, dklen=32)
-    )
-    cipher = Fernet(key_material)
-    payload = json.loads(cipher.decrypt(base64.b64decode(envelope["payload"])))
-    assert any(tpl["id"] == "default" for tpl in payload["templates"])
-    assert "export-test.png" in payload["images"]
-    assert payload.get("app_settings", {}).get("display_name") == "テスト医院"
-    assert payload.get("llm_settings", {}).get("model") == "gpt-test"
-    serialized_payload = json.dumps(payload, ensure_ascii=False)
-    assert "service_account_json" not in serialized_payload
-    assert "dummy-key" not in serialized_payload
-    assert "SYNTHETIC_PRIVATE_KEY_MATERIAL" not in serialized_payload
-    logo_files = payload.get("logo_files", {})
-    assert logo_files
-    logo_filename = next(iter(logo_files.keys()))
-    assert logo_filename.endswith("clinic-logo.png")
-    first_logo_data = logo_files[logo_filename]
-    assert isinstance(first_logo_data, str) and first_logo_data
-
-    # インポート前にテンプレートと画像を削除して差分を確認する
-    if (IMAGE_DIR / "export-test.png").exists():
-        (IMAGE_DIR / "export-test.png").unlink()
-    _clean_logos()
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM questionnaire_templates")
-    conn.execute("DELETE FROM summary_prompts")
-    conn.execute("DELETE FROM followup_prompts")
-    conn.execute("DELETE FROM app_settings")
-    conn.execute("DELETE FROM llm_settings")
-    conn.commit()
-    conn.close()
-
-    # 誤ったパスワードでは復号できない
-    bad_import = client.post(
-        "/admin/questionnaires/import",
-        headers=_admin_headers(),
-        data={"password": "wrong", "mode": "replace"},
-        files={"file": ("settings.json", export_res.content, "application/json")},
-    )
-    assert bad_import.status_code == 400
-
-    good_import = client.post(
-        "/admin/questionnaires/import",
-        headers=_admin_headers(),
-        data={"password": "secret", "mode": "replace"},
-        files={"file": ("settings.json", export_res.content, "application/json")},
-    )
-    assert good_import.status_code == 200
-    body = good_import.json()
-    assert body["logos_restored"] == 1
-
-    tpl = db_get_template("default", "initial")
-    assert tpl is not None
-    assert any(it.get("image", "").endswith("export-test.png") for it in tpl["items"])
-    assert (IMAGE_DIR / "export-test.png").exists()
-    assert (LOGO_DIR / logo_filename).exists()
-
-    display_after = client.get("/system/display-name")
-    assert display_after.status_code == 200
-    assert display_after.json()["display_name"] == "テスト医院"
-    logo_after = client.get("/system/logo")
-    assert logo_after.status_code == 200
-    assert logo_after.json()["url"].endswith(logo_filename)
-    llm_after = client.get("/llm/settings", headers=_admin_headers())
-    assert llm_after.status_code == 200
-    assert llm_after.json()["model"] == "gpt-test"
-
-    # 後続テストに影響しないよう LLM 設定を初期値へ戻す
-    client.put(
-        "/llm/settings", json=original_llm_settings, headers=_admin_headers()
-    )
+def test_invalid_later_asset_has_no_mutation(main, monkeypatch):
+    called = []
+    monkeypatch.setattr(main, "atomic_import", lambda *a, **k: called.append(True))
+    envelope = main._build_export_envelope({"templates": [], "images": {
+        "valid.png": base64.b64encode(raster()).decode(),
+        "bad.svg": base64.b64encode(b"<svg onload='evil()'/>").decode(),
+    }}, "questionnaire_settings", None)
+    with pytest.raises(HTTPException):
+        asyncio.run(main.import_questionnaire_settings_api(file=upload(envelope), password=None, mode="merge"))
+    assert not called
 
 
-def test_questionnaire_export_normalizes_absolute_image_url() -> None:
-    _reset_database()
-    init_db()
-    _clean_images()
-    _clean_logos()
-    image_path = IMAGE_DIR / "export-abs.png"
-    image_path.write_bytes(b"abs-image")
-
-    payload = {
-        "id": "default",
-        "visit_type": "initial",
-        "items": [
-            {
-                "id": "with_image",
-                "label": "画像付き",
-                "type": "string",
-                "required": False,
-                "image": "https://example.com/questionnaire-item-images/files/export-abs.png?rev=1",
-            }
-        ],
-        "llm_followup_enabled": True,
-        "llm_followup_max_questions": 2,
-    }
-    assert client.post("/questionnaires", json=payload).status_code == 200
-
-    export_res = client.post(
-        "/admin/questionnaires/export", json={}, headers=_admin_headers()
-    )
-    assert export_res.status_code == 200
-    envelope = json.loads(export_res.content)
-    assert envelope["encryption"] is None
-    payload_export = envelope["payload"]
-    template = next(t for t in payload_export["templates"] if t["id"] == "default" and t["visit_type"] == "initial")
-    assert template["items"][0]["image"] == "/questionnaire-item-images/files/export-abs.png"
-    assert "export-abs.png" in payload_export["images"]
-
-    if (IMAGE_DIR / "export-abs.png").exists():
-        (IMAGE_DIR / "export-abs.png").unlink()
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM questionnaire_templates")
-    conn.execute("DELETE FROM summary_prompts")
-    conn.execute("DELETE FROM followup_prompts")
-    conn.commit()
-    conn.close()
-
-    import_res = client.post(
-        "/admin/questionnaires/import",
-        headers=_admin_headers(),
-        data={"mode": "replace"},
-        files={"file": ("settings.json", export_res.content, "application/json")},
-    )
-    assert import_res.status_code == 200
-
-    tpl = db_get_template("default", "initial")
-    assert tpl is not None
-    assert any(
-        it.get("image") == "/questionnaire-item-images/files/export-abs.png" for it in tpl["items"]
-    )
-    assert (IMAGE_DIR / "export-abs.png").exists()
+def test_import_hook_receives_only_validated_assets_and_portable_state(main, monkeypatch):
+    from app import db
+    received = {}
+    def hook(data, **kwargs):
+        received.update(data=data, **kwargs)
+        return {"templates": 0}
+    monkeypatch.setattr(db, "get_active_adapter", lambda: SimpleNamespace(atomic_import_questionnaire_settings=hook))
+    envelope = main._build_export_envelope({"templates": [], "app_settings": {
+        "display_name": "synthetic clinic", "security_state": {"token": "never-portable"},
+        "admin_password": "never-portable",
+    }, "images": {"valid.png": base64.b64encode(raster() + b"trailer").decode()}}, "questionnaire_settings", None)
+    result = asyncio.run(main.import_questionnaire_settings_api(file=upload(envelope), password=None, mode="merge"))
+    assert result["status"] == "ok"
+    assert received["data"]["app_settings"] == {"display_name": "synthetic clinic"}
+    assert not received["images"]["valid.png"]["content"].endswith(b"trailer")
 
 
-def test_session_export_import_roundtrip() -> None:
-    _reset_database()
-    init_db()
-    _clean_images()
-    _clean_logos()
-    payload = {
-        "patient_name": "輸出太郎",
-        "dob": "1990-01-01",
-        "gender": "male",
-        "visit_type": "initial",
-        "answers": {"chief_complaint": "頭痛"},
-    }
-    create_res = client.post("/sessions", json=payload)
-    assert create_res.status_code == 200
-    session_id = create_res.json()["id"]
-    finalize_res = client.post(f"/sessions/{session_id}/finalize")
-    assert finalize_res.status_code == 200
+def test_import_size_limit_before_json(main):
+    from app.transfer_security import MAX_IMPORT_BYTES
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(main.import_sessions_api(file=UploadFile(file=io.BytesIO(b"x" * (MAX_IMPORT_BYTES + 1))), password=None, mode="merge"))
+    assert exc.value.status_code == 413
 
-    export_res = client.post(
-        "/admin/sessions/export",
-        json={"session_ids": [session_id]},
-    )
-    assert export_res.status_code == 200
-    envelope = json.loads(export_res.content)
-    assert envelope["encryption"] is None
-    payload = envelope["payload"]
-    assert any(s["id"] == session_id for s in payload["sessions"])
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM session_responses")
-    conn.execute("DELETE FROM sessions")
-    conn.commit()
-    conn.close()
-    assert db_get_session(session_id) is None
+def test_existing_asset_is_revalidated_and_headers_are_safe(main):
+    with pytest.raises(HTTPException) as exc:
+        main._build_binary_asset_response({"content": b"<svg/>"}, "legacy.svg")
+    assert exc.value.status_code == 404
+    response = main._build_binary_asset_response({"content": raster(), "content_type": "text/html"}, "image.html")
+    assert response.media_type == "image/png"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in response.headers["content-security-policy"]
 
-    import_res = client.post(
-        "/admin/sessions/import",
-        data={"mode": "merge"},
-        files={"file": ("sessions.json", export_res.content, "application/json")},
-    )
-    assert import_res.status_code == 200
-    restored = db_get_session(session_id)
-    assert restored is not None
-    assert restored["patient_name"] == "輸出太郎"
-    assert json.loads(restored["answers_json"])["chief_complaint"] == "頭痛"
+
+@pytest.mark.parametrize("name", ["upload_system_logo", "upload_questionnaire_item_image"])
+def test_upload_ignores_claimed_name_and_mime(main, monkeypatch, name):
+    writes = []
+    monkeypatch.setattr(main, "save_binary_asset", lambda *args, **kwargs: writes.append((args, kwargs)))
+    file = UploadFile(filename="payload.svg", file=io.BytesIO(raster() + b"<script>evil</script>"))
+    result = getattr(main, name)(file=file)
+    assert result["url"].endswith(".png")
+    assert writes[0][1]["content_type"] == "image/png"
+    assert b"evil" not in writes[0][0][1]
+
+
+@pytest.mark.parametrize("name", ["upload_system_logo", "upload_questionnaire_item_image"])
+def test_upload_read_is_bounded(main, name):
+    from app.transfer_security import MAX_ASSET_BYTES
+    class Reader:
+        def read(self, limit):
+            assert limit == MAX_ASSET_BYTES + 1
+            return b"x" * limit
+    with pytest.raises(HTTPException) as exc:
+        getattr(main, name)(file=SimpleNamespace(file=Reader()))
+    assert exc.value.status_code == 413
+
+
+def test_setting_update_never_resends_records(main, monkeypatch):
+    monkeypatch.setattr(main, "db_list_sessions", lambda: pytest.fail("history enumeration"))
+    monkeypatch.setattr(main, "save_llm_settings", lambda value: None)
+    monkeypatch.setattr(main.llm_gateway, "settings", main.llm_gateway.settings.model_copy(deep=True))
+    settings = main.LLMSettings(provider="openai", model="synthetic", temperature=0.2, enabled=False)
+    monkeypatch.setattr(main, "_merge_preserved_api_keys", lambda _: settings)
+    background = SimpleNamespace(add_task=lambda *a, **k: pytest.fail("history resend scheduled"))
+    main.update_llm_settings(settings, background)

@@ -1,3 +1,4 @@
+import { adminFetch, adminSnapshot } from '../utils/adminApi';
 import { ReactNode, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -59,23 +60,29 @@ export default function AdminSessionDetail() {
   const { formatDate } = useTimezone();
 
   useEffect(() => {
+    const snapshot = adminSnapshot();
+    const controller = new AbortController();
     const fetchData = async () => {
       try {
-        const res = await fetch(`/admin/sessions/${id}`);
+        const res = await adminFetch(`/admin/sessions/${id}`, { signal: controller.signal });
         if (!res.ok) throw new Error('セッションが見つかりません');
         const data: SessionDetail = await res.json();
+        if (controller.signal.aborted || !snapshot.current()) return;
         setDetail(data);
 
-        const tpl = await fetch(
-          `/questionnaires/${data.questionnaire_id}/template?visit_type=${data.visit_type}`
+        const tpl = await adminFetch(
+          `/questionnaires/${data.questionnaire_id}/template?visit_type=${data.visit_type}`, { signal: controller.signal }
         ).then((r) => r.json());
+        if (controller.signal.aborted || !snapshot.current()) return;
         setItems(tpl.items);
       } catch (error) {
+        if (controller.signal.aborted || !snapshot.current()) return;
         console.error(error);
         navigate('/admin/sessions'); // データ取得失敗時は一覧に戻る
       }
     };
     fetchData();
+    return () => controller.abort();
   }, [id, navigate]);
 
   if (!detail) return null; // ローディング表示を追加しても良い

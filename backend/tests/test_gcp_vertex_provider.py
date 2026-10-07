@@ -135,10 +135,19 @@ def test_extract_strings_from_text_repairs_malformed_array():
     ]
 
 
+@pytest.mark.parametrize("project_id", [None, "", "../synthetic-project"])
+def test_normalize_profile_rejects_missing_or_invalid_project(project_id):
+    provider = GcpVertexProvider()
+    profile = {} if project_id is None else {"project_id": project_id}
+    with pytest.raises(ValueError, match="llm_destination_not_allowed"):
+        provider.normalize_profile(profile)
+
+
 def test_build_generation_payload_uses_profile_max_tokens():
     provider = GcpVertexProvider()
     settings = SimpleNamespace(temperature=0.2, system_prompt="")
     profile = provider.normalize_profile({
+        "project_id": "synthetic-project",
         "max_output_tokens": 4096,
     })
 
@@ -230,7 +239,7 @@ def test_gemini_3_payload_is_single_turn_and_omits_sampling_temperature():
         followup_timeout_seconds=30,
     )
     profile = provider.normalize_profile(
-        {"model": "gemini-3.5-flash-lite", "temperature": 0.2}
+        {"project_id": "synthetic-project", "model": "gemini-3.5-flash-lite", "temperature": 0.2}
     )
 
     payload = provider._build_generation_payload(  # type: ignore[arg-type]

@@ -11,6 +11,14 @@ import threading
 from pydantic import BaseModel, Field
 import httpx
 
+from .llm_data_security import minimize_answers, validate_destination, validate_profile_destination
+
+
+def _safe_http(method: str, url: str, **kwargs: Any) -> httpx.Response:
+    validate_destination(url, resolve=True)
+    # Never follow redirects or inherit environment proxy configuration.
+    return getattr(httpx, method)(url, follow_redirects=False, trust_env=False, **kwargs)
+
 
 from .llm_provider_registry import (
     LLMProviderAdapter,
@@ -241,7 +249,7 @@ class LLMGateway:
             try:
                 normalized = adapter.normalize_profile(dict(data))
             except Exception as exc:  # noqa: BLE001
-                logging.getLogger("llm").warning("normalize_profile_failed: %s", exc)
+                logging.getLogger("llm").warning("normalize_profile_failed: %s", "llm_request_failed")
             else:
                 if isinstance(normalized, dict):
                     for key, value in normalized.items():
@@ -260,8 +268,26 @@ class LLMGateway:
         return get_provider_registry().get(key)
 
     def _get_adapter(self, provider: str | None = None) -> LLMProviderAdapter | None:
+        if not self.settings.enabled:
+            return None
+        key = provider or self.settings.provider
+        try:
+            validate_profile_destination(key, self.settings.get_profile(key).model_dump())
+        except ValueError:
+            self._record_status("ng", "destination_policy", "llm_destination_not_allowed")
+            return None
         registration = self._get_registration(provider)
         return registration.adapter if registration else None
+
+    def _remote_allowed(self) -> bool:
+        if not self.settings.enabled or not self.settings.base_url:
+            return False
+        try:
+            validate_profile_destination(self.settings.provider, self.settings.get_profile().model_dump())
+            return True
+        except ValueError:
+            self._record_status("ng", "destination_policy", "llm_destination_not_allowed")
+            return False
 
     def has_remote_backend(self) -> bool:
         """現在の設定でリモート LLM を呼び出せるかを判定する。"""
@@ -270,7 +296,7 @@ class LLMGateway:
             return False
         if self._get_adapter() is not None:
             return True
-        return bool(self.settings.base_url)
+        return self._remote_allowed()
 
     def _provider_uses_base_url(self, provider: str | None = None) -> bool:
         registration = self._get_registration(provider)
@@ -355,6 +381,8 @@ class LLMGateway:
         settings.sync_from_active_profile()
         settings.sync_to_active_profile()
         self._ensure_provider_integrity(settings)
+        if settings.enabled:
+            validate_profile_destination(settings.provider, settings.get_profile().model_dump())
         self.settings = settings
         self._sync_status_for_settings(reason="settings_update")
 
@@ -375,11 +403,11 @@ class LLMGateway:
             try:
                 result = adapter.test_connection(self.settings, profile_data, source=source)
             except Exception as exc:  # noqa: BLE001
-                detail = str(exc)
+                detail = "llm_request_failed"
                 self._record_status("ng", source, detail)
                 return {"status": "ng", "detail": detail}
             status = (result or {}).get("status") if isinstance(result, dict) else None
-            detail = (result or {}).get("detail") if isinstance(result, dict) else None
+            detail = "connection ok" if status == "ok" else "llm_request_failed"
             if status == "ok":
                 self._record_status("ok", source, detail or "connection ok")
                 return {"status": "ok"}
@@ -407,11 +435,11 @@ class LLMGateway:
             if s.model in models:
                 self._record_status("ok", source, "connection ok")
                 return {"status": "ok"}
-            detail = f"model '{s.model}' not found"
+            detail = "model_not_found"
             self._record_status("ng", source, detail)
             return {"status": "ng", "detail": detail}
         except Exception as e:  # noqa: BLE001 - 疎通失敗は詳細を返す
-            detail = str(e)
+            detail = "llm_request_failed"
             self._record_status("ng", source, detail)
             return {"status": "ng", "detail": detail}
 
@@ -433,9 +461,9 @@ class LLMGateway:
             try:
                 models = adapter.list_models(self.settings, profile_data, source=source)
             except Exception as exc:  # noqa: BLE001
-                logging.getLogger("llm").error("adapter_list_models_failed: %s", exc)
+                logging.getLogger("llm").error("adapter_list_models_failed: %s", "llm_request_failed")
                 if source:
-                    self._record_status("ng", source, str(exc))
+                    self._record_status("ng", source, "llm_request_failed")
                 return []
             if source:
                 self._record_status("ok", source, "model list fetched")
@@ -446,11 +474,13 @@ class LLMGateway:
                 self._set_status("disabled", "base_url missing", source, mark_time=True)
             return []
 
+        if not self._remote_allowed():
+            return []
         try:
             timeout = httpx.Timeout(5.0)
             if s.provider == "ollama":
                 url = s.base_url.rstrip("/") + "/api/tags"
-                r = httpx.get(url, timeout=timeout)
+                r = _safe_http("get", url, timeout=timeout)
                 r.raise_for_status()
                 data = r.json()
                 models = sorted(
@@ -464,7 +494,7 @@ class LLMGateway:
                 headers = {}
                 if s.api_key:
                     headers["Authorization"] = f"Bearer {s.api_key}"
-                r = httpx.get(url, headers=headers, timeout=timeout)
+                r = _safe_http("get", url, headers=headers, timeout=timeout)
                 r.raise_for_status()
                 data = r.json()
                 models = sorted(
@@ -474,9 +504,9 @@ class LLMGateway:
                     self._record_status("ok", source, "model list fetched")
                 return models
         except Exception as e:
-            logging.getLogger("llm").error(f"Failed to list models: {e}")
+            logging.getLogger("llm").error("llm_list_models_failed")
             if source:
-                self._record_status("ng", source, str(e))
+                self._record_status("ng", source, "llm_request_failed")
         return []
 
     def generate_question(
@@ -498,6 +528,7 @@ class LLMGateway:
         Returns:
             str: 追質問の本文。
         """
+        context = minimize_answers(context or {})
         start = time.perf_counter()
         s = self.settings
         adapter = self._get_adapter()
@@ -512,9 +543,9 @@ class LLMGateway:
                     context,
                 )
             except Exception as exc:  # noqa: BLE001
-                self._record_status("ng", "generate_question", str(exc))
-                logging.getLogger("llm").exception(
-                    "external_generate_question_failed: %s", exc
+                self._record_status("ng", "generate_question", "llm_request_failed")
+                logging.getLogger("llm").warning(
+                    "external_generate_question_failed: %s", "llm_request_failed"
                 )
             else:
                 if question:
@@ -528,7 +559,7 @@ class LLMGateway:
                         "ok", "generate_question", "external question generated"
                     )
                     return question
-        if s.enabled and s.base_url:
+        if self._remote_allowed():
             try:
                 timeout = httpx.Timeout(15.0)
                 if s.provider == "ollama":
@@ -548,7 +579,7 @@ class LLMGateway:
                         "stream": False,
                         "options": {"temperature": s.temperature},
                     }
-                    r = httpx.post(url, json=payload, timeout=timeout)
+                    r = _safe_http("post", url, json=payload, timeout=timeout)
                     r.raise_for_status()
                     data = r.json()
                     content = (
@@ -588,7 +619,7 @@ class LLMGateway:
                         "temperature": s.temperature,
                         "stream": False,
                     }
-                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                    r = _safe_http("post", url, headers=headers, json=payload, timeout=timeout)
                     r.raise_for_status()
                     data = r.json()
                     choices = data.get("choices") or []
@@ -610,9 +641,9 @@ class LLMGateway:
                             return content
                     raise RuntimeError("empty response from lm studio")
             except Exception as e:  # noqa: BLE001 - 呼び出し側でフォールバック
-                self._record_status("ng", "generate_question", str(e))
-                logging.getLogger("llm").exception(
-                    "remote_generate_question_failed: %s", e
+                self._record_status("ng", "generate_question", "llm_request_failed")
+                logging.getLogger("llm").warning(
+                    "remote_generate_question_failed: %s", "llm_request_failed"
                 )
                 # 失敗時はスタブの追質問にフォールバックする
 
@@ -640,6 +671,7 @@ class LLMGateway:
         s = self.settings
         if not s.enabled:
             return []
+        context = minimize_answers(context)
         user_prompt = (prompt or DEFAULT_FOLLOWUP_PROMPT).replace(
             "{max_questions}", str(max_questions)
         )
@@ -668,11 +700,11 @@ class LLMGateway:
                 )
                 return result or []
             except Exception as exc:  # noqa: BLE001
-                self._record_status("ng", "generate_followups", str(exc))
+                self._record_status("ng", "generate_followups", "llm_request_failed")
                 logging.getLogger("llm").warning(
-                    "external_generate_followups_failed: %s", exc
+                    "external_generate_followups_failed: %s", "llm_request_failed"
                 )
-        if s.base_url:
+        if self._remote_allowed():
             # セッション単位の直列化
             lock = self._get_lock(lock_key)
 
@@ -712,7 +744,7 @@ class LLMGateway:
                         # JSON Schema に適合した配列を強制
                         "format": schema,
                     }
-                    r = httpx.post(url, json=payload, timeout=timeout)
+                    r = _safe_http("post", url, json=payload, timeout=timeout)
                     r.raise_for_status()
                     data = r.json()
                     content = (
@@ -754,7 +786,7 @@ class LLMGateway:
                             "json_schema": schema,
                         },
                     }
-                    r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                    r = _safe_http("post", url, headers=headers, json=payload, timeout=timeout)
                     r.raise_for_status()
                     data = r.json()
                     choices = data.get("choices") or []
@@ -776,9 +808,9 @@ class LLMGateway:
                 )
                 return result
             except Exception as e:  # noqa: BLE001
-                self._record_status("ng", "generate_followups", str(e))
+                self._record_status("ng", "generate_followups", "llm_request_failed")
                 logging.getLogger("llm").warning(
-                    "generate_followups attempt failed: %s", e
+                    "generate_followups attempt failed: %s", "llm_request_failed"
                 )
                 # 失敗時はスタブ実装へフォールバックする
         # フォールバックでは汎用質問を提示せず、追加質問フェーズを終了させる
@@ -797,8 +829,8 @@ class LLMGateway:
             try:
                 reply = adapter.chat(self.settings, profile_data, message)
             except Exception as exc:  # noqa: BLE001
-                self._record_status("ng", "chat", str(exc))
-                logging.getLogger("llm").exception(
+                self._record_status("ng", "chat", "llm_request_failed")
+                logging.getLogger("llm").warning(
                     "external_chat_failed; falling back to stub"
                 )
             else:
@@ -810,7 +842,7 @@ class LLMGateway:
                 return reply
         # リモート設定が有効な場合は HTTP 経由で実行し、失敗時はスタブへフォールバック
         requires_base = self._provider_uses_base_url()
-        if s.enabled and ((not requires_base) or s.base_url):
+        if self._remote_allowed():
             try:
                 reply = self._chat_remote(message)
                 duration = (time.perf_counter() - start) * 1000
@@ -818,8 +850,8 @@ class LLMGateway:
                 self._record_status("ok", "chat", "remote chat succeeded")
                 return reply
             except Exception as e:
-                self._record_status("ng", "chat", str(e))
-                logging.getLogger("llm").exception("remote_chat_failed; falling back to stub")
+                self._record_status("ng", "chat", "llm_request_failed")
+                logging.getLogger("llm").warning("remote_chat_failed; falling back to stub")
 
         # フォールバック（スタブ）
         result = f"LLM応答[{s.provider}:{s.model},temp={s.temperature}] {message}"
@@ -849,7 +881,7 @@ class LLMGateway:
                 "stream": False,
                 "options": {"temperature": s.temperature},
             }
-            r = httpx.post(url, json=payload, timeout=timeout)
+            r = _safe_http("post", url, json=payload, timeout=timeout)
             r.raise_for_status()
             data = r.json()
             # Ollama の応答は data["message"]["content"] に入る
@@ -877,7 +909,7 @@ class LLMGateway:
                 "temperature": s.temperature,
                 "stream": False,
             }
-            r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+            r = _safe_http("post", url, headers=headers, json=payload, timeout=timeout)
             r.raise_for_status()
             data = r.json()
             choices = data.get("choices") or []
@@ -925,6 +957,8 @@ class LLMGateway:
         リモート設定が有効かつ base_url がある場合はリモート LLM に投げ、
         失敗時はスタブ的な要約にフォールバックする。
         """
+        answers = minimize_answers(answers)
+        labels = {k: v for k, v in (labels or {}).items() if k in answers}
         try:
             s = self.settings
             last_error: Exception | None = None
@@ -965,13 +999,13 @@ class LLMGateway:
                         return external
                 except Exception as exc:  # noqa: BLE001
                     last_error = exc
-                    self._record_status("ng", "summarize", str(exc))
+                    self._record_status("ng", "summarize", "llm_request_failed")
                     logging.getLogger("llm").warning(
-                        "external_summary_failed: %s", exc
+                        "external_summary_failed: %s", "llm_request_failed"
                     )
 
             # リモート可能なら OpenAI/Ollama 互換のチャットで生成
-            if s.enabled and s.base_url:
+            if self._remote_allowed():
                 lock = self._get_lock(lock_key)
                 def _attempt() -> str:
                     timeout = httpx.Timeout(20.0)
@@ -990,7 +1024,7 @@ class LLMGateway:
                             "stream": False,
                             "options": {"temperature": s.temperature},
                         }
-                        r = httpx.post(url, json=payload, timeout=timeout)
+                        r = _safe_http("post", url, json=payload, timeout=timeout)
                         r.raise_for_status()
                         data = r.json()
                         content = (
@@ -1019,7 +1053,7 @@ class LLMGateway:
                             "temperature": s.temperature,
                             "stream": False,
                         }
-                        r = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+                        r = _safe_http("post", url, headers=headers, json=payload, timeout=timeout)
                         r.raise_for_status()
                         data = r.json()
                         choices = data.get("choices") or []
@@ -1042,7 +1076,7 @@ class LLMGateway:
                 except Exception as e:
                     last_error = e
                     logging.getLogger("llm").warning(
-                        "summarize_with_prompt attempt failed: %s", e
+                        "summarize_with_prompt attempt failed: %s", "llm_request_failed"
                     )
                     if retry > 0:
                         time.sleep(0.4)
@@ -1058,14 +1092,14 @@ class LLMGateway:
                             return result
                         except Exception as e2:
                             last_error = e2
-                            logging.getLogger("llm").exception(
-                                "summarize_with_prompt retry failed: %s", e2
+                            logging.getLogger("llm").warning(
+                                "summarize_with_prompt retry failed: %s", "llm_request_failed"
                             )
             if last_error:
-                self._record_status("ng", "summarize", str(last_error))
+                self._record_status("ng", "summarize", "llm_request_failed")
         except Exception as e:  # noqa: BLE001 - フォールバックへ
-            self._record_status("ng", "summarize", str(e))
-            logging.getLogger("llm").exception("summarize_with_prompt failed: %s", e)
+            self._record_status("ng", "summarize", "llm_request_failed")
+            logging.getLogger("llm").warning("summarize_with_prompt failed: %s", "llm_request_failed")
 
         # フォールバック（スタブ要約）
         return self.summarize(answers)
