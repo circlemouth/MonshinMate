@@ -8,6 +8,21 @@ const { webcrypto } = require('node:crypto');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '../src');
 
+test('nginx login navigation is SPA-only for GET/HEAD while authentication APIs stay proxied', () => {
+  const config = fs.readFileSync(path.join(root, '../nginx.conf.template'), 'utf8');
+  const exact = config.split('location = /admin/login {')[1]?.split('location /admin/login {')[0];
+  assert.ok(exact, 'exact login route precedes the child API prefix');
+  assert.match(exact, /if \(\$request_method ~ \^\(GET\|HEAD\)\$\) \{\s*rewrite \^ \/index\.html last;\s*\}/);
+  assert.match(exact, /proxy_pass \$\{BACKEND_ORIGIN\};/);
+  assert.doesNotMatch(exact, /add_header|return 200|proxy_method|Access-Control-Allow/);
+  const child = config.split('location /admin/login {')[1]?.split('location /admin/totp {')[0];
+  assert.match(child, /proxy_pass \$\{BACKEND_ORIGIN\};/);
+  assert.doesNotMatch(child, /try_files|rewrite|return 200/);
+  for (const header of ['Cache-Control "no-store"', 'X-Content-Type-Options "nosniff"', 'X-Frame-Options "DENY"']) {
+    assert.ok(config.includes(`add_header ${header} always;`));
+  }
+});
+
 function harness() {
   let now = Date.now();
   class Clock extends Date { static now() { return now; } }

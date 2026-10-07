@@ -1,6 +1,19 @@
 # 実装履歴と判断メモ
 
-## 最新追補：build・既存保護状態・運用者手順の検証
+## 最新追補：承認済み本番保守・バックアップ・パスワード保持移行
+
+以下は実施済み工程の記録。下段の「未実施」は各工程前の履歴であり、最新状態は本節を優先する。
+
+- [x] 全backend URLを保守へ切替し、旧writerの退役・request drainを確認。承認済みの全DB exportをprivate bucketへ保存し、新規named DBへ復元。export/import成功、完了件数4,342件一致。assetsは4件/493,892 bytesのキー集合・size・CRC32C一致。
+- [x] PITR無効のため時刻指定exportは拒否され、設定を変更せず通常exportへ変更。MonshinMate writerは停止したが、他アプリを含む全DBの同一時刻性は保証しない。import/exportのbyte progressは異なるため全DB byte完全一致も主張しない。
+- [x] 復元adminとsourceの全field/hash一致を内部比較後、明示承認されたreset-only OTPだけを解除。通常preflight eligibleを確認し、拒否条件を緩めず通常migrationを1回実行。移行後もpassword hashと無関係な旧fieldの保持を確認。秘密値は出力せず、署名鍵・暗号鍵・連携キーは変更しない。
+- [x] 新backend候補でreadiness/auth status200、初期登録不要・MFA off・password-only policyを確認。無認証管理操作は401。これは実パスワードloginの確認とは異なる。
+- [x] frontend候補のCORS拒否を観測し、許可origin拡張ではなくsame-origin proxyへ変更。Cloud Run hostの`.a.run.app`形状を厳密に追加許可。private全隔離171成功/4既存skip。候補のHTML/config/proxyとChromeログイン画面表示を確認。
+- [ ] SPA loginの直接再読込とAPI proxyの競合を検出したためfrontend修正/build後に再検証し、全URLを切替する。
+- [ ] 本人の実パスワードlogin、実患者を使う検証は未実施。型診断52件・npm advisory6件（中2/高4）等の既存課題は解消していない。
+- [ ] 切替後にAPI接続変更プロンプトと運用記録を最終化する。詳細な配備識別子・backup・復元先は非公開運用文書へ記録する。
+
+## 前段追補：build・既存保護状態・運用者手順の検証
 
 以下は切替前の経過記録。アプリ版 `177543e` はcommit/pushとCloud Build成功まで完了し、本番trafficはまだ旧版を維持している。
 

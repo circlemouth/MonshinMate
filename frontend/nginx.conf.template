@@ -133,6 +133,18 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+    # This URL is both a browser page and a POST API. Only navigation methods
+    # rewrite to the SPA; all other methods retain backend authentication checks.
+    location = /admin/login {
+        if ($request_method ~ ^(GET|HEAD)$) {
+            rewrite ^ /index.html last;
+        }
+        proxy_pass ${BACKEND_ORIGIN};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+    # Child APIs (including /admin/login/totp) must never become SPA fallbacks.
     location /admin/login {
         proxy_pass ${BACKEND_ORIGIN};
         proxy_set_header X-Real-IP $remote_addr;
