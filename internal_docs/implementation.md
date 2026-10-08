@@ -9,9 +9,11 @@
 - [x] 復元adminとsourceの全field/hash一致を内部比較後、明示承認されたreset-only OTPだけを解除。通常preflight eligibleを確認し、拒否条件を緩めず通常migrationを1回実行。移行後もpassword hashと無関係な旧fieldの保持を確認。秘密値は出力せず、署名鍵・暗号鍵・連携キーは変更しない。
 - [x] 新backend候補でreadiness/auth status200、初期登録不要・MFA off・password-only policyを確認。無認証管理操作は401。これは実パスワードloginの確認とは異なる。
 - [x] frontend候補のCORS拒否を観測し、許可origin拡張ではなくsame-origin proxyへ変更。Cloud Run hostの`.a.run.app`形状を厳密に追加許可。private全隔離171成功/4既存skip。候補のHTML/config/proxyとChromeログイン画面表示を確認。
-- [ ] SPA loginの直接再読込とAPI proxyの競合を検出したためfrontend修正/build後に再検証し、全URLを切替する。
-- [ ] 本人の実パスワードlogin、実患者を使う検証は未実施。型診断52件・npm advisory6件（中2/高4）等の既存課題は解消していない。
-- [ ] 切替後にAPI接続変更プロンプトと運用記録を最終化する。詳細な配備識別子・backup・復元先は非公開運用文書へ記録する。
+- [x] SPA loginの直接再読込とAPI proxyの競合を修正。frontend `9cc10a9` の隔離32試験/build、実Nginxのnetwork-none検証1試験成功。GET/HEADだけSPAへ送り、POST/子APIの認証は維持。Cloud Build成功後に固定digestで配備。
+- [x] **2026-10-08 00:01 UTC、本番切替完了。** backend API版 `177543e` とfrontend版 `9cc10a9` を100%＋全tagへ固定。canonical/旧tag/custom domainの計9 URLでreadiness200・password-only状態・無認証管理API401を確認。frontend全URLの直接login表示/同一origin設定も確認し、Chrome ForCodexで本番ログイン画面を確認した。
+- [ ] 本人の実パスワードlogin、実患者操作、資格情報付き外部連携成功は未試験。型診断52件・npm advisory6件（中2/高4）等の既存課題は解消していない。今回TS source変更はなく、型検査は再実施していない。
+- [x] [API接続変更プロンプト](<external_api_migration_prompt.md>)を実配備状況・対象版固定の参照に更新。接続側の本番アクセス/配備を許可する文書ではなく、コード修正と隔離検証で停止させる。詳細な配備識別子・backup・復元先は非公開運用文書に記録。
+- [x] パスワードや鍵は変更せず、バックアップ/復元先は保持。移行後の旧アプリrollbackは行わず、異常時は保守へ戻して別途復旧判断する。既存画面は再読込と再ログインが必要。
 
 ## 前段追補：build・既存保護状態・運用者手順の検証
 
