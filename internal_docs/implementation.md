@@ -1,6 +1,12 @@
 # 実装履歴と判断メモ
 
-## 最新追補：型検査・npm依存指摘の解消（完了）
+## 最新追補：main統合・ブランチ整理（完了）
+
+- [x] ユーザーが両リポジトリのmain統合とmain以外のローカル/リモートbranch削除を承認。ただし作業branchに取り込まれていない他branchがあれば停止する条件付き。全origin headをfetchし、全ローカル/リモートbranch tipが統合対象の履歴内にあることを検証、未取り込み0件。別worktree/追加remoteはなし。
+- [x] mainをfast-forwardで統合（統合時root `bf6100a` / private `0b855de`）。各originへmain更新と既知のrelease2branch削除をatomic pushし、旧tipを明示したleaseで並行変更を拒否。履歴の書換えなし。mainへ取り込まれたローカルbranchのみ `git branch -d` で削除し、fetch/pruneで追跡refも整理した。
+- [x] 両リポジトリで現在branch/ローカルhead/remote head/default branchがmainのみ、削除したbranchの全commitはmainから到達可能。origin/HEADはmainへの別名であり別branchではない。非公開submoduleの固定commitはmain先端と一致。外部接続プロンプトの正本branchもmainへ更新する。この追補は文書のみで、検証済みアプリ/依存と本番の固定revision/digestは変えず、本番再配備は行わない。下段の旧branch名は工程当時の履歴として保持する。
+
+## 前段追補：型検査・npm依存指摘の解消（完了）
 
 ユーザーから残存型診断52件・npm指摘6件の修正、commit/push、本番反映を追加承認された。新規ブランチは `release/typecheck-dependency-remediation`。下段の残存記録は各工程時点の履歴として保持する。
 
