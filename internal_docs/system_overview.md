@@ -14,7 +14,8 @@
 ## 2. 起動・ビルド構成
 
 - 汎用バックエンドイメージは [Dockerfile](<../backend/Dockerfile>) のPython 3.12を使用し、[requirements.lock](<../backend/requirements.lock>) から依存を導入する。Python依存は仮想環境内へ入れる。
-- フロントエンドはVite 7を使用。対応Node.jsは20.19以上の20系、または22.12以上。正確な採用版は [package.json](<../frontend/package.json>) とロックファイルを参照し、古いNode 18を前提にしない。
+- フロントエンドはVite 7・React Router 7（宣言的モード）を使用。対応Node.jsは20.19以上の20系、または22.12以上。正確な採用版は [package.json](<../frontend/package.json>) と [ロックファイル](<../frontend/package-lock.json>) を参照し、古いNode 18を前提にしない。
+- production buildは `npm run typecheck`（strict・依存宣言検査を維持）成功を必須とする。`npm ci` のpostinstallでChakra themeの確認済み型宣言のみを限定修復するため、build用dev依存を省略しない。対象版・宣言hashが変わったら自動回避せず再レビューする。Firebaseは公式packageを維持し、間接grpc-jsには実修正版overrideを適用する。理由と検証限界は [型・依存修正記録](<typecheck_dependency_remediation.md>) を参照。
 - [docker-compose.yml](<../docker-compose.yml>) はローカル用で、CouchDB 5984、backend 8001、frontend 5173（`FRONTEND_HTTP_PORT`で変更可能）をループバックへバインドする。共有ネットワーク向けの公開・TLS・アクセス制御は別途設計が必要。
 - Composeには管理者やCouchDBの既定パスワードを置かない。`COUCHDB_USER` / `COUCHDB_PASSWORD` / `SECRET_KEY` / `TOTP_ENC_KEY` は事前注入必須。backendは`MONSHINMATE_ENV=production`で鍵検証を行い、SQLiteをホストのデータ領域へ永続化する。
 - [.dockerignore](<../.dockerignore>) は環境ファイル、鍵、実DB、ログ、データ類、private領域等を除外する。汎用イメージには非公開クラウドアダプタやGCP専用依存を同梱しない。クラウド向け設定・デプロイ手順は非公開サブモジュール側で管理する。

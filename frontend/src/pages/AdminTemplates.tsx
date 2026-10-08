@@ -1,4 +1,5 @@
 import { adminFetch } from '../utils/adminApi';
+import { parseQuestionnaireList, parseUploadedImageUrl, replaceUploadedImage } from '../utils/questionnaireAdmin';
 import { useEffect, useState, useRef, useMemo, Fragment, Dispatch, SetStateAction, useCallback } from 'react';
 import type { DragEvent } from 'react';
 import {
@@ -86,6 +87,13 @@ interface Item {
     image?: string;
   followups?: Record<string, Item[]>;
 }
+
+type FollowupState = {
+  items: Item[];
+  depth: number;
+  onSave: (items: Item[], stack: FollowupState[]) => void;
+  contextPath: Array<{ question: string; answer: string }>;
+};
 
 type FollowupPathSegment = { parentId: string; optionKey: string };
 
@@ -309,7 +317,7 @@ export default function AdminTemplates() {
       adminFetch('/questionnaires').then((res) => res.json()),
       loadSystemBootstrap(),
     ]).then(([data, defaultData]) => {
-      const ids = Array.from(new Set((data || []).map((t: any) => t.id))).map((id) => ({ id }));
+      const ids = parseQuestionnaireList(data);
       setTemplates(ids);
       const defaultId = defaultData.default_questionnaire_id || 'default';
       setDefaultQuestionnaireId(defaultId);
@@ -326,13 +334,18 @@ export default function AdminTemplates() {
     });
   };
 
-  const uploadItemImage = async (file: File): Promise<string | undefined> => {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await adminFetch('/questionnaire-item-images', { method: 'POST', body: fd });
-    if (!res.ok) return undefined;
-    const data = await res.json();
-    return data.url as string;
+  const uploadItemImage = async (file: File): Promise<string | null> => {
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await adminFetch('/questionnaire-item-images', { method: 'POST', body: fd });
+      const url = res.ok ? parseUploadedImageUrl(await res.json()) : null;
+      if (url) return url;
+    } catch {
+      // 生の応答やエラーを表示せず、既存画像を保持する。
+    }
+    notify({ title: '画像をアップロードできませんでした', status: 'error' });
+    return null;
   };
 
   const deleteItemImage = async (url?: string): Promise<void> => {
@@ -521,12 +534,6 @@ export default function AdminTemplates() {
   };
 
   // 追質問は各回答（各オプション）につき最大1件
-type FollowupState = {
-  items: Item[];
-  depth: number;
-  onSave: (items: Item[], stack: FollowupState[]) => void;
-  contextPath: Array<{ question: string; answer: string }>;
-};
   const [followupStack, setFollowupStack] = useState<FollowupState[]>([]);
   const followupModal = useDisclosure();
 
@@ -2287,8 +2294,7 @@ type FollowupState = {
                           updateFollowupItem(fIdx, 'image', undefined);
                           return;
                         }
-                        await deleteItemImage(fi.image);
-                        const url = await uploadItemImage(file);
+                        const url = await replaceUploadedImage(file, fi.image, uploadItemImage, deleteItemImage);
                         if (url) updateFollowupItem(fIdx, 'image', url);
                       }}
                     />
@@ -2671,8 +2677,7 @@ function ItemEditorModalContent({
               updateItem(itemIndex, 'image', undefined);
               return;
             }
-            await deleteItemImage(item.image);
-            const url = await uploadItemImage(file);
+            const url = await replaceUploadedImage(file, item.image, uploadItemImage, deleteItemImage);
             if (url) updateItem(itemIndex, 'image', url);
           }}
         />
@@ -3051,8 +3056,7 @@ function NewItemModalContent({
               setNewItem({ ...newItem, image: '' });
               return;
             }
-            await deleteItemImage(newItem.image);
-            const url = await uploadItemImage(file);
+            const url = await replaceUploadedImage(file, newItem.image, uploadItemImage, deleteItemImage);
             if (url) setNewItem({ ...newItem, image: url });
           }}
         />

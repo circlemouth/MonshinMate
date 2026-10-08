@@ -1,7 +1,6 @@
 // 医療機関向け UI デザイントークン + Chakra テーマ
 // 方針: 高コントラスト/可読性・一貫した間隔・半径8px・最小限のモーション
-import { extendTheme, ThemeConfig, Theme } from '@chakra-ui/react';
-import { StyleFunctionProps } from '@chakra-ui/theme-tools';
+import { extendTheme, ThemeConfig, ChakraTheme, StyleFunctionProps } from '@chakra-ui/react';
 import tinycolor from 'tinycolor2';
 
 const config: ThemeConfig = {
@@ -529,7 +528,7 @@ const components = {
 };
 
 export interface ThemeArtifacts {
-  theme: Theme;
+  theme: ChakraTheme;
   accentPalette: AccentPalette;
   primary: PrimaryRamp;
 }
@@ -556,6 +555,7 @@ export function createThemeArtifacts(primaryColor: string): ThemeArtifacts {
     neutral,
   };
 
+  // extendTheme は完全な基底テーマをマージする。既定値のリテラル型 Theme ではなく拡張用契約を使う。
   const theme = extendTheme({
     config,
     colors,
@@ -563,12 +563,12 @@ export function createThemeArtifacts(primaryColor: string): ThemeArtifacts {
     fonts,
     styles,
     components,
-  });
+  }) as ChakraTheme;
 
   return { theme, accentPalette, primary };
 }
 
-export function createTheme(primaryColor: string): Theme {
+export function createTheme(primaryColor: string): ChakraTheme {
   return createThemeArtifacts(primaryColor).theme;
 }
 

@@ -432,7 +432,7 @@ export default function BasicInfo() {
       isInvalid={
         attempted &&
         !!visitType &&
-        (!dob || (dob && dob > new Date().toISOString().slice(0, 10)))
+        (!dob || dob > new Date().toISOString().slice(0, 10))
       }
     >
       <FormLabel>生年月日</FormLabel>

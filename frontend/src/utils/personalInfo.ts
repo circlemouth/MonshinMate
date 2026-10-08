@@ -1,8 +1,8 @@
 export const personalInfoFields = [
-  { key: 'name', label: '患者名', placeholder: '問診 太郎', autoComplete: 'name' },
-  { key: 'kana', label: 'よみがな', placeholder: 'もんしん たろう', autoComplete: 'off' },
+  { key: 'name', label: '患者名', placeholder: '問診 太郎', autoComplete: 'name', inputMode: 'text' },
+  { key: 'kana', label: 'よみがな', placeholder: 'もんしん たろう', autoComplete: 'off', inputMode: 'text' },
   { key: 'postal_code', label: '郵便番号', placeholder: '123-4567', autoComplete: 'postal-code', inputMode: 'numeric' },
-  { key: 'address', label: '住所', placeholder: '〇〇県〇〇市...', autoComplete: 'street-address' },
+  { key: 'address', label: '住所', placeholder: '〇〇県〇〇市...', autoComplete: 'street-address', inputMode: 'text' },
   { key: 'phone', label: '電話番号', placeholder: '090-1234-5678', autoComplete: 'tel', inputMode: 'tel' },
 ] as const;
 

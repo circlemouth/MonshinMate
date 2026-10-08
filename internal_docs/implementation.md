@@ -1,6 +1,16 @@
 # 実装履歴と判断メモ
 
-## 最新追補：承認済み本番保守・バックアップ・パスワード保持移行
+## 最新追補：型検査・npm依存指摘の解消（進行中）
+
+ユーザーから残存型診断52件・npm指摘6件の修正、commit/push、本番反映を追加承認された。新規ブランチは `release/typecheck-dependency-remediation`。下段の残存記録は各工程時点の履歴として保持する。
+
+- [x] ソースのみの隔離環境で元lockのTypeScript52診断を再現。strictは維持し、skipLibCheckや診断抑制で隠さず、依存の宣言互換・不足型・アプリの型を修正する。
+- [x] 元npm監査6パッケージ（high4/moderate2）を再現し、公式Firebaseを維持した修正版grpc1.13.6 override・Router7.18.4等へ更新。型0・監査全深刻度0・隔離標準43試験/build成功。合成gRPC互換4試験、実nginxのnetwork-none1試験、独立SSR/型/43試験成功。buildにstrict型gateを追加した。
+- [x] Chakra theme最新版にも残る生成宣言26診断は、版/original・patched SHA256/11 AST scopeで固定した型宣言のみの限定patchを採用。runtime JS不変・未知版/hash拒否・idempotence・本当の型エラーを維持する回帰を確認。React型18.3.20を互換pinし、skipLibCheck/ts-ignore/監査除外は不使用。Docker npm ci前のpatchscript COPYとCloud source exact allowlistを追加、private隔離171 passed/4既存skip。画像交換失敗時に旧画像を消さない順序も修正。理由と保守制約は [型・依存修正記録](<typecheck_dependency_remediation.md>)。
+- [ ] frontendだけを固定digestで更新する。backend API、認証状態、パスワード・署名鍵・OTP鍵・連携キーは変更せず、前段のOTP解除やmigrationは再実行しない。candidate検証後にcanonical/全frontend tag/custom domainへ反映する。
+- [ ] 秘密値スキャン・commit/push・実配備確認と残存制約を記録する。
+
+## 前段追補：承認済み本番保守・バックアップ・パスワード保持移行
 
 以下は実施済み工程の記録。下段の「未実施」は各工程前の履歴であり、最新状態は本節を優先する。
 

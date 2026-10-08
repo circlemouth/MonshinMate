@@ -3,6 +3,8 @@ FROM node:20 AS build
 WORKDIR /app
 # 依存をインストール
 COPY frontend/package*.json ./
+# npm ci postinstall repairs only reviewed Chakra type declarations.
+COPY frontend/scripts/patch-chakra-theme-types.cjs ./scripts/patch-chakra-theme-types.cjs
 RUN npm ci
 # ソースをコピーしてビルド
 COPY frontend ./

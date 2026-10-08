@@ -10,7 +10,7 @@ import {
 } from '@chakra-ui/react';
 import { ReactNode } from 'react';
 
-interface StatusBannerProps extends Omit<AlertProps, 'status'> {
+interface StatusBannerProps extends Omit<AlertProps, 'status' | 'title'> {
   status: AlertStatus;
   title?: ReactNode;
   description?: ReactNode;
