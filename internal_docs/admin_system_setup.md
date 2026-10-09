@@ -2,7 +2,7 @@
 
 本書は、P0 セキュリティ変更後の管理者登録・復旧と設定手順です。既定パスワードによるログイン、固定の非常用パスワード、未認証の QR コード取得は廃止されています。
 
-> 本変更の検証はローカルの隔離コピーと合成データに限っています。本番への反映、実 DB の移行、実資格情報の発行は実施していません。以下は承認された作業者向けの手順であり、実環境での実行を指示するものではありません。
+> 本書の標準手順は、隔離コピーと合成データで検証した仕様です。別途承認された本番移行・緊急OTP解除の実績と未検証範囲は [実装履歴](<implementation.md>) を参照してください。以下は承認された作業者向けの手順であり、この文書だけで実環境での実行を許可・指示するものではありません。
 
 ## 1. 起動前の準備と既存環境の移行
 
@@ -118,7 +118,7 @@ CouchDB または対応済みの非公開アダプターでは、正しい接続
 | `POST /admin/totp/verify` | 同じ登録所有者の認証、`enrollment_id`, `totp_code` | pending 登録を有効化してアクセス発行 |
 | `POST /admin/reauth` | access Bearer、`password`, `totp_code` | 5 分の `reauth_token` |
 | `POST /admin/password/change` | access Bearer + `X-Admin-Reauth`、`current_password`, `new_password` | MFA 維持、旧トークン失効 |
-| `POST /admin/totp/disable` | access Bearer + `X-Admin-Reauth` | 本番 `403`。ローカルのみ無効化と失効 |
+| `POST /admin/totp/disable` | access Bearer + `X-Admin-Reauth` | MFA必須policyは `403`。明示policy `0` は無効化と旧token失効 |
 | `GET /admin/auth/status` | access Bearer は任意 | 秘密値を含まない認証状態 |
 | `GET /admin/totp/mode` | access Bearer | 現在のモード |
 

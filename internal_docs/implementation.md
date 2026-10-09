@@ -1,6 +1,14 @@
 # 実装履歴と判断メモ
 
-## 最新追補：main統合・ブランチ整理（完了）
+## 最新追補：本番共有アカウントのOTP緊急解除（2026-10-09、完了）
+
+- [x] ユーザーが本番障害の緊急対応として、6桁管理者OTPを画面/API経由のログインで要求しないよう明示承認。パスワードのみpolicyは既に有効だったが、共有アカウントに登録済みのMFAが要求される状態を確認した。新規作業は別branchで実施した。
+- [x] 非公開アダプターへ専用の限定解除CLIと合成回帰試験を追加。現password hash・無関係なfieldを保持し、ロック/復旧/必須登録/pending等を拒否。検証済みprivate preimage保存後、全状態とupdate_time一致をtransactionで再確認し、1文書のOTP解除とversion増加だけを適用した。旧管理JWT/再認証/challengeは失効し、新たなpassword-only login/API JWT accessを維持する。
+- [x] private source-only隔離194 passed/4既存emulator専用skip/5既存警告、独立read-onlyレビュー成功。実本番SDKのbackup完全一致・transaction commit・password hash保持とMFA解除の内部照合も成功。秘密/患者本文は出力しない。鍵・password・患者データ・専用連携キーは変更せず、旧reset-only解除/migration/recoveryは再実行しない。
+- [x] **2026-10-09 01:48 UTC、本番解除完了。** 全10 URLでreadiness200・初期登録不要・OTP off/policy0・無認証管理API401を確認。固定backend/frontendのrevision/digest/traffic/tagと配信frontend artifact一致を維持し、再配備なし。画面再読込と、APIの旧JWT破棄後のパスワードだけでの新JWT取得を案内する。詳細な対象・backup・復旧注意は [非公開実行記録](<../private/cloud-run-adapter/docs/emergency-shared-mfa-removal.md>)。
+- [ ] 本人の実password login、実資格情報付き管理API/外部連携・患者操作は未試験。frontend/backend runtime sourceを変えていないためfrontend test/build/tsc/npm監査は今回再実施しない。将来の明示的な任意OTP再登録を禁止する変更ではない。復旧・再有効化には別承認と、新しいversionを維持したCASが必要。
+
+## 前段追補：main統合・ブランチ整理（完了）
 
 - [x] ユーザーが両リポジトリのmain統合とmain以外のローカル/リモートbranch削除を承認。ただし作業branchに取り込まれていない他branchがあれば停止する条件付き。全origin headをfetchし、全ローカル/リモートbranch tipが統合対象の履歴内にあることを検証、未取り込み0件。別worktree/追加remoteはなし。
 - [x] mainをfast-forwardで統合（統合時root `bf6100a` / private `0b855de`）。各originへmain更新と既知のrelease2branch削除をatomic pushし、旧tipを明示したleaseで並行変更を拒否。履歴の書換えなし。mainへ取り込まれたローカルbranchのみ `git branch -d` で削除し、fetch/pruneで追跡refも整理した。
