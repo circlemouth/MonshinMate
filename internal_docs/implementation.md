@@ -10,7 +10,8 @@
 - [x] 初回Cloud Build成功後、default appuserの実imageゲートで0600のadapter sourceがroot所有のためimport拒否を検出。stage前に停止し本番は不変。Dockerfileの既存chownへ静的adapter directoryを追加する1行で対応し、root実行・広域chmodを回避する。
 - [x] 梱包回帰 **private 202 passed/5 emulator専用skip**・独立APPROVE、固定source root `2fa8683` / private `554c908` の再build成功。default appuserのruntime/lock34ファイルhash一致、実imageの合成作成/restore/再送/確定/replay/消去、実uvicorn起動200/未認証401、actual SDK/local emulator **5 tests OK**。旧imageでの保存形式/認証/確定互換は成功するがPI全回答再送は旧422のまま。
 - [x] **2026-10-13 08:35:47 UTC（17:35 JST）、本番配備完了。** Ready=True/固定digest/保護設定不変の0%候補を確認後、canonical100%＋全4backend tagを同固定revisionへ切替。frontend image/設定/trafficは不変。切替後のbackend5＋frontend6（custom domain含む）計11 URLでreadiness200・password-only状態・無認証admin401・公開bootstrap/template hash不変・CORS/HTML維持を確認。source/build/digest/revision/指紋と旧版の復帰限界は [非公開実行記録](<../private/cloud-run-adapter/docs/initial-intake-release.md>)。秘密値・患者本文・DB export/import・鍵交換・認証解除なし。
-- [x] 本番合成POST・本人password login・実患者操作は承認範囲から拡張せず**未実施**。ブラウザ患者E2E、外部LLM/資格情報付き管理・連携API、GCS画像全transactionも未試験。実image合成APIとlocal SDK成功を本番患者write/IAMの証明と混同しない。旧image rollbackは元の422を復活させる。個別の過去422帰属の観測限界は前段調査を保持。ローカルcommitで記録しremote pushは行わない。
+- [x] 本番合成POST・本人password login・実患者操作は承認範囲から拡張せず**未実施**。ブラウザ患者E2E、外部LLM/資格情報付き管理・連携API、GCS画像全transactionも未試験。実image合成APIとlocal SDK成功を本番患者write/IAMの証明と混同しない。旧image rollbackは元の422を復活させる。個別の過去422帰属の観測限界は前段調査を保持。当該配備時点ではローカルcommitのみで記録し、remote pushは別承認とした。
+- [x] 後続の「コミットしてpushもしておいて」でroot/privateのpushを明示承認。private remoteの非公開visibilityを確認し、両方の `fix/initial-session-personal-info` branchをoriginへprivate→rootの順でpush（初回root `e911c22` / private `6e843e3`）。mainへのmerge・force pushは行わず、後続の承認記録もcommit/pushする。本番への追加変更なし。
 
 ## 前段追補：初診セッション作成失敗の調査（2026-10-13、本番設定不整合を確認・調査時は修正未実施）
 
