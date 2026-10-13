@@ -1,6 +1,27 @@
 # 実装履歴と判断メモ
 
-## 最新追補：本番共有アカウントのOTP緊急解除（2026-10-09、完了）
+## 最新追補：初診固定基本情報契約の修正・本番配備（2026-10-13、進行中）
+
+- [x] ユーザーが修正と本番配備を明示承認。root/privateの作業branchを `fix/initial-session-personal-info` に分離。患者データコピー・認証解除・秘密値読取・鍵交換・テンプレート書換えは行わない。
+- [x] 初診だけ `personal_info` をcanonical型で検証する明示opt-inをValidatorへ追加し、作成とFSMの回答更新で適用。他の未知ID422、全体shape/size検査、正規化・LLM除外を維持する。
+- [x] セッション項目は永続snapshotではなく各APIで現行テンプレートから復元されるため、項目注入ではなく検証契約を独立化。テンプレート・restore・missing_required・旧セッションを移行せず、未送信の部分回答作成も従来通り。
+- [x] 設計と段階配備手順を独立read-onlyレビュー。frontendの固定backend tagも含め全tagを同時に再bindし、frontend画像/設定は変更しない。旧revision/digestと限定metadataを保全し、全DB export/復元を実施しない。
+- [ ] source-only SQLite/fake Firestore回帰・実image合成起動・SDK/local emulator・frontend隔離試験・最終差分レビュー。
+- [ ] 固定digestビルド、no-traffic候補、設定/公開API検査、canonicalと全tag切替、切替後検査。非公開の実行証跡は配備時に追加する。
+- [ ] 本番合成POST・本人password login・実患者操作はこの配備承認から拡張しない。未実施事項と個別の過去422帰属の限界を報告する。
+
+## 前段追補：初診セッション作成失敗の調査（2026-10-13、本番設定不整合を確認・調査時は修正未実施）
+
+- [x] 新規branch `investigate/initial-session-creation` で、固定基本情報UI→公開セッション作成API→テンプレート検証→永続保存/患者token発行を追跡。初期はローカル読み取りと隔離検証のみ。秘密情報/実環境ファイルの読取・患者DBアクセス・デプロイは行わない。
+- [x] 初診UIが必ず送る `answers.personal_info` が保存済みテンプレートに存在しない/別ID/性別フィルタで落ちる場合、臨床保存前に422 `unknown answer item` となり同じ汎用通知が出る条件を、合成SQLiteとoffline fake Firestoreで再現。両テンプレート欠落fallbackも同じ422。正しい項目あり初診と空回答再診は200。起動イベントは既存の旧defaultを補正しないことも検証した。
+- [x] source-only隔離の既存backend対象22 passed、private Firestore対象20 passed、調査用matrix/起動検証13 passed、各終了コード0。追加診断テストは一時コピーのみで、実装/既存試験/非公開submoduleは変更しない。read-only副調査も独立して同経路を確認した。fakeを実SDK/本番検証と呼ばない。
+- [x] ユーザーの明示許可後、本番metadataと公開テンプレートを限定読取。2026-10-13午前JSTの正確な `POST /sessions` 16件中、422が12件（07:48に1件、09:02〜09:04に11件）、200が4件。対象期間・経路の429/5xxなし。frontendも同失敗status。固定稼働revision/digestは配備記録と一致した。
+- [x] 現行既定問診「形成外科・美容皮膚科」の初診テンプレートに `personal_info` がないことを、frontendと既存backend転送先の公開GETで確認。存在するカスタムテンプレートは正常なdefaultへ切り替わらず、正しい初診入力でも422になる確定的な不整合。入力本文/token/秘密値・患者セッションDBは閲覧せず、本番POSTや変更は行わない。
+- [x] 調査文書のみ追加。現在の仕様は変更せず、front test/build/tsc・ブラウザE2E・全体回帰・実Firestore書き込み/並行試験は未実施。根拠・再現表・本番読取の限界・修正候補は [調査記録](<initial_session_creation_investigation.md>)。
+- [ ] 個々の過去リクエストの応答本文・当該利用者との直接対応、欠損の変更時刻/変更者は未確認。現行不整合と午前の422は確認済みだが、すべての個別422の応答識別子まで観測したわけではない。
+- [ ] 修正・本番反映は未実施。未知回答の一括許可、DB/テンプレート初期化、token発行と保存の単純順序入替を回避策にしない。原因確定後、固定基本情報のサーバー契約整合と安全なエラー区別を検討し、隔離回帰と別途運用承認を先行する。
+
+## 前段追補：本番共有アカウントのOTP緊急解除（2026-10-09、完了）
 
 - [x] ユーザーが本番障害の緊急対応として、6桁管理者OTPを画面/API経由のログインで要求しないよう明示承認。パスワードのみpolicyは既に有効だったが、共有アカウントに登録済みのMFAが要求される状態を確認した。新規作業は別branchで実施した。
 - [x] 非公開アダプターへ専用の限定解除CLIと合成回帰試験を追加。現password hash・無関係なfieldを保持し、ロック/復旧/必須登録/pending等を拒否。検証済みprivate preimage保存後、全状態とupdate_time一致をtransactionで再確認し、1文書のOTP解除とversion増加だけを適用した。旧管理JWT/再認証/challengeは失効し、新たなpassword-only login/API JWT accessを維持する。

@@ -3478,7 +3478,7 @@ def create_session(req: SessionCreateRequest) -> SessionCreateResponse:
     if req.gender:
         items = [it for it in items if not it.gender or it.gender == "both" or it.gender == req.gender]
     question_texts = _collect_question_texts_from_items(items)
-    Validator.validate_partial(items, req.answers)
+    Validator.validate_partial(items, req.answers, visit_type=req.visit_type)
     for k, v in list(req.answers.items()):
         # 空欄の回答は「該当なし」に統一
         req.answers[k] = StructuredContextManager.normalize_answer(v)

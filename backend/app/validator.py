@@ -58,11 +58,19 @@ class Validator:
             raise HTTPException(413, "answers too large")
 
     @staticmethod
-    def validate_partial(items: Sequence[Any], answers: dict[str, Any]) -> None:
-        """部分的な回答の型や選択肢を検証する。"""
+    def validate_partial(
+        items: Sequence[Any], answers: dict[str, Any], *, visit_type: str | None = None
+    ) -> None:
+        """部分回答を検証する。初診の固定基本情報は問診定義から独立する。"""
         Validator.validate_shape(answers)
         for key, value in answers.items():
-            spec = Validator._find_item(items, key)
+            # The fixed intake UI owns this reserved key, not a custom template.
+            # Keep every other unknown ID fail-closed and do not alter templates.
+            spec = (
+                {"id": "personal_info", "type": "personal_info"}
+                if visit_type == "initial" and key == "personal_info"
+                else Validator._find_item(items, key)
+            )
             if spec is None:
                 raise HTTPException(status_code=422, detail="unknown answer item")
             item_type = getattr(spec, "type", spec.get("type") if isinstance(spec, dict) else None)

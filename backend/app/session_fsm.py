@@ -26,7 +26,9 @@ class SessionFSM:
         if item_id in (getattr(self.session, "llm_question_texts", {}) or {}):
             specifications.append({"id": item_id, "type": "string"})
         partial = {item_id: answer}
-        Validator.validate_partial(specifications, partial)
+        Validator.validate_partial(
+            specifications, partial, visit_type=getattr(self.session, "visit_type", None)
+        )
         Validator.validate_shape({**self.session.answers, **partial})
         StructuredContextManager.update_structured_context(self.session, item_id, partial[item_id])
         self._finalize_item()
