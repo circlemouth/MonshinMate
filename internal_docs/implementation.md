@@ -6,7 +6,9 @@
 - [x] 初診だけ `personal_info` をcanonical型で検証する明示opt-inをValidatorへ追加し、作成とFSMの回答更新で適用。他の未知ID422、全体shape/size検査、正規化・LLM除外を維持する。
 - [x] セッション項目は永続snapshotではなく各APIで現行テンプレートから復元されるため、項目注入ではなく検証契約を独立化。テンプレート・restore・missing_required・旧セッションを移行せず、未送信の部分回答作成も従来通り。
 - [x] 設計と段階配備手順を独立read-onlyレビュー。frontendの固定backend tagも含め全tagを同時に再bindし、frontend画像/設定は変更しない。旧revision/digestと限定metadataを保全し、全DB export/復元を実施しない。
-- [ ] source-only SQLite/fake Firestore回帰・実image合成起動・SDK/local emulator・frontend隔離試験・最終差分レビュー。
+- [x] source-only SQLite **406 passed**、fake/offline Firestore **201 passed/5 emulator専用skip**、frontend隔離 **43 tests/型0/build/監査0**、修正設計とruntimeの独立review成功。fakeと実SDKは区別する。
+- [x] 初回Cloud Build成功後、default appuserの実imageゲートで0600のadapter sourceがroot所有のためimport拒否を検出。stage前に停止し本番は不変。Dockerfileの既存chownへ静的adapter directoryを追加する1行で対応し、root実行・広域chmodを回避する。
+- [ ] 梱包回帰/独立review、再build固定digest、実image合成起動・SDK/local emulator・旧image保存形式の確認・最終差分レビュー。
 - [ ] 固定digestビルド、no-traffic候補、設定/公開API検査、canonicalと全tag切替、切替後検査。非公開の実行証跡は配備時に追加する。
 - [ ] 本番合成POST・本人password login・実患者操作はこの配備承認から拡張しない。未実施事項と個別の過去422帰属の限界を報告する。
 
