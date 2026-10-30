@@ -1,12 +1,15 @@
 # 実装履歴と判断メモ
 
-## 最新追補：問診完了画面の遷移競合修正（2026-10-30、本番配備準備）
+## 最新追補：問診完了画面の遷移競合修正（2026-10-30、本番配備完了）
 
 - [x] ユーザーが修正・commit/push・本番デプロイを明示承認。`fix/completion-redirect-race` で実施し、backend・DB・鍵・認証設定・患者データは変更しない。
 - [x] 正当な確定応答の検証成功時だけ非識別のメモリ内完了フラグを消去通知前に設定し、全患者情報/資格情報/再送キューの即時消去・世代更新・fetch中断を維持。PatientGuardだけが完了へ履歴置換し、3ページの重複navigateを撤去。旧idle callback/touch/Continueが正常完了を再消去しないよう保護し、一般消去・次患者・pagehide/bfcacheは従来通り解除する。
 - [x] 追加質問のawait呼出元でも世代を再確認し、内部helper解決後からcaller再開までの完了/消去競合で質問やエラーを復活させない。仕様書/API文書を更新。APIの応答/認証/永続schemaに変更なし。
 - [x] envなし・正規lockの隔離frontend **59 tests / strict型検査 / production build成功**。実React/Router/Appの合成APIブラウザ統合は **production 11項目・開発StrictMode 11項目成功**。3完了経路の表示維持、失敗後再試行、旧route保護、次患者、中止、idle、遅延応答、page lifecycleを検証。独立read-only設計レビューAPPROVE。新規依存なし。既存の隔離backendランナーも **406 passed / 9既存警告**。実DB/本番患者POSTの検証ではない。
-- [ ] root修正sourceをcommit/pushし既存allowlist wrapperでimmutable imageをbuild。frontendだけno-traffic候補で検証し、既存backend proxy/same-originと復帰先を保持して全frontend tagを固定切替する。配備後は公開HTTP・artifact・ブラウザとbackend不変を確認し、非公開実行記録を残す。実患者操作・本人password login・DB移行・鍵交換は行わない。
+- [x] 修正source `b7d6212` をoriginへpushし、固定root/private commitを展開したsource-only contextを既存allowlist wrapperへ指定。初回候補の公開static403を昇格前ゲートで検出し、本番トラフィックは維持したまま、Gitの通常file modeを保つ一時展開で別immutable imageを再build。副次的な候補tagのDNS長超過も未作成・設定/traffic不変をread-backして短縮した。採用imageのnormal HTML/entry chunk・config・公開static全検査成功後に切替。
+- [x] **本番frontendのcanonical100%＋全6tagを採用固定revisionへ切替完了**。frontend canonical/全tag/custom domainの8 URLとbackend canonical/全4tagの5 URL、**計13 URLすべて**でreadiness200・公開password-only状態・無認証admin401・公開設定hash不変を確認。全frontend URLでnormal artifact bytes、same-origin、SPA/GET/HEAD login/保護headerと公開staticが正常。公式Chromeで本番custom domainの完了文言・戻るボタンも表示確認。backend revision/digest/traffic・DB・鍵・認証設定は変更なし。固定source/build/digest/復帰先・失敗時のread-back・metadata証跡は [非公開配備記録](<../private/cloud-run-adapter/docs/completion-screen-release.md>)。
+- [x] 配備後の記録をprivate→root gitlinkの順にcommit/pushする。mainへのmerge/force pushや公開snapshot生成は行わない。本番患者POST・本人password login・DB移行・鍵交換・実患者検証は未実施で、隔離回帰と本番の直接Done表示smokeを区別する。
+- [ ] 既存タブは旧JSを保持するため、問診中は強制reloadせず、患者入力がないトップ/完了画面で安全に再読込して端末へ反映する。実患者による動作確認は今回実施していない。
 
 ## 前段追補：問診完了画面のトップ遷移競合調査（2026-10-30、調査時は修正未実施）
 
