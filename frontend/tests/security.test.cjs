@@ -436,13 +436,15 @@ test('auth forms use challenge/enrollment/reauth contracts, not retired reset en
     assert.doesNotMatch(source, /['"]\/admin\/password\/reset\/(request|confirm|emergency)['"]/);
   }
 });
-test('patient completion uses replace navigation only after acknowledged finalization', () => {
+test('patient guard alone owns completion redirects after acknowledged cleanup', () => {
   for (const file of ['QuestionnaireForm', 'Questions', 'LlmWait']) {
     const source = fs.readFileSync(path.join(root, `pages/${file}.tsx`), 'utf8');
-    assert.match(source, /await finalizePatient\(sessionId\);\s*navigate\('\/done', \{ replace: true \}\)/);
+    assert.match(source, /await finalizePatient\(sessionId\);/);
+    assert.doesNotMatch(source, /navigate\('\/done'/);
     assert.doesNotMatch(source, /setItem\('summary'/);
   }
   const safety = fs.readFileSync(path.join(root, 'components/PatientSafety.tsx'), 'utf8');
+  assert.match(safety, /<Navigate to=\{hasAcknowledgedCompletion\(\) \? '\/done' : '\/'\} replace/);
   assert.match(safety, /patientIdleState/);
   assert.match(safety, /pagehide/); assert.match(safety, /event.persisted/);
   assert.match(safety, /PATIENT_CLEARED/);

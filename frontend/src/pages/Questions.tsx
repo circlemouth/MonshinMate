@@ -22,8 +22,8 @@ export default function Questions() {
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
     try {
+      // PatientGuard owns the terminal redirect after acknowledged cleanup.
       await finalizePatient(sessionId);
-      navigate('/done', { replace: true });
     } catch {
       if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({
@@ -37,8 +37,10 @@ export default function Questions() {
 
   const fetchQuestion = async () => {
     if (!sessionId) return;
+    const epoch = patientGeneration();
     try {
       const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!isPatientGeneration(epoch)) return;
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         setPending(data.questions);
@@ -54,7 +56,7 @@ export default function Questions() {
         await finalize(answers);
       }
     } catch (e) {
-      if (sessionStorage.getItem('session_id') !== sessionId) return;
+      if (!isPatientGeneration(epoch) || sessionStorage.getItem('session_id') !== sessionId) return;
       console.error('fetchQuestion failed', e);
       try {
         const msg = e instanceof Error ? e.message : String(e);
@@ -117,6 +119,7 @@ export default function Questions() {
       // 次のバッチを取得（前回で上限到達していれば0件が返る）
       sessionStorage.removeItem('pending_llm_questions');
       const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+      if (!isPatientGeneration(epoch)) return;
       if (data.questions && data.questions.length > 0) {
         sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
         setPending(data.questions);

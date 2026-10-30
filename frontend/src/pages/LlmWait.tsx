@@ -15,8 +15,8 @@ export default function LlmWait() {
   const finalize = async () => {
     if (!sessionId) return;
     try {
+      // PatientGuard owns the terminal redirect after acknowledged cleanup.
       await finalizePatient(sessionId);
-      navigate('/done', { replace: true });
     } catch {
       if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({
@@ -34,24 +34,26 @@ export default function LlmWait() {
       return;
     }
     const check = async () => {
-    try {
-      const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
-      if (data.questions && data.questions.length > 0) {
-        sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
-        navigate('/questions');
-      } else {
+      const epoch = patientGeneration();
+      try {
+        const data = await patientJson(`/sessions/${sessionId}/llm-questions`, { method: 'POST' });
+        if (!isPatientGeneration(epoch)) return;
+        if (data.questions && data.questions.length > 0) {
+          sessionStorage.setItem('pending_llm_questions', JSON.stringify(data.questions));
+          navigate('/questions');
+        } else {
+          await finalize();
+        }
+      } catch (e) {
+        if (!isPatientGeneration(epoch) || sessionStorage.getItem('session_id') !== sessionId) return;
+        console.error('llm question check failed', e);
+        try {
+          const msg = e instanceof Error ? e.message : String(e);
+          sessionStorage.setItem('llm_error', msg);
+        } catch {}
         await finalize();
       }
-    } catch (e) {
-      if (sessionStorage.getItem('session_id') !== sessionId) return;
-      console.error('llm question check failed', e);
-      try {
-        const msg = e instanceof Error ? e.message : String(e);
-        sessionStorage.setItem('llm_error', msg);
-      } catch {}
-      await finalize();
-    }
-  };
+    };
     check();
   }, [sessionId, navigate]);
 

@@ -19,12 +19,21 @@ export function canAccessPatientRoute(entry = false): boolean {
 export interface PatientSession { id: string; token: string; expiresAt: number }
 let generation = 0;
 let controller = new AbortController();
+// Only a non-identifying, in-memory terminal state survives successful cleanup.
+let completionAcknowledged = false;
 
 export const patientGeneration = () => generation;
 export const isPatientGeneration = (value: number) => value === generation;
 export const patientSignal = () => controller.signal;
+export const hasAcknowledgedCompletion = () => completionAcknowledged;
 
 export function clearPatientSession(): void {
+  resetPatientSession(false);
+}
+
+function resetPatientSession(completed: boolean): void {
+  // Set before notifying guards; their redirect must agree with the cleanup reason.
+  completionAcknowledged = completed;
   generation += 1;
   controller.abort();
   controller = new AbortController();
@@ -43,6 +52,7 @@ export function getPatientSession(): PatientSession | null {
 export function storePatientSession(data: { id: string; session_token: string; expires_at: string }): void {
   if (!data.id || !data.session_token || !(Date.parse(data.expires_at) > Date.now())) throw new Error('セッション情報が無効です');
   // Invalidate pending work from any previous session, without deleting the current entry form.
+  completionAcknowledged = false;
   generation += 1;
   controller.abort();
   controller = new AbortController();
@@ -84,5 +94,5 @@ export function acknowledgeFinalization(receipt: { status?: string; id?: string;
   if (!isCurrentPatient(expected) || receipt.id !== expected.id || receipt.status !== 'finalized' || !receipt.finalized_at) {
     throw new Error('完了確認を取得できませんでした。再試行してください。');
   }
-  clearPatientSession();
+  resetPatientSession(true);
 }

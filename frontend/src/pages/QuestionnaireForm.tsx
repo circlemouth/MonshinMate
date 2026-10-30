@@ -201,8 +201,8 @@ export default function QuestionnaireForm() {
   const finalize = async (ans: Record<string, any>) => {
     if (!sessionId) return;
     try {
+      // PatientGuard owns the terminal redirect after acknowledged cleanup.
       await finalizePatient(sessionId);
-      navigate('/done', { replace: true });
     } catch {
       if (sessionStorage.getItem('session_id') !== sessionId) return;
       notify({

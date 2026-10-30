@@ -8,8 +8,9 @@
     "postinstall": "node scripts/patch-chakra-theme-types.cjs",
     "build": "npm run typecheck && vite build",
     "typecheck": "tsc --noEmit",
+    "test:browser:build": "node tests/build-patient-browser.mjs",
     "preview": "vite preview",
-    "test": "node --test tests/security.test.cjs tests/type-regression.test.cjs tests/chakra-type-patch.test.cjs"
+    "test": "node --test tests/security.test.cjs tests/type-regression.test.cjs tests/chakra-type-patch.test.cjs tests/patient-completion.test.cjs"
   },
   "dependencies": {
     "@chakra-ui/icons": "^2.2.4",

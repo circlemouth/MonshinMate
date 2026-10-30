@@ -1,6 +1,22 @@
 # 実装履歴と判断メモ
 
-## 最新追補：初診固定基本情報契約の修正・本番配備（2026-10-13、完了）
+## 最新追補：問診完了画面の遷移競合修正（2026-10-30、本番配備準備）
+
+- [x] ユーザーが修正・commit/push・本番デプロイを明示承認。`fix/completion-redirect-race` で実施し、backend・DB・鍵・認証設定・患者データは変更しない。
+- [x] 正当な確定応答の検証成功時だけ非識別のメモリ内完了フラグを消去通知前に設定し、全患者情報/資格情報/再送キューの即時消去・世代更新・fetch中断を維持。PatientGuardだけが完了へ履歴置換し、3ページの重複navigateを撤去。旧idle callback/touch/Continueが正常完了を再消去しないよう保護し、一般消去・次患者・pagehide/bfcacheは従来通り解除する。
+- [x] 追加質問のawait呼出元でも世代を再確認し、内部helper解決後からcaller再開までの完了/消去競合で質問やエラーを復活させない。仕様書/API文書を更新。APIの応答/認証/永続schemaに変更なし。
+- [x] envなし・正規lockの隔離frontend **59 tests / strict型検査 / production build成功**。実React/Router/Appの合成APIブラウザ統合は **production 11項目・開発StrictMode 11項目成功**。3完了経路の表示維持、失敗後再試行、旧route保護、次患者、中止、idle、遅延応答、page lifecycleを検証。独立read-only設計レビューAPPROVE。新規依存なし。既存の隔離backendランナーも **406 passed / 9既存警告**。実DB/本番患者POSTの検証ではない。
+- [ ] root修正sourceをcommit/pushし既存allowlist wrapperでimmutable imageをbuild。frontendだけno-traffic候補で検証し、既存backend proxy/same-originと復帰先を保持して全frontend tagを固定切替する。配備後は公開HTTP・artifact・ブラウザとbackend不変を確認し、非公開実行記録を残す。実患者操作・本人password login・DB移行・鍵交換は行わない。
+
+## 前段追補：問診完了画面のトップ遷移競合調査（2026-10-30、調査時は修正未実施）
+
+- [x] `investigate/completion-redirect-race` で調査。正規lockを使うソースのみの隔離コピーと合成APIで、元のApp・患者ページ・ガードを変更せず公式ブラウザ検証を実施。本番・実DB・環境ファイル・秘密情報・非公開submoduleにはアクセスしない。
+- [x] 問診のみ・追加質問回答後・追加質問なしの3経路で、確定成功応答→患者状態消去→`/done`→約0.6〜0.7ms後に`/`を再現。消去イベントで再描画されるPatientGuardのトップ遷移と、Router 7のtransitionによる完了遷移の競合を確認。表示時間設定やDone内の自動遷移ではない。
+- [x] 隔離frontend標準 **43 passed / 型検査成功 / production build成功**。既存試験は消去・ルート拒否・遷移コードを個別に検査しており、この実遷移の競合を検出しない。試験用コピーの初期設定不足を解消して全件再実行した。
+- [x] 実ブラウザ再現は開発モード。productionブラウザ検証は公式接続の操作ブロックにより未実施、別接続への迂回なし。ローカルサーバーは終了。mockの成功を実DB保存の証明としない。調査文書だけを追加し、アプリ修正・commit/push・本番反映は行わない。
+- [ ] 正常完了の消去・遷移をガードと整合させる修正、3経路の統合回帰、確定失敗・戻る・中止・アイドル・次患者の保護回帰、production artifactのブラウザ検証。本番配備版の直接確認・本番操作は別途許可が必要。根拠と限界は [調査記録](<completion_redirect_investigation.md>)。
+
+## 前段追補：初診固定基本情報契約の修正・本番配備（2026-10-13、完了）
 
 - [x] ユーザーが修正と本番配備を明示承認。root/privateの作業branchを `fix/initial-session-personal-info` に分離。患者データコピー・認証解除・秘密値読取・鍵交換・テンプレート書換えは行わない。
 - [x] 初診だけ `personal_info` をcanonical型で検証する明示opt-inをValidatorへ追加し、作成とFSMの回答更新で適用。他の未知ID422、全体shape/size検査、正規化・LLM除外を維持する。

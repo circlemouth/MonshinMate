@@ -28,6 +28,7 @@ public_export/
 
 # Node/Vite（フロントエンド）
 frontend/dist/
+frontend/patient-browser-dist/
 frontend/tmp/
 **/.vite/
 **/.eslintcache
